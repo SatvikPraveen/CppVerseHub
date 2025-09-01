@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STL Mastery - CppVerseHub API</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .breadcrumb {
+        color: #7f8c8d;
+        margin-bottom: 1rem;
+      }
+
+      .breadcrumb a {
+        color: #3498db;
+        text-decoration: none;
+      }
+
+      .header h1 {
+        color: #2c3e50;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .stl-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 2rem;
+      }
+
+      .stl-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+      }
+
+      .stl-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+      }
+
+      .stl-header {
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .stl-name {
+        color: #2c3e50;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+
+      .stl-category {
+        color: #27ae60;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .stl-description {
+        color: #7f8c8d;
+        margin-bottom: 1.5rem;
+      }
+
+      .components-section h3 {
+        color: #34495e;
+        font-size: 1.1rem;
+        margin-bottom: 0.8rem;
+        border-left: 3px solid #27ae60;
+        padding-left: 0.5rem;
+      }
+
+      .component-list {
+        list-style: none;
+        margin-bottom: 1rem;
+      }
+
+      .component-list li {
+        padding: 0.4rem 0;
+        color: #7f8c8d;
+        border-bottom: 1px solid #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .component-list li:last-child {
+        border-bottom: none;
+      }
+
+      .component-name {
+        color: #2c3e50;
+        font-weight: 600;
+        font-family: "Consolas", "Monaco", monospace;
+      }
+
+      .complexity-indicator {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 10px;
+        color: white;
+      }
+
+      .basic {
+        background: #3498db;
+      }
+      .intermediate {
+        background: #f39c12;
+      }
+      .advanced {
+        background: #e74c3c;
+      }
+
+      .code-snippet {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+      }
+
+      .keyword {
+        color: #e74c3c;
+      }
+      .type {
+        color: #3498db;
+      }
+      .string {
+        color: #27ae60;
+      }
+      .comment {
+        color: #95a5a6;
+        font-style: italic;
+      }
+
+      .performance-note {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+      }
+
+      .performance-note h4 {
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+      }
+
+      .complexity-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #27ae60, #2ecc71);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 1rem;
+      }
+
+      .back-button {
+        display: inline-block;
+        background: #27ae60;
+        color: white;
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        transition: background 0.3s ease;
+      }
+
+      .back-button:hover {
+        background: #2ecc71;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- File: docs/api_reference/html/stl/index.html -->
+    <div class="container">
+      <a href="../index.html" class="back-button">← Back to API Reference</a>
+
+      <div class="header">
+        <div class="breadcrumb">
+          <a href="../index.html">API Reference</a> > STL Mastery
+        </div>
+        <h1>📚 STL Mastery</h1>
+        <p>Comprehensive Standard Template Library usage and best practices</p>
+      </div>
+
+      <div class="stl-grid">
+        <div class="stl-card">
+          <div class="stl-header">
+            <div class="stl-name">STL Containers</div>
+            <div class="stl-category">Sequential & Associative</div>
+          </div>
+          <div class="stl-description">
+            Comprehensive demonstrations of STL container usage with real-world
+            applications in fleet management and resource tracking.
+          </div>
+          <div class="components-section">
+            <h3>Container Types</h3>
+            <ul class="component-list">
+              <li>
+                <span class="component-name">std::vector</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::deque</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::list</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::map</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::unordered_map</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::set</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::priority_queue</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+            </ul>
+          </div>
+          <div class="code-snippet">
+            <span class="comment"
+              >// Fleet management with multiple containers</span
+            >
+            <span class="type">std::vector</span>&lt;<span class="type"
+              >Fleet</span
+            >&gt; fleets; <span class="type">std::map</span>&lt;<span
+              class="type"
+              >std::string</span
+            >, <span class="type">Planet</span>&gt; planetRegistry;
+            <span class="type">std::priority_queue</span>&lt;<span class="type"
+              >Mission</span
+            >, <span class="type">std::vector</span>&lt;<span class="type"
+              >Mission</span
+            >&gt;, <span class="type">MissionComparator</span>&gt; missionQueue;
+          </div>
+          <div class="performance-note">
+            <h4>Performance Insights</h4>
+            Vector for sequential access, map for sorted keys, unordered_map for
+            O(1) lookup, priority_queue for mission scheduling.
+          </div>
+          <div class="complexity-badge">Core Knowledge</div>
+        </div>
+
+        <div class="stl-card">
+          <div class="stl-header">
+            <div class="stl-name">STL Algorithms</div>
+            <div class="stl-category">Generic Operations</div>
+          </div>
+          <div class="stl-description">
+            Powerful generic algorithms for sorting, searching, transforming,
+            and manipulating data structures efficiently.
+          </div>
+          <div class="components-section">
+            <h3>Algorithm Categories</h3>
+            <ul class="component-list">
+              <li>
+                <span class="component-name">std::sort</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::find_if</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::transform</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::accumulate</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::partition</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::for_each</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::remove_if</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+            </ul>
+          </div>
+          <div class="code-snippet">
+            <span class="comment"
+              >// Sort fleets by strength and find combat-ready</span
+            >
+            <span class="type">std::sort</span>(fleets.begin(), fleets.end(),
+            [](<span class="keyword">const</span>
+            <span class="type">Fleet</span>&amp; a,
+            <span class="keyword">const</span>
+            <span class="type">Fleet</span>&amp; b) {
+            <span class="keyword">return</span> a.getStrength() >
+            b.getStrength(); });
+
+            <span class="keyword">auto</span> readyFleet =
+            <span class="type">std::find_if</span>(fleets.begin(), fleets.end(),
+            [](<span class="keyword">const</span>
+            <span class="type">Fleet</span>&amp; f) {
+            <span class="keyword">return</span> f.isCombatReady(); });
+          </div>
+          <div class="performance-note">
+            <h4>Efficiency Focus</h4>
+            Leveraging STL algorithms provides optimized, tested implementations
+            with excellent performance characteristics.
+          </div>
+          <div class="complexity-badge">Essential Skills</div>
+        </div>
+
+        <div class="stl-card">
+          <div class="stl-header">
+            <div class="stl-name">Iterator Patterns</div>
+            <div class="stl-category">Navigation & Access</div>
+          </div>
+          <div class="stl-description">
+            Custom iterators and advanced iterator usage patterns for traversing
+            complex data structures and implementing generic algorithms.
+          </div>
+          <div class="components-section">
+            <h3>Iterator Types</h3>
+            <ul class="component-list">
+              <li>
+                <span class="component-name">Input Iterators</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">Output Iterators</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">Forward Iterators</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">Bidirectional Iterators</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">Random Access Iterators</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+              <li>
+                <span class="component-name">Custom Iterators</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+            </ul>
+          </div>
+          <div class="code-snippet">
+            <span class="comment">// Custom iterator for fleet traversal</span>
+            <span class="keyword">class</span>
+            <span class="type">FleetIterator</span> {
+            <span class="keyword">public</span>:
+            <span class="keyword">using</span> iterator_category =
+            std::forward_iterator_tag;
+            <span class="keyword">using</span> value_type =
+            <span class="type">Fleet</span>;
+            <span class="keyword">using</span> difference_type = std::ptrdiff_t;
+
+            <span class="type">Fleet</span>&amp;
+            <span class="keyword">operator</span>*() {
+            <span class="keyword">return</span> *current; }
+            <span class="type">FleetIterator</span>&amp;
+            <span class="keyword">operator</span>++() { ++current;
+            <span class="keyword">return</span> *<span class="keyword"
+              >this</span
+            >; } };
+          </div>
+          <div class="performance-note">
+            <h4>Design Philosophy</h4>
+            Iterators provide uniform interface for container traversal,
+            enabling generic programming and algorithm reuse.
+          </div>
+          <div class="complexity-badge">Advanced Technique</div>
+        </div>
+
+        <div class="stl-card">
+          <div class="stl-header">
+            <div class="stl-name">Function Objects</div>
+            <div class="stl-category">Functors & Lambdas</div>
+          </div>
+          <div class="stl-description">
+            Function objects, predicates, and lambda expressions for customizing
+            algorithm behavior and creating reusable callable entities.
+          </div>
+          <div class="components-section">
+            <h3>Callable Types</h3>
+            <ul class="component-list">
+              <li>
+                <span class="component-name">Lambda Expressions</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">Function Objects</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::function</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+              <li>
+                <span class="component-name">Predicates</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">Comparators</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::bind</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+            </ul>
+          </div>
+          <div class="code-snippet">
+            <span class="comment">// Mission priority functor</span>
+            <span class="keyword">struct</span>
+            <span class="type">MissionComparator</span> {
+            <span class="keyword">bool</span>
+            <span class="keyword">operator</span>()(<span class="keyword"
+              >const</span
+            >
+            <span class="type">Mission</span>&amp; a,
+            <span class="keyword">const</span>
+            <span class="type">Mission</span>&amp; b)
+            <span class="keyword">const</span> {
+            <span class="keyword">return</span> a.getPriority() &lt;
+            b.getPriority(); } };
+
+            <span class="comment">// Lambda for resource filtering</span>
+            <span class="keyword">auto</span> hasResources = [](<span
+              class="keyword"
+              >const</span
+            >
+            <span class="type">Planet</span>&amp; p) {
+            <span class="keyword">return</span> p.getTotalResources() >
+            <span class="string">1000</span>; };
+          </div>
+          <div class="performance-note">
+            <h4>Modern C++ Approach</h4>
+            Lambdas provide concise, inline functionality while functors offer
+            reusable, stateful behavior for complex operations.
+          </div>
+          <div class="complexity-badge">Modern Practice</div>
+        </div>
+
+        <div class="stl-card">
+          <div class="stl-header">
+            <div class="stl-name">STL Utilities</div>
+            <div class="stl-category">Helper Classes</div>
+          </div>
+          <div class="stl-description">
+            Essential utility classes and templates for managing pairs, tuples,
+            optional values, and variant types in complex systems.
+          </div>
+          <div class="components-section">
+            <h3>Utility Components</h3>
+            <ul class="component-list">
+              <li>
+                <span class="component-name">std::pair</span>
+                <span class="complexity-indicator basic">Basic</span>
+              </li>
+              <li>
+                <span class="component-name">std::tuple</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::optional</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+              <li>
+                <span class="component-name">std::variant</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+              <li>
+                <span class="component-name">std::any</span>
+                <span class="complexity-indicator advanced">Advanced</span>
+              </li>
+              <li>
+                <span class="component-name">std::string_view</span>
+                <span class="complexity-indicator intermediate"
+                  >Intermediate</span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="code-snippet">
+            <span class="comment"
+              >// Resource management with optional and variant</span
+            >
+            <span class="type">std::optional</span>&lt;<span class="type"
+              >Planet</span
+            >&gt; findPlanet(<span class="type">std::string_view</span> name);
+
+            <span class="type">std::variant</span>&lt;<span class="type"
+              >Fleet</span
+            >, <span class="type">Planet</span>,
+            <span class="type">Station</span>&gt; entity;
+            <span class="type">std::visit</span>([](auto&amp;&amp; arg) {
+            <span class="keyword">using</span> <span class="type">T</span> =
+            std::decay_t&lt;<span class="keyword">decltype</span>(arg)&gt;;
+            <span class="keyword">if</span>
+            <span class="keyword">constexpr</span> (std::is_same_v&lt;<span
+              class="type"
+              >T</span
+            >, <span class="type">Fleet</span>&gt;) { arg.move(); } }, entity);
+          </div>
+          <div class="performance-note">
+            <h4>Type Safety Benefits</h4>
+            Modern utilities provide type-safe alternatives to void pointers and
+            unions, with compile-time guarantees.
+          </div>
+          <div class="complexity-badge">Modern Standard</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

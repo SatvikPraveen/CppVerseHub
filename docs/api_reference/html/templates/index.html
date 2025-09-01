@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Template Programming - CppVerseHub API</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #8e44ad 0%, #3498db 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .breadcrumb {
+        color: #7f8c8d;
+        margin-bottom: 1rem;
+      }
+
+      .breadcrumb a {
+        color: #3498db;
+        text-decoration: none;
+      }
+
+      .header h1 {
+        color: #2c3e50;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .template-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 2rem;
+      }
+
+      .template-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+      }
+
+      .template-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+      }
+
+      .template-header {
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .template-name {
+        color: #2c3e50;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+
+      .template-type {
+        color: #8e44ad;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .template-description {
+        color: #7f8c8d;
+        margin-bottom: 1.5rem;
+      }
+
+      .code-preview {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+      }
+
+      .keyword {
+        color: #e74c3c;
+      }
+
+      .type {
+        color: #3498db;
+      }
+
+      .string {
+        color: #27ae60;
+      }
+
+      .comment {
+        color: #95a5a6;
+        font-style: italic;
+      }
+
+      .features-section h3 {
+        color: #34495e;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid #8e44ad;
+        padding-left: 0.5rem;
+      }
+
+      .feature-list {
+        list-style: none;
+        margin-bottom: 1rem;
+      }
+
+      .feature-list li {
+        padding: 0.3rem 0;
+        color: #7f8c8d;
+        position: relative;
+        padding-left: 1rem;
+      }
+
+      .feature-list li:before {
+        content: "▶";
+        color: #8e44ad;
+        position: absolute;
+        left: 0;
+      }
+
+      .complexity-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #8e44ad, #9b59b6);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 1rem;
+      }
+
+      .back-button {
+        display: inline-block;
+        background: #8e44ad;
+        color: white;
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        transition: background 0.3s ease;
+      }
+
+      .back-button:hover {
+        background: #9b59b6;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- File: docs/api_reference/html/templates/index.html -->
+    <div class="container">
+      <a href="../index.html" class="back-button">← Back to API Reference</a>
+
+      <div class="header">
+        <div class="breadcrumb">
+          <a href="../index.html">API Reference</a> > Template Programming
+        </div>
+        <h1>📐 Template Programming</h1>
+        <p>
+          Advanced template techniques and generic programming demonstrations
+        </p>
+      </div>
+
+      <div class="template-grid">
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">GenericContainers</div>
+            <div class="template-type">Template Classes</div>
+          </div>
+          <div class="template-description">
+            Custom template containers demonstrating advanced generic
+            programming techniques with type safety and performance
+            optimization.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>, <span class="keyword">size_t</span>
+            <span class="type">N</span>&gt; <span class="keyword">class</span>
+            <span class="type">FixedVector</span> {
+            <span class="keyword">private</span>:
+            <span class="type">T</span> data[<span class="type">N</span>];
+            <span class="keyword">size_t</span> size_ =
+            <span class="string">0</span>; <span class="keyword">public</span>:
+            <span class="keyword">void</span> push_back(<span class="keyword"
+              >const</span
+            >
+            <span class="type">T</span>&amp; value);
+            <span class="comment">// ... more methods</span>
+            };
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Stack-allocated containers with compile-time sizing</li>
+              <li>Type-safe generic operations</li>
+              <li>Iterator support with STL compatibility</li>
+              <li>Memory-efficient implementations</li>
+              <li>Exception safety guarantees</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Intermediate</div>
+        </div>
+
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">MetaProgramming</div>
+            <div class="template-type">Compile-time Computing</div>
+          </div>
+          <div class="template-description">
+            Compile-time computations and type manipulations using advanced
+            template metaprogramming techniques.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >int</span
+            >
+            <span class="type">N</span>&gt; <span class="keyword">struct</span>
+            <span class="type">Factorial</span> {
+            <span class="keyword">static constexpr int</span> value =
+            <span class="type">N</span> *
+            <span class="type">Factorial</span>&lt;<span class="type">N</span
+            >-<span class="string">1</span>&gt;::value; };
+
+            <span class="keyword">template</span>&lt;&gt;
+            <span class="keyword">struct</span>
+            <span class="type">Factorial</span>&lt;<span class="string">0</span
+            >&gt; { <span class="keyword">static constexpr int</span> value =
+            <span class="string">1</span>; };
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Recursive template calculations</li>
+              <li>Type trait implementations</li>
+              <li>Compile-time algorithm execution</li>
+              <li>Template specialization patterns</li>
+              <li>Zero-runtime-cost abstractions</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Advanced</div>
+        </div>
+
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">SFINAE Examples</div>
+            <div class="template-type">Substitution Failure</div>
+          </div>
+          <div class="template-description">
+            Substitution Failure Is Not An Error demonstrations for conditional
+            template instantiation and overload resolution.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>&gt;
+            <span class="keyword">auto</span> process(<span class="type">T</span
+            >&amp;&amp; t) -&gt;
+            <span class="keyword">decltype</span>(t.process(),
+            <span class="keyword">void</span>()) {
+            <span class="comment"
+              >// Only enabled if T has process() method</span
+            >
+            t.process(); }
+
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>&gt;
+            <span class="keyword">typename</span> std::enable_if_t&lt; !<span
+              class="type"
+              >has_process_v</span
+            >&lt;<span class="type">T</span>&gt;&gt; process(<span class="type"
+              >T</span
+            >&amp;&amp; t) {
+            <span class="comment">// Fallback implementation</span>
+            }
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Conditional template instantiation</li>
+              <li>Type detection and trait checking</li>
+              <li>Overload resolution control</li>
+              <li>Enable/disable_if patterns</li>
+              <li>Duck typing support</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Expert</div>
+        </div>
+
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">VariadicTemplates</div>
+            <div class="template-type">Parameter Packs</div>
+          </div>
+          <div class="template-description">
+            Parameter pack demonstrations for flexible template functions and
+            classes with variable argument counts.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >... <span class="type">Args</span>&gt;
+            <span class="keyword">void</span> print(<span class="type"
+              >Args</span
+            >&amp;&amp;... args) { (std::cout &lt;&lt; ... &lt;&lt; args)
+            &lt;&lt; std::endl; }
+
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>,
+            <span class="keyword">typename</span>...
+            <span class="type">Args</span>&gt;
+            <span class="keyword">auto</span> make_unique(<span class="type"
+              >Args</span
+            >&amp;&amp;... args) {
+            <span class="keyword">return</span> std::unique_ptr&lt;<span
+              class="type"
+              >T</span
+            >&gt;( <span class="keyword">new</span>
+            <span class="type">T</span>(std::forward&lt;<span class="type"
+              >Args</span
+            >&gt;(args)...) ); }
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Parameter pack expansion</li>
+              <li>Fold expressions (C++17)</li>
+              <li>Perfect forwarding with variadic templates</li>
+              <li>Tuple-like operations</li>
+              <li>Generic factory functions</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Advanced</div>
+        </div>
+
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">ConceptsDemo</div>
+            <div class="template-type">C++20 Concepts</div>
+          </div>
+          <div class="template-description">
+            C++20 concepts for constraining templates with readable,
+            compile-time checked requirements.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>&gt;
+            <span class="keyword">concept</span>
+            <span class="type">Drawable</span> =
+            <span class="keyword">requires</span>(<span class="type">T</span> t)
+            { t.draw(); { t.getPosition() } -&gt; std::same_as&lt;<span
+              class="type"
+              >Vector3D</span
+            >&gt;; <span class="keyword">typename</span>
+            <span class="type">T</span>::position_type; };
+
+            <span class="keyword">template</span>&lt;<span class="type"
+              >Drawable</span
+            >
+            <span class="type">T</span>&gt;
+            <span class="keyword">void</span> render(<span class="keyword"
+              >const</span
+            >
+            <span class="type">T</span>&amp; object) { object.draw(); }
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Named requirements with concepts</li>
+              <li>Improved error messages</li>
+              <li>Concept composition and refinement</li>
+              <li>Requires expressions</li>
+              <li>Type constraint syntax</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Modern</div>
+        </div>
+
+        <div class="template-card">
+          <div class="template-header">
+            <div class="template-name">TemplateSpecialization</div>
+            <div class="template-type">Full & Partial Specialization</div>
+          </div>
+          <div class="template-description">
+            Full and partial template specializations for optimized
+            implementations and special case handling.
+          </div>
+          <div class="code-preview">
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>, <span class="keyword">size_t</span>
+            <span class="type">N</span>&gt; <span class="keyword">class</span>
+            <span class="type">Array</span> {
+            <span class="comment">// Generic implementation</span> };
+
+            <span class="comment">// Partial specialization for bool</span>
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >size_t</span
+            >
+            <span class="type">N</span>&gt; <span class="keyword">class</span>
+            <span class="type">Array</span>&lt;<span class="keyword">bool</span
+            >, <span class="type">N</span>&gt; {
+            <span class="comment">// Bit-packed implementation</span>
+            };
+
+            <span class="comment">// Full specialization</span>
+            <span class="keyword">template</span>&lt;&gt;
+            <span class="keyword">class</span>
+            <span class="type">Array</span>&lt;<span class="keyword">char</span
+            >, <span class="string">1</span>&gt; {
+            <span class="comment">// Single character optimization</span>
+            };
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Full template specialization</li>
+              <li>Partial specialization patterns</li>
+              <li>Optimization-specific implementations</li>
+              <li>Type-specific behavior customization</li>
+              <li>Compile-time dispatch</li>
+            </ul>
+          </div>
+          <div class="complexity-badge">Advanced</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

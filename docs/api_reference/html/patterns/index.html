@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design Patterns - CppVerseHub API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .breadcrumb {
+            color: #7f8c8d;
+            margin-bottom: 1rem;
+        }
+        
+        .breadcrumb a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .patterns-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 2rem;
+        }
+        
+        .pattern-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .pattern-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .pattern-header {
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .pattern-name {
+            color: #2c3e50;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .pattern-category {
+            color: #e74c3c;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .pattern-description {
+            color: #7f8c8d;
+            margin-bottom: 1.5rem;
+        }
+        
+        .implementation-section h3 {
+            color: #34495e;
+            font-size: 1.1rem;
+            margin-bottom: 0.8rem;
+            border-left: 3px solid #e74c3c;
+            padding-left: 0.5rem;
+        }
+        
+        .class-list {
+            list-style: none;
+            margin-bottom: 1rem;
+        }
+        
+        .class-list li {
+            padding: 0.5rem 0;
+            color: #7f8c8d;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .class-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .class-name {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .class-role {
+            color: #95a5a6;
+            font-size: 0.9rem;
+        }
+        
+        .usage-example {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        
+        .benefits {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .benefits h4 {
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .benefits ul {
+            list-style-type: none;
+            font-size: 0.85rem;
+        }
+        
+        .benefits li:before {
+            content: "✓ ";
+            font-weight: bold;
+        }
+        
+        .complexity-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 1rem;
+        }
+        
+        .back-button {
+            display: inline-block;
+            background: #e74c3c;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            transition: background 0.3s ease;
+        }
+        
+        .back-button:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <!-- File: docs/api_reference/html/patterns/index.html -->
+    <div class="container">
+        <a href="../index.html" class="back-button">← Back to API Reference</a>
+        
+        <div class="header">
+            <div class="breadcrumb">
+                <a href="../index.html">API Reference</a> > Design Patterns
+            </div>
+            <h1>🎨 Design Patterns</h1>
+            <p>Gang of Four and modern design pattern implementations in C++</p>
+        </div>
+        
+        <div class="patterns-grid">
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Singleton Pattern</div>
+                    <div class="pattern-category">Creational Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Thread-safe singleton implementation ensuring single instance creation with lazy initialization and proper cleanup.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">ResourceManager</span><br><span class="class-role">Global resource coordinator</span></li>
+                        <li><span class="class-name">ConfigManager</span><br><span class="class-role">Application configuration handler</span></li>
+                        <li><span class="class-name">Logger</span><br><span class="class-role">System-wide logging service</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+auto& manager = ResourceManager::getInstance();
+manager.allocateResources("minerals", 1000);
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Guaranteed single instance</li>
+                        <li>Global access point</li>
+                        <li>Lazy initialization</li>
+                        <li>Thread-safe implementation</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Advanced</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Builder Pattern</div>
+                    <div class="pattern-category">Creational Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Constructs complex entities step by step, providing a fluent interface for creating fleets, planets, and missions with multiple configuration options.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">FleetBuilder</span><br><span class="class-role">Fleet construction director</span></li>
+                        <li><span class="class-name">PlanetBuilder</span><br><span class="class-role">Planet configuration builder</span></li>
+                        <li><span class="class-name">MissionBuilder</span><br><span class="class-role">Mission parameter builder</span></li>
+                        <li><span class="class-name">EntityDirector</span><br><span class="class-role">Construction orchestrator</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+auto fleet = FleetBuilder()
+    .setName("Alpha Squadron")
+    .addShip("Destroyer", 3)
+    .addShip("Frigate", 5)
+    .setHomeBase(planet)
+    .build();
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Step-by-step object construction</li>
+                        <li>Fluent interface design</li>
+                        <li>Complex parameter validation</li>
+                        <li>Immutable result objects</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Intermediate</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">State Pattern</div>
+                    <div class="pattern-category">Behavioral Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Manages mission states and entity lifecycle through state objects, enabling clean state transitions and state-specific behavior.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">MissionState</span><br><span class="class-role">Abstract state interface</span></li>
+                        <li><span class="class-name">PendingState</span><br><span class="class-role">Mission awaiting execution</span></li>
+                        <li><span class="class-name">ExecutingState</span><br><span class="class-role">Mission in progress</span></li>
+                        <li><span class="class-name">CompletedState</span><br><span class="class-role">Mission finished</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+mission.setState(std::make_unique&lt;ExecutingState&gt;());
+mission.process(); // Behavior depends on current state
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Clean state transitions</li>
+                        <li>State-specific behavior encapsulation</li>
+                        <li>Eliminates complex conditionals</li>
+                        <li>Easy state machine visualization</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Advanced</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Adapter Pattern</div>
+                    <div class="pattern-category">Structural Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Enables integration with legacy systems and third-party libraries by adapting incompatible interfaces to work with the modern codebase.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">LegacySystemAdapter</span><br><span class="class-role">Legacy interface adapter</span></li>
+                        <li><span class="class-name">DatabaseAdapter</span><br><span class="class-role">External database interface</span></li>
+                        <li><span class="class-name">NetworkAdapter</span><br><span class="class-role">Network protocol adapter</span></li>
+                        <li><span class="class-name">FileFormatAdapter</span><br><span class="class-role">File format converter</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+auto adapter = std::make_unique&lt;LegacySystemAdapter&gt;(legacySystem);
+modernInterface.processData(adapter.get());
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Legacy system integration</li>
+                        <li>Interface compatibility</li>
+                        <li>Code reuse without modification</li>
+                        <li>Separation of concerns</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Intermediate</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>-badge">Fundamental</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Strategy Pattern</div>
+                    <div class="pattern-category">Behavioral Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Encapsulates algorithms in separate classes, allowing runtime selection of different behaviors for fleet routing and mission execution.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">RoutingStrategy</span><br><span class="class-role">Abstract routing algorithm</span></li>
+                        <li><span class="class-name">ShortestPathRouting</span><br><span class="class-role">Optimal distance routing</span></li>
+                        <li><span class="class-name">SafestPathRouting</span><br><span class="class-role">Risk-minimized routing</span></li>
+                        <li><span class="class-name">EconomicalRouting</span><br><span class="class-role">Resource-efficient routing</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+fleet.setRoutingStrategy(
+    std::make_unique&lt;ShortestPathRouting&gt;()
+);
+fleet.navigateTo(destination);
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Runtime algorithm switching</li>
+                        <li>Easy to extend with new strategies</li>
+                        <li>Eliminates conditional complexity</li>
+                        <li>Open/closed principle compliance</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Intermediate</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Observer Pattern</div>
+                    <div class="pattern-category">Behavioral Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Implements publisher-subscriber mechanism for planet monitoring, resource updates, and event notifications across the system.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">Observable</span><br><span class="class-role">Subject interface</span></li>
+                        <li><span class="class-name">Observer</span><br><span class="class-role">Listener interface</span></li>
+                        <li><span class="class-name">PlanetMonitor</span><br><span class="class-role">Planet state observer</span></li>
+                        <li><span class="class-name">ResourceTracker</span><br><span class="class-role">Resource change observer</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+planet.addObserver(std::make_shared&lt;ResourceTracker&gt;());
+planet.updateResources(); // Notifies all observers
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Loose coupling between objects</li>
+                        <li>Dynamic observer registration</li>
+                        <li>Event-driven architecture</li>
+                        <li>Broadcast communication</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Intermediate</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Decorator Pattern</div>
+                    <div class="pattern-category">Structural Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Adds new functionality to missions and entities dynamically without altering their structure through composition-based enhancement.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">MissionDecorator</span><br><span class="class-role">Abstract decorator base</span></li>
+                        <li><span class="class-name">UrgentMissionDecorator</span><br><span class="class-role">Priority enhancement</span></li>
+                        <li><span class="class-name">StealthMissionDecorator</span><br><span class="class-role">Stealth capability</span></li>
+                        <li><span class="class-name">ReconMissionDecorator</span><br><span class="class-role">Intelligence gathering</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+auto mission = std::make_unique&lt;ExplorationMission&gt;();
+mission = std::make_unique&lt;UrgentMissionDecorator&gt;(
+    std::move(mission)
+);
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Runtime behavior enhancement</li>
+                        <li>Flexible combination of features</li>
+                        <li>Preserves original object interface</li>
+                        <li>Single responsibility principle</li>
+                    </ul>
+                </div>
+                <div class="complexity-badge">Advanced</div>
+            </div>
+            
+            <div class="pattern-card">
+                <div class="pattern-header">
+                    <div class="pattern-name">Command Pattern</div>
+                    <div class="pattern-category">Behavioral Pattern</div>
+                </div>
+                <div class="pattern-description">
+                    Encapsulates fleet operations as objects, enabling queuing, logging, and undo functionality for complex mission management.
+                </div>
+                <div class="implementation-section">
+                    <h3>Implementation Classes</h3>
+                    <ul class="class-list">
+                        <li><span class="class-name">Command</span><br><span class="class-role">Abstract command interface</span></li>
+                        <li><span class="class-name">MoveFleetCommand</span><br><span class="class-role">Fleet movement operation</span></li>
+                        <li><span class="class-name">AttackCommand</span><br><span class="class-role">Combat operation</span></li>
+                        <li><span class="class-name">CommandInvoker</span><br><span class="class-role">Command execution manager</span></li>
+                    </ul>
+                </div>
+                <div class="usage-example">
+auto cmd = std::make_unique&lt;MoveFleetCommand&gt;(fleet, target);
+invoker.executeCommand(std::move(cmd));
+invoker.undo(); // Reverse last command
+                </div>
+                <div class="benefits">
+                    <h4>Key Benefits</h4>
+                    <ul>
+                        <li>Operation queuing and batching</li>
+                        <li>Undo/redo functionality</li>
+                        <li>Command logging and replay</li>
+                        <li>Decoupled sender-receiver</li>
+                    </ul>
+                </div>
+                <div class="complexity

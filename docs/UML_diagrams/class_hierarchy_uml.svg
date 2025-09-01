@@ -1,0 +1,236 @@
+<svg width="1000" height="800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Location: CppVerseHub/docs/UML_diagrams/class_hierarchy.svg -->
+  
+  <!-- Title -->
+  <text x="500" y="25" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+    Entity Class Hierarchy - CppVerseHub
+  </text>
+  
+  <!-- Abstract Base Class: Entity -->
+  <rect x="400" y="50" width="200" height="120" fill="#e8f4fd" stroke="#2196F3" stroke-width="2" rx="5"/>
+  <text x="500" y="70" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1976D2">
+    &lt;&lt;abstract&gt;&gt;
+  </text>
+  <text x="500" y="90" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Entity
+  </text>
+  <line x1="410" y1="95" x2="590" y2="95" stroke="#666" stroke-width="1"/>
+  <text x="410" y="110" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - id_: string
+  </text>
+  <text x="410" y="125" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - position_: Vector3D
+  </text>
+  <line x1="410" y1="135" x2="590" y2="135" stroke="#666" stroke-width="1"/>
+  <text x="410" y="150" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + virtual update() = 0
+  </text>
+  <text x="410" y="165" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + virtual render() const
+  </text>
+
+  <!-- Planet Class -->
+  <rect x="50" y="250" width="200" height="150" fill="#e8f5e8" stroke="#4CAF50" stroke-width="2" rx="5"/>
+  <text x="150" y="275" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Planet
+  </text>
+  <line x1="60" y1="285" x2="240" y2="285" stroke="#666" stroke-width="1"/>
+  <text x="60" y="300" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - name_: string
+  </text>
+  <text x="60" y="315" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - resources_: double
+  </text>
+  <text x="60" y="330" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - inhabitants_: vector&lt;string&gt;
+  </text>
+  <line x1="60" y1="340" x2="240" y2="340" stroke="#666" stroke-width="1"/>
+  <text x="60" y="355" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + update() override
+  </text>
+  <text x="60" y="370" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getResources(): double
+  </text>
+  <text x="60" y="385" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + addResources(double)
+  </text>
+
+  <!-- Fleet Class -->
+  <rect x="300" y="250" width="200" height="150" fill="#fff3e0" stroke="#FF9800" stroke-width="2" rx="5"/>
+  <text x="400" y="275" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Fleet
+  </text>
+  <line x1="310" y1="285" x2="490" y2="285" stroke="#666" stroke-width="1"/>
+  <text x="310" y="300" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - name_: string
+  </text>
+  <text x="310" y="315" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - ships_: vector&lt;Ship&gt;
+  </text>
+  <text x="310" y="330" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - fuel_: double
+  </text>
+  <line x1="310" y1="340" x2="490" y2="340" stroke="#666" stroke-width="1"/>
+  <text x="310" y="355" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + update() override
+  </text>
+  <text x="310" y="370" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + move(Vector3D)
+  </text>
+  <text x="310" y="385" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + addShip(Ship)
+  </text>
+
+  <!-- SpaceStation Class -->
+  <rect x="550" y="250" width="200" height="150" fill="#fce4ec" stroke="#E91E63" stroke-width="2" rx="5"/>
+  <text x="650" y="275" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    SpaceStation
+  </text>
+  <line x1="560" y1="285" x2="740" y2="285" stroke="#666" stroke-width="1"/>
+  <text x="560" y="300" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - name_: string
+  </text>
+  <text x="560" y="315" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - capacity_: int
+  </text>
+  <text x="560" y="330" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - docked_ships_: vector&lt;Ship&gt;
+  </text>
+  <line x1="560" y1="340" x2="740" y2="340" stroke="#666" stroke-width="1"/>
+  <text x="560" y="355" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + update() override
+  </text>
+  <text x="560" y="370" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + dockShip(Ship)
+  </text>
+  <text x="560" y="385" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + undockShip(Ship)
+  </text>
+
+  <!-- Asteroid Class -->
+  <rect x="800" y="250" width="180" height="130" fill="#f3e5f5" stroke="#9C27B0" stroke-width="2" rx="5"/>
+  <text x="890" y="275" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Asteroid
+  </text>
+  <line x1="810" y1="285" x2="970" y2="285" stroke="#666" stroke-width="1"/>
+  <text x="810" y="300" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - size_: double
+  </text>
+  <text x="810" y="315" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - mineral_content_: double
+  </text>
+  <line x1="810" y1="325" x2="970" y2="325" stroke="#666" stroke-width="1"/>
+  <text x="810" y="340" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + update() override
+  </text>
+  <text x="810" y="355" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + mine(): double
+  </text>
+  <text x="810" y="370" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getSize(): double
+  </text>
+
+  <!-- Inheritance arrows -->
+  <!-- Planet to Entity -->
+  <path d="M 150 250 L 150 220 L 450 220 L 450 170" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  
+  <!-- Fleet to Entity -->
+  <path d="M 400 250 L 400 220 L 500 220 L 500 170" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  
+  <!-- SpaceStation to Entity -->
+  <path d="M 650 250 L 650 220 L 550 220 L 550 170" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  
+  <!-- Asteroid to Entity -->
+  <path d="M 890 250 L 890 220 L 550 220 L 550 170" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+
+  <!-- Composition relationships -->
+  <!-- Fleet contains Ships -->
+  <rect x="200" y="480" width="160" height="100" fill="#f5f5f5" stroke="#666" stroke-width="1" rx="3"/>
+  <text x="280" y="505" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Ship
+  </text>
+  <line x1="210" y1="515" x2="350" y2="515" stroke="#666" stroke-width="1"/>
+  <text x="210" y="530" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    - name_: string
+  </text>
+  <text x="210" y="545" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    - type_: ShipType
+  </text>
+  <text x="210" y="560" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    - health_: double
+  </text>
+  <text x="210" y="575" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    + repair()
+  </text>
+
+  <!-- Composition arrow from Fleet to Ship -->
+  <path d="M 350 400 L 350 450 L 280 450 L 280 480" fill="none" stroke="#666" stroke-width="2" marker-end="url(#compositionArrow)"/>
+  <text x="320" y="445" font-family="Arial, sans-serif" font-size="10" fill="#666">1..*</text>
+
+  <!-- Resource Manager (Singleton pattern) -->
+  <rect x="600" y="480" width="200" height="120" fill="#e3f2fd" stroke="#2196F3" stroke-width="2" rx="5"/>
+  <text x="700" y="500" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    ResourceManager
+  </text>
+  <text x="700" y="515" font-family="Arial, sans-serif" font-size="10" font-style="italic" text-anchor="middle" fill="#666">
+    &lt;&lt;singleton&gt;&gt;
+  </text>
+  <line x1="610" y1="525" x2="790" y2="525" stroke="#666" stroke-width="1"/>
+  <text x="610" y="540" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    - instance_: static unique_ptr
+  </text>
+  <text x="610" y="555" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    - total_resources_: double
+  </text>
+  <line x1="610" y1="565" x2="790" y2="565" stroke="#666" stroke-width="1"/>
+  <text x="610" y="580" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    + getInstance(): static&amp;
+  </text>
+  <text x="610" y="595" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    + allocate(double): bool
+  </text>
+
+  <!-- Association arrow from Entity to ResourceManager -->
+  <path d="M 600 110 L 650 110 L 650 480" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="655" y="300" font-family="Arial, sans-serif" font-size="10" fill="#666">uses</text>
+
+  <!-- Legend -->
+  <rect x="20" y="650" width="300" height="120" fill="none" stroke="#ccc" stroke-width="1"/>
+  <text x="30" y="670" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Legend:
+  </text>
+  
+  <line x1="30" y1="685" x2="50" y2="685" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <text x="55" y="690" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    Inheritance (is-a relationship)
+  </text>
+  
+  <line x1="30" y1="705" x2="50" y2="705" stroke="#666" stroke-width="2" marker-end="url(#compositionArrow)"/>
+  <text x="55" y="710" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    Composition (part-of relationship)
+  </text>
+  
+  <line x1="30" y1="725" x2="50" y2="725" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="55" y="730" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    Association (uses relationship)
+  </text>
+  
+  <text x="30" y="750" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    Abstract classes shown with &lt;&lt;abstract&gt;&gt; stereotype
+  </text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <!-- Inheritance arrow (hollow triangle) -->
+    <marker id="inheritanceArrow" markerWidth="10" markerHeight="10" 
+            refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="white" stroke="#666" stroke-width="1"/>
+    </marker>
+    
+    <!-- Composition arrow (filled diamond) -->
+    <marker id="compositionArrow" markerWidth="10" markerHeight="10" 
+            refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,3 L3,0 L9,3 L3,6 z" fill="#666"/>
+    </marker>
+  </defs>
+</svg>

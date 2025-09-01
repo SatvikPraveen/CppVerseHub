@@ -1,0 +1,656 @@
+<svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Location: CppVerseHub/docs/UML_diagrams/system_architecture.svg -->
+  
+  <!-- Title -->
+  <text x="800" y="25" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#333">
+    CppVerseHub - System Architecture Overview
+  </text>
+  <text x="800" y="45" font-family="Arial, sans-serif" font-size="14" font-style="italic" text-anchor="middle" fill="#666">
+    Space Exploration Simulation - Modern C++ Showcase
+  </text>
+
+  <!-- Application Layer -->
+  <rect x="50" y="70" width="1500" height="80" fill="#e3f2fd" stroke="#1976d2" stroke-width="2" rx="5"/>
+  <text x="800" y="95" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1976d2">
+    Application Layer
+  </text>
+  
+  <!-- Main Application -->
+  <rect x="100" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="175" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    main.cpp
+  </text>
+  
+  <!-- CLI Interface -->
+  <rect x="270" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="345" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    CLI Interface
+  </text>
+  
+  <!-- Configuration -->
+  <rect x="440" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="515" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    ConfigManager
+  </text>
+  
+  <!-- Logger -->
+  <rect x="610" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="685" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Logger System
+  </text>
+  
+  <!-- File Parser -->
+  <rect x="780" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="855" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    FileParser
+  </text>
+  
+  <!-- Examples/Tutorials -->
+  <rect x="950" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="1025" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Examples/Tutorials
+  </text>
+  
+  <!-- Test Framework -->
+  <rect x="1120" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="1195" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Test Framework
+  </text>
+  
+  <!-- Benchmarks -->
+  <rect x="1290" y="105" width="150" height="35" fill="#fff" stroke="#1976d2" stroke-width="1" rx="3"/>
+  <text x="1365" y="125" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Benchmarks
+  </text>
+
+  <!-- Core Engine Layer -->
+  <rect x="50" y="180" width="1500" height="120" fill="#e8f5e9" stroke="#388e3c" stroke-width="2" rx="5"/>
+  <text x="800" y="205" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#388e3c">
+    Core Engine Layer
+  </text>
+  
+  <!-- Game Engine -->
+  <rect x="100" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="200" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    GameEngine
+  </text>
+  <text x="200" y="255" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+    Main Simulation Controller
+  </text>
+  <text x="110" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Simulation loop management
+  </text>
+  <text x="110" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Entity lifecycle control
+  </text>
+  
+  <!-- Resource Manager -->
+  <rect x="320" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="420" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    ResourceManager
+  </text>
+  <text x="420" y="255" font-family="Arial, sans-serif" font-size="10" font-style="italic" text-anchor="middle" fill="#666">
+    (Singleton Pattern)
+  </text>
+  <text x="330" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Global resource allocation
+  </text>
+  <text x="330" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Thread-safe operations
+  </text>
+  
+  <!-- Entity Factory -->
+  <rect x="540" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="640" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    EntityFactory
+  </text>
+  <text x="640" y="255" font-family="Arial, sans-serif" font-size="10" font-style="italic" text-anchor="middle" fill="#666">
+    (Factory Pattern)
+  </text>
+  <text x="550" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Dynamic entity creation
+  </text>
+  <text x="550" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Type-safe instantiation
+  </text>
+  
+  <!-- Exception Handler -->
+  <rect x="760" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="860" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Exception System
+  </text>
+  <text x="860" y="255" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+    Custom Exception Hierarchy
+  </text>
+  <text x="770" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Domain-specific exceptions
+  </text>
+  <text x="770" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Error recovery strategies
+  </text>
+  
+  <!-- Command System -->
+  <rect x="980" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="1080" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Command System
+  </text>
+  <text x="1080" y="255" font-family="Arial, sans-serif" font-size="10" font-style="italic" text-anchor="middle" fill="#666">
+    (Command Pattern)
+  </text>
+  <text x="990" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Action encapsulation
+  </text>
+  <text x="990" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Undo/Redo functionality
+  </text>
+  
+  <!-- Event System -->
+  <rect x="1200" y="220" width="200" height="70" fill="#fff" stroke="#388e3c" stroke-width="1" rx="3"/>
+  <text x="1300" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Event System
+  </text>
+  <text x="1300" y="255" font-family="Arial, sans-serif" font-size="10" font-style="italic" text-anchor="middle" fill="#666">
+    (Observer Pattern)
+  </text>
+  <text x="1210" y="270" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Event-driven architecture
+  </text>
+  <text x="1210" y="280" font-family="Arial, sans-serif" font-size="9" fill="#333">
+    • Loose coupling</text>
+
+  <!-- Domain Model Layer -->
+  <rect x="50" y="330" width="1500" height="140" fill="#fff3e0" stroke="#f57c00" stroke-width="2" rx="5"/>
+  <text x="800" y="355" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#f57c00">
+    Domain Model Layer
+  </text>
+  
+  <!-- Entity Hierarchy -->
+  <rect x="100" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="190" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Entity Hierarchy
+  </text>
+  <text x="110" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Abstract Entity base
+  </text>
+  <text x="110" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Planet implementations
+  </text>
+  <text x="110" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Fleet management
+  </text>
+  
+  <!-- Mission System -->
+  <rect x="300" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="390" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Mission System
+  </text>
+  <text x="310" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Mission polymorphism
+  </text>
+  <text x="310" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Strategy pattern routing
+  </text>
+  <text x="310" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Decorator enhancements
+  </text>
+  
+  <!-- Navigation System -->
+  <rect x="500" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="590" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Navigation System
+  </text>
+  <text x="510" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Pathfinding algorithms
+  </text>
+  <text x="510" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Legacy system adapter
+  </text>
+  <text x="510" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Route optimization
+  </text>
+  
+  <!-- Fleet Builder -->
+  <rect x="700" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="790" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Fleet Builder
+  </text>
+  <text x="710" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Complex fleet construction
+  </text>
+  <text x="710" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Builder pattern
+  </text>
+  <text x="710" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Configuration templates
+  </text>
+  
+  <!-- Communication -->
+  <rect x="900" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="990" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Communication
+  </text>
+  <text x="910" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Async messaging
+  </text>
+  <text x="910" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Thread-safe queues
+  </text>
+  <text x="910" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Event broadcasting
+  </text>
+  
+  <!-- Data Models -->
+  <rect x="1100" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="1190" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Data Models
+  </text>
+  <text x="1110" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Resource definitions
+  </text>
+  <text x="1110" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Configuration schemas
+  </text>
+  <text x="1110" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • State representations
+  </text>
+  
+  <!-- Validation -->
+  <rect x="1300" y="375" width="180" height="85" fill="#fff" stroke="#f57c00" stroke-width="1" rx="3"/>
+  <text x="1390" y="395" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Validation Layer
+  </text>
+  <text x="1310" y="415" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Input validation
+  </text>
+  <text x="1310" y="430" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Business rule checks
+  </text>
+  <text x="1310" y="445" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Constraint verification
+  </text>
+
+  <!-- C++ Feature Showcase Layer -->
+  <rect x="50" y="500" width="1500" height="200" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="2" rx="5"/>
+  <text x="800" y="525" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#7b1fa2">
+    C++ Feature Showcase Layer
+  </text>
+  
+  <!-- Templates -->
+  <rect x="100" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="200" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Template Programming
+  </text>
+  <text x="110" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Generic containers
+  </text>
+  <text x="110" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • SFINAE examples
+  </text>
+  <text x="110" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Variadic templates
+  </text>
+  <text x="110" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Meta-programming
+  </text>
+  
+  <!-- STL Showcase -->
+  <rect x="320" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="420" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    STL Mastery
+  </text>
+  <text x="330" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Containers (vector, map, set)
+  </text>
+  <text x="330" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Algorithms (sort, transform)
+  </text>
+  <text x="330" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Iterators & functors
+  </text>
+  <text x="330" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Utilities (tuple, optional)
+  </text>
+  
+  <!-- Memory Management -->
+  <rect x="540" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="640" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Memory Management
+  </text>
+  <text x="550" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Smart pointers
+  </text>
+  <text x="550" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • RAII patterns
+  </text>
+  <text x="550" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Custom allocators
+  </text>
+  <text x="550" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Memory pools
+  </text>
+  
+  <!-- Concurrency -->
+  <rect x="760" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="860" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Concurrency
+  </text>
+  <text x="770" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Thread pools
+  </text>
+  <text x="770" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Async operations
+  </text>
+  <text x="770" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Synchronization primitives
+  </text>
+  <text x="770" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Lock-free programming
+  </text>
+  
+  <!-- Modern C++ -->
+  <rect x="980" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="1080" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Modern C++
+  </text>
+  <text x="990" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • C++20 Concepts
+  </text>
+  <text x="990" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Ranges & coroutines
+  </text>
+  <text x="990" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Modules & constexpr
+  </text>
+  <text x="990" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Lambda expressions
+  </text>
+  
+  <!-- Algorithms -->
+  <rect x="1200" y="545" width="200" height="100" fill="#fff" stroke="#7b1fa2" stroke-width="1" rx="3"/>
+  <text x="1300" y="565" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    Custom Algorithms
+  </text>
+  <text x="1210" y="585" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Sorting implementations
+  </text>
+  <text x="1210" y="600" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Search algorithms
+  </text>
+  <text x="1210" y="615" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Graph algorithms
+  </text>
+  <text x="1210" y="630" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Data structures
+  </text>
+
+  <!-- Infrastructure Layer -->
+  <rect x="50" y="730" width="1500" height="120" fill="#ffebee" stroke="#d32f2f" stroke-width="2" rx="5"/>
+  <text x="800" y="755" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#d32f2f">
+    Infrastructure & Support Layer
+  </text>
+  
+  <!-- Build System -->
+  <rect x="100" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="190" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Build System
+  </text>
+  <text x="110" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • CMake configuration
+  </text>
+  <text x="110" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Cross-platform builds
+  </text>
+  
+  <!-- Testing -->
+  <rect x="300" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="390" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Testing Framework
+  </text>
+  <text x="310" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Unit tests (Catch2)
+  </text>
+  <text x="310" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Integration & benchmarks
+  </text>
+  
+  <!-- Documentation -->
+  <rect x="500" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="590" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Documentation
+  </text>
+  <text x="510" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Doxygen API docs
+  </text>
+  <text x="510" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Cheat sheets & guides
+  </text>
+  
+  <!-- Development Tools -->
+  <rect x="700" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="790" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Development Tools
+  </text>
+  <text x="710" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Code formatting
+  </text>
+  <text x="710" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Static analysis
+  </text>
+  
+  <!-- External Dependencies -->
+  <rect x="900" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="990" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    External Libraries
+  </text>
+  <text x="910" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • JSON parsing
+  </text>
+  <text x="910" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Benchmarking
+  </text>
+  
+  <!-- File I/O -->
+  <rect x="1100" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="1190" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    File I/O System
+  </text>
+  <text x="1110" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Configuration files
+  </text>
+  <text x="1110" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Data persistence
+  </text>
+  
+  <!-- Scripts -->
+  <rect x="1300" y="775" width="180" height="65" fill="#fff" stroke="#d32f2f" stroke-width="1" rx="3"/>
+  <text x="1390" y="795" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Automation Scripts
+  </text>
+  <text x="1310" y="815" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Build automation
+  </text>
+  <text x="1310" y="830" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Environment setup
+  </text>
+
+  <!-- Data Flow Arrows -->
+  <!-- Application to Core -->
+  <path d="M 800 150 L 800 180" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Core to Domain -->
+  <path d="M 800 300 L 800 330" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Domain to C++ Features -->
+  <path d="M 800 470 L 800 500" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- All to Infrastructure -->
+  <path d="M 200 730 L 200 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 400 730 L 400 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 600 730 L 600 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 800 730 L 800 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 1000 730 L 1000 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 1200 730 L 1200 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <path d="M 1400 730 L 1400 650" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+
+  <!-- Key Design Principles -->
+  <rect x="50" y="880" width="750" height="150" fill="#f8f9fa" stroke="#6c757d" stroke-width="2" rx="5"/>
+  <text x="425" y="905" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Key Design Principles
+  </text>
+  
+  <text x="70" y="930" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+    SOLID Principles:
+  </text>
+  <text x="80" y="950" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    ✓ Single Responsibility: Each class has one reason to change
+  </text>
+  <text x="80" y="965" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    ✓ Open/Closed: Open for extension, closed for modification
+  </text>
+  <text x="80" y="980" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    ✓ Liskov Substitution: Subtypes must be substitutable for base types
+  </text>
+  <text x="80" y="995" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    ✓ Interface Segregation: Clients shouldn't depend on unused interfaces
+  </text>
+  <text x="80" y="1010" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    ✓ Dependency Inversion: Depend on abstractions, not concretions
+  </text>
+  
+  <text x="450" y="930" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+    Additional Principles:
+  </text>
+  <text x="460" y="950" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • DRY: Don't Repeat Yourself
+  </text>
+  <text x="460" y="965" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • KISS: Keep It Simple, Stupid
+  </text>
+  <text x="460" y="980" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • YAGNI: You Aren't Gonna Need It
+  </text>
+  <text x="460" y="995" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • Composition over Inheritance
+  </text>
+  <text x="460" y="1010" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • Fail Fast & Exception Safety
+  </text>
+
+  <!-- Technology Stack -->
+  <rect x="820" y="880" width="730" height="150" fill="#e8f4fd" stroke="#2196F3" stroke-width="2" rx="5"/>
+  <text x="1185" y="905" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Technology Stack & Standards
+  </text>
+  
+  <text x="840" y="930" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+    Language Standards:
+  </text>
+  <text x="850" y="950" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • C++20 (Primary) with C++23 features where available
+  </text>
+  <text x="850" y="965" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • ISO C++ compliance with compiler-specific optimizations
+  </text>
+  <text x="850" y="980" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • Cross-platform compatibility (GCC, Clang, MSVC)
+  </text>
+  
+  <text x="840" y="1000" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+    External Dependencies:
+  </text>
+  <text x="850" y="1020" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    • nlohmann/json (JSON parsing) • Catch2 (Testing) • Google Benchmark (Performance)
+  </text>
+
+  <!-- Performance Characteristics -->
+  <rect x="50" y="1050" width="1500" height="120" fill="#f1f8e9" stroke="#689f38" stroke-width="2" rx="5"/>
+  <text x="800" y="1075" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#689f38">
+    Performance & Quality Characteristics
+  </text>
+  
+  <text x="100" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Memory Management:
+  </text>
+  <text x="110" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Zero-overhead abstractions
+  </text>
+  <text x="110" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • RAII throughout
+  </text>
+  <text x="110" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Custom allocators
+  </text>
+  
+  <text x="350" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Concurrency:
+  </text>
+  <text x="360" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Thread-safe operations
+  </text>
+  <text x="360" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Lock-free data structures
+  </text>
+  <text x="360" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Async task execution
+  </text>
+  
+  <text x="600" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Exception Safety:
+  </text>
+  <text x="610" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Strong guarantee preferred
+  </text>
+  <text x="610" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Basic guarantee minimum
+  </text>
+  <text x="610" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • No-throw where critical
+  </text>
+  
+  <text x="850" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Code Quality:
+  </text>
+  <text x="860" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • >90% test coverage
+  </text>
+  <text x="860" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Static analysis clean
+  </text>
+  <text x="860" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Documentation complete
+  </text>
+  
+  <text x="1100" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Scalability:
+  </text>
+  <text x="1110" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Modular architecture
+  </text>
+  <text x="1110" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Plugin-ready design
+  </text>
+  <text x="1110" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Configurable components
+  </text>
+  
+  <text x="1350" y="1100" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Educational Value:
+  </text>
+  <text x="1360" y="1120" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Progressive complexity
+  </text>
+  <text x="1360" y="1135" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Best practices showcase
+  </text>
+  <text x="1360" y="1150" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Real-world patterns
+  </text>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+            refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+  </defs>
+</svg>
