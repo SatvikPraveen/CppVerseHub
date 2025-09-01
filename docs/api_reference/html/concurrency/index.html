@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concurrency - CppVerseHub API</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .breadcrumb {
+        color: #7f8c8d;
+        margin-bottom: 1rem;
+      }
+
+      .breadcrumb a {
+        color: #3498db;
+        text-decoration: none;
+      }
+
+      .header h1 {
+        color: #2c3e50;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .concurrency-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        gap: 2rem;
+      }
+
+      .concurrency-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+      }
+
+      .concurrency-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+      }
+
+      .concurrency-header {
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .concurrency-name {
+        color: #2c3e50;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+
+      .concurrency-category {
+        color: #f39c12;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .concurrency-description {
+        color: #7f8c8d;
+        margin-bottom: 1.5rem;
+      }
+
+      .features-section h3 {
+        color: #34495e;
+        font-size: 1.1rem;
+        margin-bottom: 0.8rem;
+        border-left: 3px solid #f39c12;
+        padding-left: 0.5rem;
+      }
+
+      .feature-list {
+        list-style: none;
+        margin-bottom: 1rem;
+      }
+
+      .feature-list li {
+        padding: 0.4rem 0;
+        color: #7f8c8d;
+        position: relative;
+        padding-left: 1.5rem;
+      }
+
+      .feature-list li:before {
+        content: "⚡";
+        position: absolute;
+        left: 0;
+        color: #f39c12;
+      }
+
+      .code-example {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 1.5rem;
+        border-radius: 8px;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+      }
+
+      .keyword {
+        color: #e74c3c;
+      }
+      .type {
+        color: #3498db;
+      }
+      .string {
+        color: #27ae60;
+      }
+      .comment {
+        color: #95a5a6;
+        font-style: italic;
+      }
+      .number {
+        color: #f39c12;
+      }
+
+      .safety-note {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+      }
+
+      .safety-note h4 {
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+      }
+
+      .performance-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .metric {
+        background: #f8f9fa;
+        padding: 0.8rem;
+        border-radius: 6px;
+        text-align: center;
+      }
+
+      .metric-value {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #f39c12;
+      }
+
+      .metric-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+      }
+
+      .complexity-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 1rem;
+      }
+
+      .back-button {
+        display: inline-block;
+        background: #f39c12;
+        color: white;
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        transition: background 0.3s ease;
+      }
+
+      .back-button:hover {
+        background: #e67e22;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- File: docs/api_reference/html/concurrency/index.html -->
+    <div class="container">
+      <a href="../index.html" class="back-button">← Back to API Reference</a>
+
+      <div class="header">
+        <div class="breadcrumb">
+          <a href="../index.html">API Reference</a> > Concurrency
+        </div>
+        <h1>⚡ Concurrency</h1>
+        <p>
+          Multithreading and asynchronous programming for high-performance
+          simulation
+        </p>
+      </div>
+
+      <div class="concurrency-grid">
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">ThreadPool</div>
+            <div class="concurrency-category">Worker Management</div>
+          </div>
+          <div class="concurrency-description">
+            High-performance thread pool implementation for parallel task
+            execution, featuring dynamic sizing, work stealing, and efficient
+            task distribution.
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Dynamic thread scaling based on workload</li>
+              <li>Work-stealing queue for load balancing</li>
+              <li>Future-based result retrieval</li>
+              <li>Exception-safe task execution</li>
+              <li>Graceful shutdown with task completion</li>
+              <li>Priority-based task scheduling</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment">// Thread pool for mission execution</span>
+            <span class="keyword">class</span>
+            <span class="type">ThreadPool</span> {
+            <span class="keyword">private</span>:
+            <span class="type">std::vector</span>&lt;<span class="type"
+              >std::thread</span
+            >&gt; workers; <span class="type">std::queue</span>&lt;<span
+              class="type"
+              >std::function</span
+            >&lt;<span class="keyword">void</span>()&gt;&gt; tasks;
+            <span class="type">std::mutex</span> queueMutex;
+            <span class="type">std::condition_variable</span> condition;
+            <span class="keyword">bool</span> stop =
+            <span class="keyword">false</span>;
+
+            <span class="keyword">public</span>:
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >class</span
+            >
+            <span class="type">F</span>, <span class="keyword">class</span>...
+            <span class="type">Args</span>&gt;
+            <span class="keyword">auto</span> enqueue(<span class="type">F</span
+            >&amp;&amp; f, <span class="type">Args</span>&amp;&amp;... args)
+            -&gt; <span class="type">std::future</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            std::result_of&lt; <span class="type">F</span>(<span class="type"
+              >Args</span
+            >...)&gt;::type&gt; {
+            <span class="comment">// Implementation details...</span>
+            } };
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">4-16</div>
+              <div class="metric-label">Thread Range</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">O(1)</div>
+              <div class="metric-label">Task Enqueue</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Thread Safety</h4>
+            Mutex-protected task queue with condition variables for efficient
+            worker coordination and safe shutdown procedures.
+          </div>
+          <div class="complexity-badge">Production Ready</div>
+        </div>
+
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">AsyncComms</div>
+            <div class="concurrency-category">Async Communication</div>
+          </div>
+          <div class="concurrency-description">
+            Asynchronous communication system enabling non-blocking message
+            passing between fleets, planets, and control systems with guaranteed
+            delivery.
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Non-blocking message queues</li>
+              <li>Priority-based message routing</li>
+              <li>Guaranteed delivery mechanisms</li>
+              <li>Message serialization support</li>
+              <li>Network-ready architecture</li>
+              <li>Backpressure handling</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment">// Async message system</span>
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">MessageType</span>&gt;
+            <span class="keyword">class</span>
+            <span class="type">AsyncMessageQueue</span> {
+            <span class="keyword">private</span>:
+            <span class="type">std::queue</span>&lt;<span class="type"
+              >MessageType</span
+            >&gt; messages; <span class="type">std::mutex</span> mtx;
+            <span class="type">std::condition_variable</span> cv;
+            <span class="type">std::atomic</span>&lt;<span class="keyword"
+              >bool</span
+            >&gt; shutdown{<span class="keyword">false</span>};
+
+            <span class="keyword">public</span>:
+            <span class="keyword">void</span> send(<span class="keyword"
+              >const</span
+            >
+            <span class="type">MessageType</span>&amp; msg) {
+            <span class="type">std::lock_guard</span>&lt;<span class="type"
+              >std::mutex</span
+            >&gt; lock(mtx); messages.push(msg); cv.notify_one(); }
+
+            <span class="type">std::optional</span>&lt;<span class="type"
+              >MessageType</span
+            >&gt; receive(
+            <span class="type">std::chrono::milliseconds</span> timeout) {
+            <span class="comment">// Non-blocking receive with timeout</span>
+            } };
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">Lock-free</div>
+              <div class="metric-label">Send Path</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">10μs</div>
+              <div class="metric-label">Avg Latency</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Reliability Features</h4>
+            Implements message acknowledgments, retry mechanisms, and dead
+            letter queues for mission-critical communications.
+          </div>
+          <div class="complexity-badge">Enterprise Grade</div>
+        </div>
+
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">AsyncMissions</div>
+            <div class="concurrency-category">Parallel Execution</div>
+          </div>
+          <div class="concurrency-description">
+            Parallel mission execution framework allowing multiple missions to
+            run concurrently with progress tracking, cancellation support, and
+            result aggregation.
+          </div>
+          <div class="features-section">
+            <h3>Key Features</h3>
+            <ul class="feature-list">
+              <li>Concurrent mission execution</li>
+              <li>Progress monitoring and reporting</li>
+              <li>Graceful cancellation support</li>
+              <li>Resource conflict resolution</li>
+              <li>Result aggregation and reporting</li>
+              <li>Dependency-based scheduling</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment">// Parallel mission coordinator</span>
+            <span class="keyword">class</span>
+            <span class="type">MissionCoordinator</span> {
+            <span class="keyword">private</span>:
+            <span class="type">ThreadPool</span> executor;
+            <span class="type">std::vector</span>&lt;<span class="type"
+              >std::future</span
+            >&lt;<span class="type">MissionResult</span>&gt;&gt; futures;
+            <span class="type">std::atomic</span>&lt;<span class="keyword"
+              >int</span
+            >&gt; activeMissions{<span class="number">0</span>};
+
+            <span class="keyword">public</span>:
+            <span class="keyword">void</span> executeMission(<span class="type"
+              >std::unique_ptr</span
+            >&lt;<span class="type">Mission</span>&gt; mission) {
+            <span class="keyword">auto</span> future = executor.enqueue([mission
+            = std::move(mission)]() {
+            <span class="keyword">return</span> mission-&gt;execute(); });
+            futures.push_back(std::move(future)); activeMissions++; }
+
+            <span class="type">std::vector</span>&lt;<span class="type"
+              >MissionResult</span
+            >&gt; waitForCompletion() {
+            <span class="comment">// Wait for all missions to complete</span>
+            } };
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">32</div>
+              <div class="metric-label">Max Concurrent</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">95%</div>
+              <div class="metric-label">CPU Utilization</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Resource Management</h4>
+            Implements resource locking and conflict resolution to prevent race
+            conditions in shared resource access.
+          </div>
+          <div class="complexity-badge">High Performance</div>
+        </div>
+
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">Synchronization</div>
+            <div class="concurrency-category">Thread Coordination</div>
+          </div>
+          <div class="concurrency-description">
+            Comprehensive synchronization primitives including mutexes,
+            condition variables, barriers, and semaphores for coordinating
+            complex concurrent operations.
+          </div>
+          <div class="features-section">
+            <h3>Synchronization Tools</h3>
+            <ul class="feature-list">
+              <li>Mutex variants (shared, timed, recursive)</li>
+              <li>Condition variables for signaling</li>
+              <li>Barriers for synchronization points</li>
+              <li>Semaphores for resource counting</li>
+              <li>Read-write locks for data access</li>
+              <li>Lock-free data structures</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment">// Resource synchronization example</span>
+            <span class="keyword">class</span>
+            <span class="type">ResourcePool</span> {
+            <span class="keyword">private</span>:
+            <span class="type">std::shared_mutex</span> resourceMutex;
+            <span class="type">std::counting_semaphore</span>&lt;<span
+              class="number"
+              >100</span
+            >&gt; semaphore{<span class="number">100</span>};
+            <span class="type">std::map</span>&lt;<span class="type"
+              >std::string</span
+            >, <span class="keyword">int</span>&gt; resources;
+            <span class="type">std::condition_variable_any</span>
+            resourceAvailable;
+
+            <span class="keyword">public</span>:
+            <span class="keyword">void</span> acquireResource(<span
+              class="keyword"
+              >const</span
+            >
+            <span class="type">std::string</span>&amp; name,
+            <span class="keyword">int</span> amount) { semaphore.acquire();
+            <span class="type">std::unique_lock</span> lock(resourceMutex);
+            resourceAvailable.wait(lock, [<span class="keyword">this</span>,
+            &amp;name, amount] {
+            <span class="keyword">return</span> resources[name] &gt;= amount;
+            }); resources[name] -= amount; } };
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">Deadlock</div>
+              <div class="metric-label">Prevention</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">RAII</div>
+              <div class="metric-label">Lock Guards</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Deadlock Prevention</h4>
+            Implements ordered locking, timeout mechanisms, and lock hierarchy
+            to prevent deadlock scenarios in complex systems.
+          </div>
+          <div class="complexity-badge">Critical Systems</div>
+        </div>
+
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">Atomic Operations</div>
+            <div class="concurrency-category">Lock-Free Programming</div>
+          </div>
+          <div class="concurrency-description">
+            Lock-free programming using atomic operations for high-performance
+            concurrent data structures and algorithms with minimal contention.
+          </div>
+          <div class="features-section">
+            <h3>Atomic Features</h3>
+            <ul class="feature-list">
+              <li>Memory ordering guarantees</li>
+              <li>Compare-and-swap operations</li>
+              <li>Atomic counters and flags</li>
+              <li>Lock-free data structures</li>
+              <li>Memory barrier techniques</li>
+              <li>ABA problem prevention</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment">// Lock-free counter for statistics</span>
+            <span class="keyword">class</span>
+            <span class="type">AtomicCounter</span> {
+            <span class="keyword">private</span>:
+            <span class="type">std::atomic</span>&lt;<span class="keyword"
+              >uint64_t</span
+            >&gt; count{<span class="number">0</span>};
+            <span class="type">std::atomic</span>&lt;<span class="keyword"
+              >uint64_t</span
+            >&gt; operations{<span class="number">0</span>};
+
+            <span class="keyword">public</span>:
+            <span class="keyword">void</span> increment() noexcept {
+            count.fetch_add(<span class="number">1</span>,
+            std::memory_order_relaxed); operations.fetch_add(<span
+              class="number"
+              >1</span
+            >, std::memory_order_release); }
+
+            <span class="keyword">uint64_t</span> load()
+            <span class="keyword">const</span> noexcept {
+            <span class="keyword">return</span>
+            count.load(std::memory_order_acquire); }
+
+            <span class="keyword">bool</span> compare_exchange(<span
+              class="keyword"
+              >uint64_t</span
+            >&amp; expected, <span class="keyword">uint64_t</span> desired) {
+            <span class="keyword">return</span>
+            count.compare_exchange_weak(expected, desired,
+            std::memory_order_acq_rel); } };
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">Zero</div>
+              <div class="metric-label">Lock Overhead</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">100M+</div>
+              <div class="metric-label">Ops/Second</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Memory Consistency</h4>
+            Careful memory ordering ensures correctness while maximizing
+            performance in highly concurrent scenarios.
+          </div>
+          <div class="complexity-badge">Expert Level</div>
+        </div>
+
+        <div class="concurrency-card">
+          <div class="concurrency-header">
+            <div class="concurrency-name">C++20 Coroutines</div>
+            <div class="concurrency-category">Cooperative Multitasking</div>
+          </div>
+          <div class="concurrency-description">
+            Modern coroutine implementation for asynchronous programming with
+            generators, async operations, and cooperative scheduling for
+            efficient I/O handling.
+          </div>
+          <div class="features-section">
+            <h3>Coroutine Types</h3>
+            <ul class="feature-list">
+              <li>Generator functions for data streams</li>
+              <li>Async task coroutines</li>
+              <li>Resumable functions with state</li>
+              <li>Cooperative scheduling</li>
+              <li>Exception propagation</li>
+              <li>Cancellation token support</li>
+            </ul>
+          </div>
+          <div class="code-example">
+            <span class="comment"
+              >// Coroutine for async mission execution</span
+            >
+            <span class="keyword">struct</span> <span class="type">Task</span> {
+            <span class="keyword">struct</span>
+            <span class="type">promise_type</span> {
+            <span class="type">Task</span> get_return_object() {
+            <span class="keyword">return</span>
+            <span class="type">Task</span
+            >{std::coroutine_handle&lt;promise_type&gt;::from_promise(*<span
+              class="keyword"
+              >this</span
+            >)}; }
+            <span class="type">std::suspend_never</span> initial_suspend() {
+            <span class="keyword">return</span> {}; }
+            <span class="type">std::suspend_never</span> final_suspend()
+            noexcept { <span class="keyword">return</span> {}; }
+            <span class="keyword">void</span> return_void() {}
+            <span class="keyword">void</span> unhandled_exception() {} };
+
+            <span class="type">std::coroutine_handle</span>&lt;promise_type&gt;
+            handle; };
+
+            <span class="type">Task</span> executeMissionAsync(<span
+              class="type"
+              >Mission</span
+            >&amp; mission) { <span class="keyword">auto</span> result =
+            <span class="keyword">co_await</span> mission.prepare();
+            <span class="keyword">co_await</span> mission.execute();
+            <span class="keyword">co_await</span> mission.complete(); co_return;
+            }
+          </div>
+          <div class="performance-metrics">
+            <div class="metric">
+              <div class="metric-value">1KB</div>
+              <div class="metric-label">Stack Usage</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">10ns</div>
+              <div class="metric-label">Resume Time</div>
+            </div>
+          </div>
+          <div class="safety-note">
+            <h4>Resource Management</h4>
+            RAII-compliant coroutines with proper exception handling and
+            resource cleanup on suspension and resumption.
+          </div>
+          <div class="complexity-badge">Cutting Edge</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

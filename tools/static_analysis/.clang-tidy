@@ -1,0 +1,241 @@
+# File: tools/static_analysis/.clang-tidy
+# Static analysis configuration for CppVerseHub
+
+# Checks to enable
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  google-*,
+  hicpp-*,
+  llvm-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -cert-err58-cpp,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-special-member-functions,
+  -google-readability-todo,
+  -hicpp-avoid-c-arrays,
+  -hicpp-braces-around-statements,
+  -hicpp-named-parameter,
+  -hicpp-no-array-decay,
+  -hicpp-special-member-functions,
+  -hicpp-uppercase-literal-suffix,
+  -hicpp-vararg,
+  -llvm-header-guard,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-avoid-c-arrays,
+  -modernize-use-trailing-return-type,
+  -readability-avoid-const-params-in-decls,
+  -readability-braces-around-statements,
+  -readability-convert-member-functions-to-static,
+  -readability-else-after-return,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-uppercase-literal-suffix
+
+# Warning as errors
+WarningsAsErrors: >
+  bugprone-argument-comment,
+  bugprone-assert-side-effect,
+  bugprone-bool-pointer-implicit-conversion,
+  bugprone-copy-constructor-init,
+  bugprone-dangling-handle,
+  bugprone-fold-init-type,
+  bugprone-forward-declaration-namespace,
+  bugprone-inaccurate-erase,
+  bugprone-incorrect-roundings,
+  bugprone-integer-division,
+  bugprone-misplaced-operator-in-strlen-in-alloc,
+  bugprone-move-forwarding-reference,
+  bugprone-multiple-statement-macro,
+  bugprone-string-constructor,
+  bugprone-suspicious-memset-usage,
+  bugprone-suspicious-missing-comma,
+  bugprone-suspicious-semicolon,
+  bugprone-suspicious-string-compare,
+  bugprone-swapped-arguments,
+  bugprone-terminating-continue,
+  bugprone-throw-keyword-missing,
+  bugprone-too-small-loop-variable,
+  bugprone-undefined-memory-manipulation,
+  bugprone-undelegated-constructor,
+  bugprone-unhandled-self-assignment,
+  bugprone-unused-raii,
+  bugprone-unused-return-value,
+  bugprone-use-after-move,
+  bugprone-virtual-near-miss,
+  cert-dcl21-cpp,
+  cert-dcl50-cpp,
+  cert-env33-c,
+  cert-err52-cpp,
+  cert-err60-cpp,
+  cert-flp30-c,
+  cert-msc50-cpp,
+  cert-msc51-cpp,
+  cert-oop57-cpp,
+  cert-oop58-cpp,
+  performance-faster-string-find,
+  performance-for-range-copy,
+  performance-implicit-conversion-in-loop,
+  performance-inefficient-algorithm,
+  performance-inefficient-string-concatenation,
+  performance-inefficient-vector-operation,
+  performance-move-const-arg,
+  performance-move-constructor-init,
+  performance-noexcept-move-constructor,
+  performance-trivially-destructible,
+  performance-type-promotion-in-math-fn,
+  performance-unnecessary-copy-initialization,
+  performance-unnecessary-value-param
+
+# Header filter regex
+HeaderFilterRegex: '^.*/(src|include)/.*\.(h|hpp)$'
+
+# Check options
+CheckOptions:
+  # Naming conventions
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.VariableCase: camelBack
+  readability-identifier-naming.PrivateMemberCase: camelBack
+  readability-identifier-naming.PrivateMemberSuffix: "_"
+  readability-identifier-naming.ProtectedMemberCase: camelBack
+  readability-identifier-naming.ProtectedMemberSuffix: "_"
+  readability-identifier-naming.PublicMemberCase: camelBack
+  readability-identifier-naming.MethodCase: camelBack
+  readability-identifier-naming.PrivateMethodCase: camelBack
+  readability-identifier-naming.ProtectedMethodCase: camelBack
+  readability-identifier-naming.PublicMethodCase: camelBack
+  readability-identifier-naming.ConstantCase: UPPER_CASE
+  readability-identifier-naming.GlobalConstantCase: UPPER_CASE
+  readability-identifier-naming.StaticConstantCase: UPPER_CASE
+  readability-identifier-naming.ConstantMemberCase: UPPER_CASE
+  readability-identifier-naming.ConstexprVariableCase: UPPER_CASE
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.EnumConstantCase: UPPER_CASE
+
+  # Function length
+  readability-function-size.LineThreshold: 80
+  readability-function-size.StatementThreshold: 800
+  readability-function-size.BranchThreshold: 10
+  readability-function-size.ParameterThreshold: 7
+  readability-function-size.NestingThreshold: 5
+  readability-function-size.VariableThreshold: 20
+
+  # Modernize options
+  modernize-loop-convert.MaxCopySize: 16
+  modernize-loop-convert.MinConfidence: reasonable
+  modernize-loop-convert.NamingStyle: CamelCase
+  modernize-pass-by-value.IncludeStyle: llvm
+  modernize-replace-auto-ptr.IncludeStyle: llvm
+  modernize-use-auto.MinTypeNameLength: 5
+  modernize-use-auto.RemoveStars: false
+  modernize-use-emplace.ContainersWithPushBack: "::std::vector;::std::list;::std::deque"
+  modernize-use-emplace.SmartPointers: "::std::shared_ptr;::std::unique_ptr;::std::auto_ptr;::std::weak_ptr"
+  modernize-use-emplace.TupleMakeFunctions: "::std::make_pair;::std::make_tuple"
+  modernize-use-emplace.TupleTypes: "::std::pair;::std::tuple"
+  modernize-use-nullptr.NullMacros: "NULL"
+
+  # Google style options
+  google-readability-braces-around-statements.ShortStatementLines: 1
+  google-readability-function-size.StatementThreshold: 800
+  google-readability-namespace-comments.ShortNamespaceLines: 1
+  google-readability-namespace-comments.SpacesBeforeComments: 2
+
+  # Performance options
+  performance-faster-string-find.StringLikeClasses: "::std::basic_string;::std::basic_string_view"
+  performance-for-range-copy.WarnOnAllAutoCopies: false
+  performance-inefficient-string-concatenation.StrictMode: false
+  performance-inefficient-vector-operation.VectorLikeClasses: "::std::vector"
+  performance-move-constructor-init.IncludeStyle: llvm
+  performance-type-promotion-in-math-fn.IncludeStyle: llvm
+  performance-unnecessary-copy-initialization.AllowedTypes: ""
+
+  # Misc options
+  misc-definitions-in-headers.UseHeaderFileExtension: true
+  misc-throw-by-value-catch-by-reference.CheckThrowTemporaries: true
+  misc-unused-parameters.StrictMode: false
+
+  # Bugprone options
+  bugprone-argument-comment.StrictMode: false
+  bugprone-dangling-handle.HandleClasses: "std::basic_string_view;std::experimental::basic_string_view"
+  bugprone-exception-escape.FunctionsThatShouldNotThrow: ""
+  bugprone-exception-escape.IgnoredExceptions: ""
+  bugprone-misplaced-widening-cast.CheckImplicitCasts: false
+  bugprone-sizeof-expression.WarnOnSizeOfConstant: true
+  bugprone-sizeof-expression.WarnOnSizeOfIntegerExpression: false
+  bugprone-sizeof-expression.WarnOnSizeOfThis: true
+  bugprone-string-constructor.WarnOnLargeLength: true
+  bugprone-string-constructor.LargeLengthThreshold: 0x800000
+  bugprone-suspicious-enum-usage.StrictMode: false
+  bugprone-suspicious-missing-comma.SizeThreshold: 5
+  bugprone-suspicious-missing-comma.RatioThreshold: 0.2
+  bugprone-suspicious-missing-comma.MaxConcatenatedTokens: 5
+  bugprone-suspicious-string-compare.WarnOnImplicitComparison: true
+  bugprone-suspicious-string-compare.WarnOnLogicalNotComparison: true
+  bugprone-too-small-loop-variable.MagnitudeBitsUpperLimit: 16
+
+  # Clang analyzer options
+  clang-analyzer-core.CallAndMessage:Optimistic: false
+  clang-analyzer-cplusplus.NewDeleteLeaks: true
+  clang-analyzer-deadcode.DeadStores: true
+  clang-analyzer-security.FloatLoopCounter: true
+  clang-analyzer-security.insecureAPI.UncheckedReturn: true
+
+  # CERT options
+  cert-dcl16-c.NewSuffixes: "L;LL;LU;LLU"
+  cert-oop54-cpp.WarnOnlyIfThisHasSuspiciousField: false
+
+  # HICPP options
+  hicpp-function-size.LineThreshold: 80
+  hicpp-function-size.StatementThreshold: 800
+  hicpp-function-size.BranchThreshold: 10
+  hicpp-function-size.ParameterThreshold: 7
+  hicpp-function-size.NestingThreshold: 5
+  hicpp-function-size.VariableThreshold: 20
+  hicpp-member-init.IgnoreArrays: false
+  hicpp-move-constructor-init.IncludeStyle: llvm
+  hicpp-new-delete-operators.IncludeStyle: llvm
+  hicpp-signed-bitwise.IgnorePositiveIntegerLiterals: false
+
+  # LLVM options
+  llvm-qualified-auto.AddConstToQualified: false
+  llvm-else-after-return.WarnOnUnfixable: false
+  llvm-else-after-return.WarnOnConditionVariables: false
+
+  # Core guidelines options
+  cppcoreguidelines-avoid-goto.IgnoreMacros: true
+  cppcoreguidelines-init-variables.MathHeader: "<math.h>"
+  cppcoreguidelines-narrowing-conversions.CheckThrowingArithmeticOperators: false
+  cppcoreguidelines-narrowing-conversions.WarnOnFloatingPointNarrowingConversion: true
+  cppcoreguidelines-narrowing-conversions.WarnOnIntegerNarrowingConversion: true
+  cppcoreguidelines-narrowing-conversions.WarnOnIntegerToFloatingPointNarrowingConversion: false
+  cppcoreguidelines-pro-bounds-constant-array-index.GslHeader: ""
+  cppcoreguidelines-pro-bounds-constant-array-index.IncludeStyle: "0"
+  cppcoreguidelines-pro-type-member-init.IgnoreArrays: false
+  cppcoreguidelines-pro-type-member-init.UseAssignment: false
+  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions: false
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: false

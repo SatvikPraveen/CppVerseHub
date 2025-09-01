@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modern C++ - CppVerseHub API</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .breadcrumb {
+        color: #7f8c8d;
+        margin-bottom: 1rem;
+      }
+
+      .breadcrumb a {
+        color: #3498db;
+        text-decoration: none;
+      }
+
+      .header h1 {
+        color: #2c3e50;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .version-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #1abc9c, #16a085);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-left: 1rem;
+      }
+
+      .modern-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        gap: 2rem;
+      }
+
+      .modern-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+      }
+
+      .modern-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+      }
+
+      .modern-header {
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .modern-name {
+        color: #2c3e50;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+
+      .modern-version {
+        color: #1abc9c;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .modern-description {
+        color: #7f8c8d;
+        margin-bottom: 1.5rem;
+      }
+
+      .features-section h3 {
+        color: #34495e;
+        font-size: 1.1rem;
+        margin-bottom: 0.8rem;
+        border-left: 3px solid #1abc9c;
+        padding-left: 0.5rem;
+      }
+
+      .feature-list {
+        list-style: none;
+        margin-bottom: 1rem;
+      }
+
+      .feature-list li {
+        padding: 0.4rem 0;
+        color: #7f8c8d;
+        position: relative;
+        padding-left: 1.5rem;
+      }
+
+      .feature-list li:before {
+        content: "✨";
+        position: absolute;
+        left: 0;
+      }
+
+      .code-showcase {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 1.5rem;
+        border-radius: 8px;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+      }
+
+      .keyword {
+        color: #e74c3c;
+      }
+      .type {
+        color: #3498db;
+      }
+      .string {
+        color: #27ae60;
+      }
+      .comment {
+        color: #95a5a6;
+        font-style: italic;
+      }
+      .number {
+        color: #f39c12;
+      }
+      .modern-keyword {
+        color: #1abc9c;
+      }
+
+      .evolution-note {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+      }
+
+      .evolution-note h4 {
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+      }
+
+      .standard-timeline {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        padding: 0.8rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+      }
+
+      .timeline-item {
+        text-align: center;
+        flex: 1;
+      }
+
+      .timeline-year {
+        font-weight: bold;
+        color: #2c3e50;
+        font-size: 0.9rem;
+      }
+
+      .timeline-standard {
+        color: #7f8c8d;
+        font-size: 0.8rem;
+      }
+
+      .performance-boost {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .boost-metric {
+        background: linear-gradient(135deg, #1abc9c, #16a085);
+        color: white;
+        padding: 0.8rem;
+        border-radius: 6px;
+        text-align: center;
+      }
+
+      .boost-value {
+        font-size: 1.2rem;
+        font-weight: bold;
+      }
+
+      .boost-label {
+        font-size: 0.8rem;
+      }
+
+      .complexity-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #1abc9c, #16a085);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 1rem;
+      }
+
+      .back-button {
+        display: inline-block;
+        background: #1abc9c;
+        color: white;
+        padding: 0.8rem 1.5rem;
+        text-decoration: none;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        transition: background 0.3s ease;
+      }
+
+      .back-button:hover {
+        background: #16a085;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- File: docs/api_reference/html/modern/index.html -->
+    <div class="container">
+      <a href="../index.html" class="back-button">← Back to API Reference</a>
+
+      <div class="header">
+        <div class="breadcrumb">
+          <a href="../index.html">API Reference</a> > Modern C++
+        </div>
+        <h1>🆕 Modern C++</h1>
+        <span class="version-badge">C++17/20/23</span>
+        <p>
+          Latest C++ features and best practices for next-generation development
+        </p>
+      </div>
+
+      <div class="modern-grid">
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Advanced Concepts</div>
+            <div class="modern-version">C++20 Feature</div>
+          </div>
+          <div class="modern-description">
+            Sophisticated concept definitions with complex constraints, concept
+            composition, and advanced template metaprogramming for type-safe
+            generic code.
+          </div>
+          <div class="features-section">
+            <h3>Concept Capabilities</h3>
+            <ul class="feature-list">
+              <li>Multi-type constraint relationships</li>
+              <li>Concept composition and refinement</li>
+              <li>Subsumption and partial ordering</li>
+              <li>Type trait integration</li>
+              <li>SFINAE replacement patterns</li>
+              <li>Improved error diagnostics</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment"
+              >// Advanced concept with multiple constraints</span
+            >
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>&gt;
+            <span class="modern-keyword">concept</span>
+            <span class="type">SpaceEntity</span> =
+            <span class="keyword">requires</span>(<span class="type">T</span>
+            entity) {
+            <span class="comment">// Type requirements</span>
+            <span class="keyword">typename</span>
+            <span class="type">T</span>::position_type;
+            <span class="keyword">typename</span>
+            <span class="type">T</span>::id_type;
+
+            <span class="comment">// Expression requirements</span>
+            { entity.getPosition() } -&gt; std::same_as&lt;<span class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>::position_type&gt;; { entity.getId() }
+            -&gt; std::convertible_to&lt;<span class="type">std::string</span
+            >&gt;; { entity.distanceTo(entity) } -&gt; std::floating_point;
+
+            <span class="comment">// Compound requirements</span>
+            <span class="keyword">requires</span> std::movable&lt;<span
+              class="type"
+              >T</span
+            >&gt;; <span class="keyword">requires</span> std::regular&lt;<span
+              class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>::id_type&gt;; };
+
+            <span class="keyword">template</span>&lt;<span class="type"
+              >SpaceEntity</span
+            >
+            <span class="type">T</span>&gt; <span class="keyword">class</span>
+            <span class="type">EntityManager</span> {
+            <span class="comment">// Type-safe entity management</span>
+            };
+          </div>
+          <div class="standard-timeline">
+            <div class="timeline-item">
+              <div class="timeline-year">2020</div>
+              <div class="timeline-standard">C++20</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">2023</div>
+              <div class="timeline-standard">C++23</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">2026</div>
+              <div class="timeline-standard">C++26</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Paradigm Shift</h4>
+            Concepts revolutionize template programming with readable
+            constraints and improved compilation errors.
+          </div>
+          <div class="complexity-badge">Cutting Edge</div>
+        </div>
+
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Ranges Library</div>
+            <div class="modern-version">C++20 Standard</div>
+          </div>
+          <div class="modern-description">
+            Composable, lazy-evaluated range algorithms providing functional
+            programming paradigms with excellent performance characteristics.
+          </div>
+          <div class="features-section">
+            <h3>Range Features</h3>
+            <ul class="feature-list">
+              <li>Composable algorithm pipelines</li>
+              <li>Lazy evaluation for performance</li>
+              <li>View types for zero-copy operations</li>
+              <li>Projection support</li>
+              <li>Constrained algorithms</li>
+              <li>Functional programming style</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment"
+              >// Fleet filtering and transformation pipeline</span
+            >
+            <span class="keyword">auto</span> result = fleets |
+            std::views::filter([](<span class="keyword">const</span>
+            <span class="type">Fleet</span>&amp; f) {
+            <span class="keyword">return</span> f.isOperational(); }) |
+            std::views::transform([](<span class="keyword">const</span>
+            <span class="type">Fleet</span>&amp; f) {
+            <span class="keyword">return</span> f.getStrength(); }) |
+            std::views::take(<span class="number">10</span>) |
+            std::ranges::to&lt;<span class="type">std::vector</span>&gt;();
+
+            <span class="comment">// Advanced range operations</span>
+            <span class="keyword">auto</span> topFleets = std::ranges::sort(
+            fleets | std::views::filter(<span class="type"
+              >isReadyForMission</span
+            >), std::ranges::greater{}, &amp;<span class="type">Fleet</span
+            >::getExperience );
+          </div>
+          <div class="performance-boost">
+            <div class="boost-metric">
+              <div class="boost-value">40%</div>
+              <div class="boost-label">Less Code</div>
+            </div>
+            <div class="boost-metric">
+              <div class="boost-value">Zero</div>
+              <div class="boost-label">Copy Views</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Functional Revolution</h4>
+            Ranges enable declarative programming with composable operations and
+            excellent performance optimization.
+          </div>
+          <div class="complexity-badge">Game Changer</div>
+        </div>
+
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Module System</div>
+            <div class="modern-version">C++20 Modules</div>
+          </div>
+          <div class="modern-description">
+            Revolutionary compilation model replacing headers with modules for
+            faster builds, better encapsulation, and improved scalability.
+          </div>
+          <div class="features-section">
+            <h3>Module Advantages</h3>
+            <ul class="feature-list">
+              <li>Faster compilation times</li>
+              <li>Better symbol isolation</li>
+              <li>Reduced preprocessor usage</li>
+              <li>Interface/implementation separation</li>
+              <li>Improved build scalability</li>
+              <li>Macro scope isolation</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment">// Module interface definition</span>
+            <span class="modern-keyword">export module</span>
+            <span class="type">CppVerseHub.Core</span>;
+
+            <span class="modern-keyword">import</span> &lt;vector&gt;;
+            <span class="modern-keyword">import</span> &lt;memory&gt;;
+            <span class="modern-keyword">import</span> &lt;string&gt;;
+
+            <span class="comment">// Export specific entities</span>
+            <span class="modern-keyword">export</span>
+            <span class="keyword">class</span> <span class="type">Entity</span>;
+            <span class="modern-keyword">export</span>
+            <span class="keyword">class</span> <span class="type">Planet</span>;
+            <span class="modern-keyword">export</span>
+            <span class="keyword">class</span> <span class="type">Fleet</span>;
+
+            <span class="comment">// Module implementation</span>
+            <span class="keyword">module</span>
+            <span class="type">CppVerseHub.Core</span>;
+
+            <span class="comment">// Private implementation details</span>
+            <span class="keyword">namespace</span> {
+            <span class="keyword">constexpr</span>
+            <span class="keyword">double</span>
+            <span class="type">LIGHT_SPEED</span> =
+            <span class="number">299792458.0</span>; }
+
+            <span class="comment">// Module import in client code</span>
+            <span class="modern-keyword">import</span>
+            <span class="type">CppVerseHub.Core</span>;
+            <span class="modern-keyword">import</span>
+            <span class="type">CppVerseHub.Missions</span>;
+          </div>
+          <div class="performance-boost">
+            <div class="boost-metric">
+              <div class="boost-value">5x</div>
+              <div class="boost-label">Faster Builds</div>
+            </div>
+            <div class="boost-metric">
+              <div class="boost-value">90%</div>
+              <div class="boost-label">Less Headers</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Build System Revolution</h4>
+            Modules eliminate header inclusion overhead and provide true
+            compilation unit isolation.
+          </div>
+          <div class="complexity-badge">Future Standard</div>
+        </div>
+
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Structured Bindings</div>
+            <div class="modern-version">C++17 Feature</div>
+          </div>
+          <div class="modern-description">
+            Decomposition declarations for unpacking structured data with clean,
+            readable syntax supporting tuples, pairs, and custom types.
+          </div>
+          <div class="features-section">
+            <h3>Binding Capabilities</h3>
+            <ul class="feature-list">
+              <li>Tuple and pair decomposition</li>
+              <li>Array element binding</li>
+              <li>Structured type member access</li>
+              <li>Reference and value semantics</li>
+              <li>Const and mutable variants</li>
+              <li>Custom type support via get&lt;&gt;</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment"
+              >// Fleet analysis with structured bindings</span
+            >
+            <span class="keyword">auto</span> analyzeFleet(<span class="keyword"
+              >const</span
+            >
+            <span class="type">Fleet</span>&amp; fleet) {
+            <span class="keyword">return</span> std::make_tuple(
+            fleet.getStrength(), fleet.getSpeed(), fleet.getResourceCapacity()
+            ); }
+
+            <span class="comment">// Clean decomposition</span>
+            <span class="keyword">auto</span> [strength, speed, capacity] =
+            analyzeFleet(fleet);
+
+            <span class="comment">// Map iteration made elegant</span>
+            <span class="keyword">for</span> (<span class="keyword"
+              >const auto</span
+            >&amp; [planetName, resources] : planetResourceMap) {
+            <span class="type">std::cout</span> &lt;&lt; planetName &lt;&lt;
+            <span class="string">": "</span> &lt;&lt; resources &lt;&lt;
+            std::endl; }
+
+            <span class="comment">// Multiple return values</span>
+            <span class="keyword">if</span> (<span class="keyword">auto</span>
+            [success, result] = attemptMission(); success) {
+            processMissionResult(result); }
+          </div>
+          <div class="performance-boost">
+            <div class="boost-metric">
+              <div class="boost-value">Clean</div>
+              <div class="boost-label">Syntax</div>
+            </div>
+            <div class="boost-metric">
+              <div class="boost-value">Zero</div>
+              <div class="boost-label">Overhead</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Readability Enhancement</h4>
+            Structured bindings eliminate temporary variables and make
+            multi-value operations more intuitive.
+          </div>
+          <div class="complexity-badge">Everyday Tool</div>
+        </div>
+
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Constexpr Programming</div>
+            <div class="modern-version">C++17/20/23</div>
+          </div>
+          <div class="modern-description">
+            Compile-time computation capabilities allowing complex algorithms,
+            data structure operations, and even dynamic allocation at compile
+            time.
+          </div>
+          <div class="features-section">
+            <h3>Constexpr Evolution</h3>
+            <ul class="feature-list">
+              <li>Compile-time dynamic allocation (C++20)</li>
+              <li>Virtual function calls in constexpr</li>
+              <li>Exception handling in constexpr</li>
+              <li>Complex control flow support</li>
+              <li>STL algorithm compatibility</li>
+              <li>Constexpr containers and algorithms</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment"
+              >// Compile-time fleet strength calculator</span
+            >
+            <span class="modern-keyword">constexpr</span>
+            <span class="keyword">auto</span> calculateFleetStrength(
+            <span class="keyword">const</span>
+            <span class="type">std::array</span>&lt;<span class="keyword"
+              >int</span
+            >, <span class="number">5</span>&gt;&amp; shipStrengths) {
+
+            <span class="keyword">int</span> totalStrength =
+            <span class="number">0</span>;
+            <span class="keyword">for</span> (<span class="keyword"
+              >const auto</span
+            >&amp; strength : shipStrengths) { totalStrength += strength *
+            strength; <span class="comment">// Quadratic scaling</span>
+            }
+
+            <span class="comment"
+              >// Compile-time square root (Newton's method)</span
+            >
+            <span class="keyword">double</span> result = totalStrength;
+            <span class="keyword">for</span> (<span class="keyword">int</span> i
+            = <span class="number">0</span>; i &lt;
+            <span class="number">10</span>; ++i) { result =
+            <span class="number">0.5</span> * (result + totalStrength / result);
+            }
+
+            <span class="keyword">return</span>
+            <span class="keyword">static_cast</span>&lt;<span class="keyword"
+              >int</span
+            >&gt;(result); }
+
+            <span class="comment">// Computed at compile time</span>
+            <span class="modern-keyword">constexpr</span>
+            <span class="keyword">auto</span> fleetPower =
+            calculateFleetStrength({<span class="number">10</span>,
+            <span class="number">15</span>, <span class="number">12</span>,
+            <span class="number">8</span>, <span class="number">20</span>});
+
+            <span class="comment"
+              >// C++20: Dynamic allocation at compile time</span
+            >
+            <span class="modern-keyword">constexpr</span>
+            <span class="keyword">auto</span> createLookupTable() {
+            <span class="type">std::vector</span>&lt;<span class="keyword"
+              >int</span
+            >&gt; table; <span class="keyword">for</span> (<span class="keyword"
+              >int</span
+            >
+            i = <span class="number">0</span>; i &lt;
+            <span class="number">100</span>; ++i) { table.push_back(i * i); }
+            <span class="keyword">return</span> table; }
+          </div>
+          <div class="performance-boost">
+            <div class="boost-metric">
+              <div class="boost-value">Runtime</div>
+              <div class="boost-label">Zero Cost</div>
+            </div>
+            <div class="boost-metric">
+              <div class="boost-value">Compile</div>
+              <div class="boost-label">Time Exec</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Performance Revolution</h4>
+            Move complex computations from runtime to compile time for zero-cost
+            abstractions.
+          </div>
+          <div class="complexity-badge">Performance Critical</div>
+        </div>
+
+        <div class="modern-card">
+          <div class="modern-header">
+            <div class="modern-name">Lambda Enhancements</div>
+            <div class="modern-version">C++17/20 Evolution</div>
+          </div>
+          <div class="modern-description">
+            Advanced lambda capabilities including template parameters, pack
+            expansion, constexpr evaluation, and sophisticated capture
+            mechanisms.
+          </div>
+          <div class="features-section">
+            <h3>Lambda Advances</h3>
+            <ul class="feature-list">
+              <li>Template parameter lambdas</li>
+              <li>Pack expansion in captures</li>
+              <li>Constexpr lambda expressions</li>
+              <li>Structured binding captures</li>
+              <li>Default constructible lambdas</li>
+              <li>Lambda in unevaluated contexts</li>
+            </ul>
+          </div>
+          <div class="code-showcase">
+            <span class="comment"
+              >// Generic lambda with template parameters</span
+            >
+            <span class="keyword">auto</span> processEntity = []&lt;<span
+              class="keyword"
+              >typename</span
+            >
+            <span class="type">T</span>&gt;(<span class="keyword">const</span>
+            <span class="type">T</span>&amp; entity)
+            <span class="modern-keyword">constexpr</span> {
+            <span class="keyword">if</span>
+            <span class="modern-keyword">constexpr</span>
+            (std::is_same_v&lt;<span class="type">T</span>,
+            <span class="type">Fleet</span>&gt;) {
+            <span class="keyword">return</span> entity.getStrength(); }
+            <span class="keyword">else</span> <span class="keyword">if</span>
+            <span class="modern-keyword">constexpr</span>
+            (std::is_same_v&lt;<span class="type">T</span>,
+            <span class="type">Planet</span>&gt;) {
+            <span class="keyword">return</span> entity.getResourceValue(); } };
+
+            <span class="comment">// Structured binding capture (C++20)</span>
+            <span class="keyword">auto</span> [x, y, z] = getPosition();
+            <span class="keyword">auto</span> distanceCalculator = [x, y,
+            z](<span class="keyword">const</span>
+            <span class="type">Vector3D</span>&amp; target) {
+            <span class="keyword">auto</span> dx = target.x - x;
+            <span class="keyword">auto</span> dy = target.y - y;
+            <span class="keyword">auto</span> dz = target.z - z;
+            <span class="keyword">return</span> std::sqrt(dx*dx + dy*dy +
+            dz*dz); };
+
+            <span class="comment">// Pack expansion capture</span>
+            <span class="keyword">template</span>&lt;<span class="keyword"
+              >typename</span
+            >... <span class="type">Args</span>&gt;
+            <span class="keyword">auto</span> createProcessor(<span class="type"
+              >Args</span
+            >&amp;&amp;... args) { <span class="keyword">return</span> [...args
+            = std::forward&lt;<span class="type">Args</span>&gt;(args)](<span
+              class="keyword"
+              >auto</span
+            >&amp;&amp; func) <span class="keyword">mutable</span> {
+            <span class="keyword">return</span> func(args...); }; }
+          </div>
+          <div class="performance-boost">
+            <div class="boost-metric">
+              <div class="boost-value">Generic</div>
+              <div class="boost-label">Lambdas</div>
+            </div>
+            <div class="boost-metric">
+              <div class="boost-value">Constexpr</div>
+              <div class="boost-label">Support</div>
+            </div>
+          </div>
+          <div class="evolution-note">
+            <h4>Functional Programming</h4>
+            Modern lambdas provide powerful functional programming capabilities
+            with excellent performance.
+          </div>
+          <div class="complexity-badge">Versatile Tool</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

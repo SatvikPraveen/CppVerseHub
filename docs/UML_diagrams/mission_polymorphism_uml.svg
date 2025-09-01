@@ -1,0 +1,345 @@
+<svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">
+  <!-- Location: CppVerseHub/docs/UML_diagrams/mission_polymorphism.svg -->
+  
+  <!-- Title -->
+  <text x="600" y="25" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+    Mission Polymorphism - CppVerseHub
+  </text>
+  
+  <!-- Abstract Base Class: Mission -->
+  <rect x="450" y="50" width="300" height="160" fill="#e8f4fd" stroke="#2196F3" stroke-width="2" rx="5"/>
+  <text x="600" y="75" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1976D2">
+    &lt;&lt;abstract&gt;&gt;
+  </text>
+  <text x="600" y="95" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    Mission
+  </text>
+  <line x1="460" y1="105" x2="740" y2="105" stroke="#666" stroke-width="1"/>
+  <text x="465" y="125" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    # id_: string
+  </text>
+  <text x="465" y="140" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    # target_: string
+  </text>
+  <text x="465" y="155" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    # status_: MissionStatus
+  </text>
+  <text x="465" y="170" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    # duration_: int
+  </text>
+  <line x1="460" y1="180" x2="740" y2="180" stroke="#666" stroke-width="1"/>
+  <text x="465" y="200" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + virtual execute() = 0
+  </text>
+
+  <!-- ExplorationMission -->
+  <rect x="50" y="320" width="280" height="200" fill="#e8f5e8" stroke="#4CAF50" stroke-width="2" rx="5"/>
+  <text x="190" y="345" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    ExplorationMission
+  </text>
+  <line x1="60" y1="355" x2="320" y2="355" stroke="#666" stroke-width="1"/>
+  <text x="65" y="375" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - scan_radius_: double
+  </text>
+  <text x="65" y="390" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - discoveries_: vector&lt;string&gt;
+  </text>
+  <text x="65" y="405" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - scientific_equipment_: Equipment
+  </text>
+  <line x1="60" y1="415" x2="320" y2="415" stroke="#666" stroke-width="1"/>
+  <text x="65" y="435" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + execute() override
+  </text>
+  <text x="65" y="450" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + scanArea(): vector&lt;Discovery&gt;
+  </text>
+  <text x="65" y="465" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + analyzeFindings(): Report
+  </text>
+  <text x="65" y="480" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getCost() const override: double
+  </text>
+  <text x="65" y="495" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getType() const override: string
+  </text>
+
+  <!-- CombatMission -->
+  <rect x="370" y="320" width="280" height="200" fill="#ffebee" stroke="#f44336" stroke-width="2" rx="5"/>
+  <text x="510" y="345" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    CombatMission
+  </text>
+  <line x1="380" y1="355" x2="640" y2="355" stroke="#666" stroke-width="1"/>
+  <text x="385" y="375" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - enemy_strength_: int
+  </text>
+  <text x="385" y="390" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - weapons_: vector&lt;Weapon&gt;
+  </text>
+  <text x="385" y="405" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - tactical_plan_: Strategy
+  </text>
+  <line x1="380" y1="415" x2="640" y2="415" stroke="#666" stroke-width="1"/>
+  <text x="385" y="435" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + execute() override
+  </text>
+  <text x="385" y="450" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + engageEnemy(): BattleResult
+  </text>
+  <text x="385" y="465" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + calculateDamage(): double
+  </text>
+  <text x="385" y="480" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getCost() const override: double
+  </text>
+  <text x="385" y="495" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getType() const override: string
+  </text>
+
+  <!-- ColonizationMission -->
+  <rect x="690" y="320" width="280" height="200" fill="#fff3e0" stroke="#ff9800" stroke-width="2" rx="5"/>
+  <text x="830" y="345" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    ColonizationMission
+  </text>
+  <line x1="700" y1="355" x2="960" y2="355" stroke="#666" stroke-width="1"/>
+  <text x="705" y="375" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - colonist_count_: int
+  </text>
+  <text x="705" y="390" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - supplies_: vector&lt;Resource&gt;
+  </text>
+  <text x="705" y="405" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - colony_blueprint_: Plan
+  </text>
+  <line x1="700" y1="415" x2="960" y2="415" stroke="#666" stroke-width="1"/>
+  <text x="705" y="435" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + execute() override
+  </text>
+  <text x="705" y="450" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + establishColony(): Colony
+  </text>
+  <text x="705" y="465" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + deployResources(): bool
+  </text>
+  <text x="705" y="480" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getCost() const override: double
+  </text>
+  <text x="705" y="495" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getType() const override: string
+  </text>
+
+  <!-- RescueMission -->
+  <rect x="1010" y="320" width="280" height="180" fill="#f3e5f5" stroke="#9c27b0" stroke-width="2" rx="5"/>
+  <text x="1150" y="345" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    RescueMission
+  </text>
+  <line x1="1020" y1="355" x2="1200" y2="355" stroke="#666" stroke-width="1"/>
+  <text x="1025" y="375" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - survivors_count_: int
+  </text>
+  <text x="1025" y="390" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - medical_supplies_: MedKit
+  </text>
+  <text x="1025" y="405" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - evacuation_plan_: Plan
+  </text>
+  <line x1="1020" y1="415" x2="1200" y2="415" stroke="#666" stroke-width="1"/>
+  <text x="1025" y="435" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + execute() override
+  </text>
+  <text x="1025" y="450" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + locateSurvivors(): vector&lt;Person&gt;
+  </text>
+  <text x="1025" y="465" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + evacuate(): bool
+  </text>
+  <text x="1025" y="480" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getCost() const override: double
+  </text>
+
+  <!-- Inheritance arrows -->
+  <path d="M 190 320 L 190 280 L 550 280 L 550 210" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <path d="M 510 320 L 510 280 L 580 280 L 580 210" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <path d="M 830 320 L 830 280 L 620 280 L 620 210" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <path d="M 1150 320 L 1150 280 L 650 280 L 650 210" fill="none" stroke="#666" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+
+  <!-- MissionManager class showing polymorphic usage -->
+  <rect x="450" y="600" width="300" height="180" fill="#e1f5fe" stroke="#03a9f4" stroke-width="2" rx="5"/>
+  <text x="600" y="625" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    MissionManager
+  </text>
+  <line x1="460" y1="635" x2="740" y2="635" stroke="#666" stroke-width="1"/>
+  <text x="465" y="655" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - active_missions_: vector&lt;unique_ptr&lt;Mission&gt;&gt;
+  </text>
+  <text x="465" y="670" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    - mission_factory_: MissionFactory
+  </text>
+  <line x1="460" y1="680" x2="740" y2="680" stroke="#666" stroke-width="1"/>
+  <text x="465" y="700" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + addMission(unique_ptr&lt;Mission&gt;)
+  </text>
+  <text x="465" y="715" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + executeAllMissions()
+  </text>
+  <text x="465" y="730" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getMissionsByCost(): vector&lt;Mission*&gt;
+  </text>
+  <text x="465" y="745" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + getMissionsByType(string): vector&lt;Mission*&gt;
+  </text>
+  <text x="465" y="760" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + calculateTotalCost(): double
+  </text>
+
+  <!-- Factory Pattern for Mission Creation -->
+  <rect x="900" y="600" width="250" height="160" fill="#f1f8e9" stroke="#689f38" stroke-width="2" rx="5"/>
+  <text x="1025" y="625" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+    MissionFactory
+  </text>
+  <line x1="910" y1="635" x2="1140" y2="635" stroke="#666" stroke-width="1"/>
+  <text x="915" y="655" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + createExplorationMission():</text>
+  <text x="920" y="670" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    unique_ptr&lt;ExplorationMission&gt;
+  </text>
+  <text x="915" y="685" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + createCombatMission():
+  </text>
+  <text x="920" y="700" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    unique_ptr&lt;CombatMission&gt;
+  </text>
+  <text x="915" y="715" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + createColonizationMission():
+  </text>
+  <text x="920" y="730" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    unique_ptr&lt;ColonizationMission&gt;
+  </text>
+  <text x="915" y="745" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    + createMission(MissionType):
+  </text>
+  <text x="920" y="760" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    unique_ptr&lt;Mission&gt;
+  </text>
+
+  <!-- Association arrows -->
+  <path d="M 600 600 L 600 550 L 600 520 L 600 210" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="610" y="410" font-family="Arial, sans-serif" font-size="10" fill="#666" transform="rotate(90, 610, 410)">
+    manages
+  </text>
+  
+  <path d="M 750 680 L 900 680" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="810" y="675" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    creates
+  </text>
+
+  <!-- Enumeration for MissionStatus -->
+  <rect x="50" y="600" width="180" height="120" fill="#fffde7" stroke="#fbc02d" stroke-width="2" rx="5"/>
+  <text x="140" y="620" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    &lt;&lt;enumeration&gt;&gt;
+  </text>
+  <text x="140" y="640" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+    MissionStatus
+  </text>
+  <line x1="60" y1="650" x2="220" y2="650" stroke="#666" stroke-width="1"/>
+  <text x="65" y="670" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    PENDING
+  </text>
+  <text x="65" y="685" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    IN_PROGRESS
+  </text>
+  <text x="65" y="700" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    COMPLETED
+  </text>
+  <text x="65" y="715" font-family="Arial, sans-serif" font-size="11" fill="#333">
+    FAILED
+  </text>
+
+  <!-- Polymorphism demonstration box -->
+  <rect x="250" y="600" width="180" height="180" fill="#f8bbd9" stroke="#e91e63" stroke-width="2" rx="5"/>
+  <text x="340" y="620" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Polymorphic Usage
+  </text>
+  <line x1="260" y1="630" x2="420" y2="630" stroke="#666" stroke-width="1"/>
+  <text x="260" y="650" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    vector&lt;unique_ptr&lt;Mission&gt;&gt; missions;
+  </text>
+  <text x="260" y="665" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    
+  </text>
+  <text x="260" y="680" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    for(auto&amp; mission : missions) {
+  </text>
+  <text x="270" y="695" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    // Virtual function call
+  </text>
+  <text x="270" y="710" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    mission-&gt;execute();
+  </text>
+  <text x="270" y="725" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    
+  </text>
+  <text x="270" y="740" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    // Runtime type checking
+  </text>
+  <text x="270" y="755" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    cout &lt;&lt; mission-&gt;getType();
+  </text>
+  <text x="260" y="770" font-family="Arial, sans-serif" font-size="9" font-family="monospace" fill="#333">
+    }
+  </text>
+
+  <!-- Legend -->
+  <rect x="20" y="800" width="400" height="80" fill="none" stroke="#ccc" stroke-width="1"/>
+  <text x="30" y="820" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Polymorphism Features Demonstrated:
+  </text>
+  <text x="30" y="840" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Pure virtual functions (execute()) enable runtime polymorphism
+  </text>
+  <text x="30" y="855" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Virtual functions (getCost(), getType()) provide different implementations
+  </text>
+  <text x="30" y="870" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Factory pattern creates objects without knowing specific types
+  </text>
+
+  <!-- Strategy Pattern Integration -->
+  <rect x="450" y="800" width="300" height="80" fill="#e8f5e8" stroke="#4caf50" stroke-width="1" rx="3"/>
+  <text x="600" y="820" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Design Pattern Integration
+  </text>
+  <text x="460" y="840" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Factory Pattern: Creates mission objects polymorphically
+  </text>
+  <text x="460" y="855" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Strategy Pattern: Different execution strategies per mission type
+  </text>
+  <text x="460" y="870" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Template Method: Common mission workflow in base class
+  </text>
+
+  <!-- Benefits box -->
+  <rect x="770" y="800" width="300" height="80" fill="#fff3e0" stroke="#ff9800" stroke-width="1" rx="3"/>
+  <text x="920" y="820" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+    Polymorphism Benefits
+  </text>
+  <text x="780" y="840" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Code extensibility: Add new mission types easily
+  </text>
+  <text x="780" y="855" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Runtime flexibility: Choose mission types dynamically
+  </text>
+  <text x="780" y="870" font-family="Arial, sans-serif" font-size="10" fill="#333">
+    • Uniform interface: Treat all missions the same way
+  </text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <!-- Inheritance arrow (hollow triangle) -->
+    <marker id="inheritanceArrow" markerWidth="10" markerHeight="10" 
+            refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="white" stroke="#666" stroke-width="1"/>
+    </marker>
+  </defs>
+</svg>

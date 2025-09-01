@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CppVerseHub API Reference</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      .header h1 {
+        color: #2c3e50;
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .header p {
+        color: #7f8c8d;
+        font-size: 1.2rem;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .nav-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+      }
+
+      .nav-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border: 2px solid transparent;
+      }
+
+      .nav-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        border-color: #667eea;
+      }
+
+      .nav-card h2 {
+        color: #2c3e50;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .nav-card .icon {
+        font-size: 1.5rem;
+      }
+
+      .nav-card p {
+        color: #7f8c8d;
+        margin-bottom: 1.5rem;
+      }
+
+      .nav-card ul {
+        list-style: none;
+      }
+
+      .nav-card li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #ecf0f1;
+      }
+
+      .nav-card li:last-child {
+        border-bottom: none;
+      }
+
+      .nav-card a {
+        color: #3498db;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.3s ease;
+      }
+
+      .nav-card a:hover {
+        color: #2980b9;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-top: 3rem;
+      }
+
+      .stat-card {
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1.5rem;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      }
+
+      .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #667eea;
+        display: block;
+      }
+
+      .stat-label {
+        color: #7f8c8d;
+        font-weight: 500;
+        margin-top: 0.5rem;
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 3rem;
+        padding: 2rem;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 15px;
+        color: #7f8c8d;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- File: docs/api_reference/html/index.html -->
+    <div class="container">
+      <div class="header">
+        <h1>🚀 CppVerseHub</h1>
+        <p>Comprehensive C++ Learning Platform - API Reference Documentation</p>
+      </div>
+
+      <div class="nav-grid">
+        <div class="nav-card" onclick="location.href='core/index.html'">
+          <h2><span class="icon">🏗️</span>Core Architecture</h2>
+          <p>Essential classes and core system components</p>
+          <ul>
+            <li><a href="core/entity.html">Entity Base Class</a></li>
+            <li><a href="core/planet.html">Planet System</a></li>
+            <li><a href="core/fleet.html">Fleet Management</a></li>
+            <li><a href="core/mission.html">Mission Framework</a></li>
+            <li><a href="core/resource-manager.html">Resource Manager</a></li>
+            <li><a href="core/game-engine.html">Game Engine</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='templates/index.html'">
+          <h2><span class="icon">📐</span>Template Programming</h2>
+          <p>Advanced template techniques and generic programming</p>
+          <ul>
+            <li>
+              <a href="templates/generic-containers.html">Generic Containers</a>
+            </li>
+            <li>
+              <a href="templates/meta-programming.html">Meta Programming</a>
+            </li>
+            <li><a href="templates/sfinae.html">SFINAE Examples</a></li>
+            <li><a href="templates/variadic.html">Variadic Templates</a></li>
+            <li><a href="templates/concepts.html">C++20 Concepts</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='patterns/index.html'">
+          <h2><span class="icon">🎨</span>Design Patterns</h2>
+          <p>Gang of Four and modern design pattern implementations</p>
+          <ul>
+            <li><a href="patterns/singleton.html">Singleton Pattern</a></li>
+            <li><a href="patterns/strategy.html">Strategy Pattern</a></li>
+            <li><a href="patterns/observer.html">Observer Pattern</a></li>
+            <li><a href="patterns/decorator.html">Decorator Pattern</a></li>
+            <li><a href="patterns/command.html">Command Pattern</a></li>
+            <li><a href="patterns/builder.html">Builder Pattern</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='stl/index.html'">
+          <h2><span class="icon">📚</span>STL Mastery</h2>
+          <p>Standard Template Library comprehensive usage</p>
+          <ul>
+            <li><a href="stl/containers.html">STL Containers</a></li>
+            <li><a href="stl/algorithms.html">STL Algorithms</a></li>
+            <li><a href="stl/iterators.html">Iterator Patterns</a></li>
+            <li><a href="stl/functors.html">Function Objects</a></li>
+            <li><a href="stl/utilities.html">STL Utilities</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='concurrency/index.html'">
+          <h2><span class="icon">⚡</span>Concurrency</h2>
+          <p>Multithreading and asynchronous programming</p>
+          <ul>
+            <li><a href="concurrency/thread-pool.html">Thread Pool</a></li>
+            <li>
+              <a href="concurrency/async-comms.html">Async Communication</a>
+            </li>
+            <li>
+              <a href="concurrency/synchronization.html">Synchronization</a>
+            </li>
+            <li><a href="concurrency/atomics.html">Atomic Operations</a></li>
+            <li><a href="concurrency/coroutines.html">C++20 Coroutines</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='memory/index.html'">
+          <h2><span class="icon">🧠</span>Memory Management</h2>
+          <p>Advanced memory handling and RAII patterns</p>
+          <ul>
+            <li><a href="memory/smart-pointers.html">Smart Pointers</a></li>
+            <li><a href="memory/allocators.html">Custom Allocators</a></li>
+            <li><a href="memory/raii.html">RAII Patterns</a></li>
+            <li><a href="memory/memory-pools.html">Memory Pools</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='modern/index.html'">
+          <h2><span class="icon">🆕</span>Modern C++</h2>
+          <p>C++17/20/23 features and best practices</p>
+          <ul>
+            <li><a href="modern/concepts.html">Advanced Concepts</a></li>
+            <li><a href="modern/ranges.html">Ranges Library</a></li>
+            <li><a href="modern/modules.html">Module System</a></li>
+            <li>
+              <a href="modern/structured-bindings.html">Structured Bindings</a>
+            </li>
+            <li><a href="modern/constexpr.html">Constexpr Programming</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-card" onclick="location.href='utils/index.html'">
+          <h2><span class="icon">🔧</span>Utilities</h2>
+          <p>Helper classes and utility functions</p>
+          <ul>
+            <li><a href="utils/logger.html">Logging System</a></li>
+            <li><a href="utils/file-parser.html">File Parsers</a></li>
+            <li><a href="utils/config-manager.html">Configuration</a></li>
+            <li><a href="utils/math-utils.html">Math Utilities</a></li>
+            <li><a href="utils/string-utils.html">String Utilities</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number">50+</span>
+          <div class="stat-label">Classes Documented</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">200+</span>
+          <div class="stat-label">Methods & Functions</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">15</span>
+          <div class="stat-label">Design Patterns</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">8</span>
+          <div class="stat-label">Core Modules</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>
+          Generated with Doxygen | CppVerseHub Project | Modern C++ Learning
+          Platform
+        </p>
+        <p>Last Updated: <span id="current-date"></span></p>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById("current-date").textContent =
+        new Date().toLocaleDateString();
+
+      // Add smooth scrolling and animations
+      document.querySelectorAll(".nav-card").forEach((card) => {
+        card.addEventListener("mouseenter", function () {
+          this.style.transform = "translateY(-10px) scale(1.02)";
+        });
+
+        card.addEventListener("mouseleave", function () {
+          this.style.transform = "translateY(0) scale(1)";
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,387 @@
+# File: .gitignore
+# Git ignore patterns for CppVerseHub
+
+# Build directories
+build/
+Build/
+BUILD/
+out/
+dist/
+bin/
+lib/
+debug/
+release/
+Debug/
+Release/
+x64/
+x86/
+Win32/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# IDE and Editor files
+## Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.log
+*.sbr
+*.sdf
+*.opensdf
+*.unsuccessfulbuild
+ipch/
+[Oo]bj/
+[Bb]in/
+[Dd]ebug*/
+[Rr]elease*/
+*.lib
+*.exe
+*.dll
+*.pdb
+*.idb
+*.pgc
+*.pgd
+*.rsp
+*.tmp
+*.tmp_proj
+
+## Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+## CLion
+.idea/
+cmake-build-*/
+
+## Qt Creator
+CMakeLists.txt.user
+CMakeLists.txt.user.*
+*.pro.user
+*.pro.user.*
+*.creator
+*.creator.user
+*.autosave
+
+## KDevelop
+.kdev4/
+*.kdev4
+
+## Code::Blocks
+*.depend
+*.layout
+*.cbp
+
+## Dev-C++
+*.dev
+
+## Eclipse CDT
+.project
+.cproject
+.metadata
+.settings/
+
+## NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+## Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+## Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+.netrwhist
+*~
+tags
+.tags
+
+## Emacs
+*~
+\#*\#
+.\#*
+.emacs.desktop
+.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Compiler-specific files
+## GCC
+*.a
+*.so
+*.dylib
+*.gch
+*.pch
+
+## MSVC
+*.obj
+*.tlog
+*.idb
+*.ipdb
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.lastbuildstate
+*.unsuccessfulbuild
+
+## Clang
+*.bc
+
+# Static analysis outputs
+.clang-tidy
+cppcheck-build-dir/
+*.cppcheck
+scan-build-*/
+
+# Code coverage
+*.gcno
+*.gcda
+*.lcov
+coverage/
+coverage.xml
+coverage.info
+
+# Profiling
+*.prof
+gmon.out
+*.dSYM/
+*.dSYM.zip
+*.gprof
+
+# Valgrind
+*.memcheck
+*.helgrind
+*.drd
+callgrind.out.*
+massif.out.*
+vgcore.*
+
+# Sanitizers
+*.asan
+*.ubsan
+*.tsan
+*.msan
+
+# Documentation generated files
+docs/html/
+docs/latex/
+docs/man/
+docs/rtf/
+docs/xml/
+Doxyfile.bak
+*.tag
+
+# Logs
+*.log
+logs/
+*.out
+*.err
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.rar
+*.7z
+
+# Package managers
+## Conan
+conandata.txt
+conanfile.txt
+conan.lock
+conanbuild.txt
+conanrun.txt
+graph_info.json
+*.pyc
+
+## vcpkg
+vcpkg/
+vcpkg_installed/
+.vcpkg-root
+
+## Hunter
+_3rdParty/
+hunter_build/
+
+# Testing artifacts
+Testing/Temporary/
+*.testlog
+test_results.xml
+gtest_*.xml
+catch_*.xml
+
+# Benchmark results
+benchmark_results/
+*.benchmark
+*.csv
+*.json
+
+# Memory dumps
+*.dmp
+core
+core.*
+
+# Backup files
+*.backup
+*.bak
+*.old
+*~
+
+# OS specific
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+## Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Project specific
+## Configuration that should not be shared
+config/local_config.json
+config/secrets.json
+*.secret
+
+## Data files that are user-specific
+data/user_data/
+data/saves/
+data/cache/
+*.user
+*.local
+
+## Build artifacts that should be cleaned
+*.markers
+.ninja_deps
+.ninja_log
+
+## External dependencies (if not using package manager)
+external/*/
+!external/CMakeLists.txt
+!external/README.md
+
+## Performance analysis
+*.perf
+perf.data
+perf.data.old
+
+## Custom tools output
+analysis_results/
+format_results/
+lint_results/
+
+# Python (for scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Node.js (for documentation tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Keep important files
+!.gitkeep
+!README.md
+!LICENSE
+!CMakeLists.txt
+!.clang-format
+!.clang-tidy
+!Doxyfile
+
+# Custom exclusions for this project
+# Add any project-specific patterns below
+simulation_output/
+mission_logs/
+fleet_data/
+performance_reports/
