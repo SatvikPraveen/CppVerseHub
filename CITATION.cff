@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use CppVerseHub in your research or teaching, please cite it using these metadata."
+title: "CppVerseHub: A Modern C++20 Reference Implementation of Systems Programming Techniques"
+abstract: >-
+  CppVerseHub is a modular, tested and benchmarked C++20 code base that
+  demonstrates templates and concepts, design patterns, the standard library,
+  memory management, concurrency, modern language features and classical
+  algorithms, unified by a deterministic space-fleet simulation domain.
+type: software
+authors:
+  - family-names: Praveen
+    given-names: Satvik
+    email: satvikpraveen707@gmail.com
+repository-code: "https://github.com/SatvikPraveen/CppVerseHub"
+url: "https://satvikpraveen.github.io/CppVerseHub/"
+license: MIT
+version: 2.0.0
+date-released: "2026-10-04"
+keywords:
+  - C++20
+  - concepts
+  - concurrency
+  - design patterns
+  - memory allocators
+  - algorithms
+  - simulation
+  - benchmarking

@@ -1,0 +1,61 @@
+name: Static Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-format-18
+          find src tests benchmarks examples -name '*.cpp' -o -name '*.hpp' \
+            | xargs clang-format-18 --dry-run --Werror --style=file
+        continue-on-error: true
+
+  clang-tidy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy-18
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18
+          -DCPPVERSEHUB_BUILD_BENCHMARKS=OFF -DCPPVERSEHUB_BUILD_EXAMPLES=OFF
+      - name: Run clang-tidy
+        run: |
+          run-clang-tidy-18 -p build -quiet -j 4 "$(pwd)/src/.*\.cpp$"
+
+  cppcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Run cppcheck
+        run: >
+          cppcheck --enable=warning,performance,portability --std=c++20
+          --inline-suppr --suppress=missingIncludeSystem --error-exitcode=1
+          -I src --quiet src
+
+  codeql:
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake -S . -B build -G Ninja -DCPPVERSEHUB_BUILD_BENCHMARKS=OFF
+      - run: cmake --build build --parallel
+      - uses: github/codeql-action/analyze@v3

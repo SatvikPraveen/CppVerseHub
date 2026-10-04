@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a new technique, module or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this solve or what concept would it demonstrate?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+      description: API sketch, references to papers or standard proposals, and how it would be tested.
