@@ -95,7 +95,7 @@ jobs:
           gcovr --root . --filter src/ --exclude-throw-branches
           --gcov-ignore-parse-errors=negative_hits.warn_once_per_file
           --xml-pretty --output coverage.xml --print-summary
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.xml
@@ -109,7 +109,7 @@ jobs:
       - run: cmake --preset default -DCPPVERSEHUB_BUILD_TESTS=OFF -DCPPVERSEHUB_BUILD_EXAMPLES=OFF
       - run: cmake --build --preset default --parallel
       - run: cmake --build --preset default --target run_benchmarks
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: build/default/benchmark-results/*.json
