@@ -1,6 +1,8 @@
 // Behavioural tests for ThreadPool, PriorityThreadPool, WorkStealingThreadPool and UniqueTask.
 // No test depends on timing: ordering is forced with promises/gates, never with sleeps.
 
+#include "concurrency/ThreadPool.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -15,29 +17,27 @@
 #include <thread>
 #include <vector>
 
-#include "concurrency/ThreadPool.hpp"
-
 using namespace CppVerseHub::Concurrency;
 
 namespace {
 
-    // Blocks a worker until opened; lets tests fill a queue deterministically.
-    struct Gate {
-        std::promise<void> promise;
-        std::shared_future<void> future = promise.get_future().share();
-        void open() { promise.set_value(); }
-        [[nodiscard]] auto waiter() const {
-            return [f = future] { f.wait(); };
-        }
-    };
-
-    void spin_until(const std::function<bool()>& predicate) {
-        while (!predicate()) {
-            std::this_thread::yield();
-        }
+// Blocks a worker until opened; lets tests fill a queue deterministically.
+struct Gate {
+    std::promise<void> promise;
+    std::shared_future<void> future = promise.get_future().share();
+    void open() { promise.set_value(); }
+    [[nodiscard]] auto waiter() const {
+        return [f = future] { f.wait(); };
     }
+};
 
-}  // namespace
+void spin_until(const std::function<bool()>& predicate) {
+    while (!predicate()) {
+        std::this_thread::yield();
+    }
+}
+
+} // namespace
 
 TEST_CASE("UniqueTask wraps move-only callables", "[concurrency][threadpool]") {
     UniqueTask empty;
@@ -92,7 +92,8 @@ TEST_CASE("ThreadPool zero threads means one worker", "[concurrency][threadpool]
     CHECK(pool.submit([] { return 1; }).get() == 1);
 }
 
-TEST_CASE("ThreadPool pending_tasks counts queued work behind a blocked worker", "[concurrency][threadpool]") {
+TEST_CASE("ThreadPool pending_tasks counts queued work behind a blocked worker",
+          "[concurrency][threadpool]") {
     ThreadPool pool(1);
     Gate gate;
     std::atomic<bool> started{false};
@@ -207,7 +208,8 @@ TEST_CASE("ThreadPool supports concurrent submitters", "[concurrency][threadpool
     CHECK(std::accumulate(sums.begin(), sums.end(), 0LL) == 4 * 5050);
 }
 
-TEST_CASE("PriorityThreadPool runs higher priorities first, FIFO within a priority", "[concurrency][threadpool]") {
+TEST_CASE("PriorityThreadPool runs higher priorities first, FIFO within a priority",
+          "[concurrency][threadpool]") {
     PriorityThreadPool pool(1);
     Gate gate;
     std::atomic<bool> started{false};
@@ -265,10 +267,11 @@ TEST_CASE("WorkStealingThreadPool computes correct results", "[concurrency][thre
     for (auto& f : fs) {
         total += f.get();
     }
-    CHECK(total == 332833500ULL);  // sum of i^2 for i < 1000
+    CHECK(total == 332833500ULL); // sum of i^2 for i < 1000
 }
 
-TEST_CASE("WorkStealingThreadPool supports tasks spawning subtasks", "[concurrency][threadpool][workstealing]") {
+TEST_CASE("WorkStealingThreadPool supports tasks spawning subtasks",
+          "[concurrency][threadpool][workstealing]") {
     WorkStealingThreadPool pool(4);
     std::vector<std::future<std::vector<std::future<int>>>> parents;
     for (int p = 0; p < 8; ++p) {
@@ -300,7 +303,8 @@ TEST_CASE("WorkStealingThreadPool propagates exceptions", "[concurrency][threadp
     CHECK_THROWS_AS(f.get(), std::runtime_error);
 }
 
-TEST_CASE("WorkStealingThreadPool shutdown executes all accepted tasks", "[concurrency][threadpool][workstealing]") {
+TEST_CASE("WorkStealingThreadPool shutdown executes all accepted tasks",
+          "[concurrency][threadpool][workstealing]") {
     std::atomic<int> executed{0};
     WorkStealingThreadPool pool(4);
     for (int i = 0; i < 2000; ++i) {
@@ -310,7 +314,7 @@ TEST_CASE("WorkStealingThreadPool shutdown executes all accepted tasks", "[concu
     CHECK(executed.load() == 2000);
     CHECK(pool.pending_tasks() == 0);
     CHECK_THROWS_AS(pool.submit([] {}), PoolShutdownError);
-    pool.shutdown();  // idempotent
+    pool.shutdown(); // idempotent
 }
 
 TEST_CASE("WorkStealingThreadPool loses no task when submitters race with shutdown",
@@ -343,7 +347,8 @@ TEST_CASE("WorkStealingThreadPool loses no task when submitters race with shutdo
     CHECK(executed.load() == accepted.load());
 }
 
-TEST_CASE("WorkStealingThreadPool idle workers steal from a busy worker", "[concurrency][threadpool][workstealing]") {
+TEST_CASE("WorkStealingThreadPool idle workers steal from a busy worker",
+          "[concurrency][threadpool][workstealing]") {
     WorkStealingThreadPool pool(2);
     // One task (on some worker) spawns many children onto its own deque and then blocks
     // until all of them have run. They can only complete if the other worker steals them.

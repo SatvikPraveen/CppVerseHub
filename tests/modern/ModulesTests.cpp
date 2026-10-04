@@ -1,3 +1,5 @@
+#include "modern/ModulesDemo.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -6,22 +8,21 @@
 #include <stdexcept>
 #include <string>
 
-#include "modern/ModulesDemo.hpp"
-
 using namespace CppVerseHub::Modern::Modules;
 using namespace CppVerseHub::Modern::Modules::SpaceGame;
 using Catch::Approx;
 
 TEST_CASE("Core utilities", "[modern][modules]") {
     CHECK(Core::calculateDistance({0, 0, 0}, {2, 3, 6}) == Approx(7.0));
-    CHECK(Core::parseCommaSeparatedList(" ore, water ,,gas ,") == std::vector<std::string>{"ore", "water", "gas"});
+    CHECK(Core::parseCommaSeparatedList(" ore, water ,,gas ,") ==
+          std::vector<std::string>{"ore", "water", "gas"});
     CHECK(Core::parseCommaSeparatedList("").empty());
     Core::IdGenerator gen("fleet");
     CHECK(gen.next() == "fleet-1");
     CHECK(gen.next() == "fleet-2");
     CHECK(gen.issued() == 2);
     Core::IdGenerator other;
-    CHECK(other.next() == "entity-1");  // independent state, no globals
+    CHECK(other.next() == "entity-1"); // independent state, no globals
 }
 
 TEST_CASE("Core is versioned through an inline namespace", "[modern][modules]") {
@@ -51,13 +52,13 @@ TEST_CASE("Starship movement consumes fuel", "[modern][modules]") {
     Entities::Starship s(1, "Arrow", "Scout", {0, 0, 0}, 12);
     CHECK(s.getFuelPercentage() == Approx(100.0));
     s.setVelocity({3, 4, 0});
-    s.update(2.0);  // travels 10 units
+    s.update(2.0); // travels 10 units
     CHECK(s.getPosition() == Core::Vec3{6, 8, 0});
     CHECK(s.getFuelPercentage() == Approx(99.0));
     CHECK(s.hasEnoughFuelFor(990.0));
     CHECK_FALSE(s.hasEnoughFuelFor(991.0));
     s.setVelocity({1000, 0, 0});
-    s.update(1.0);  // not enough fuel: stops in place
+    s.update(1.0); // not enough fuel: stops in place
     CHECK(s.getPosition() == Core::Vec3{6, 8, 0});
     CHECK(s.getVelocity() == Core::Vec3{});
     s.refuel(5000.0);
@@ -71,7 +72,7 @@ TEST_CASE("Mission state machine", "[modern][modules]") {
     Mission m(1, "Survey", Missions::MissionType::Exploration, 4.0, 2);
     CHECK(m.getStatus() == MissionStatus::Pending);
     m.update(1.0);
-    CHECK(m.getProgress() == 0.0);  // pending missions don't progress
+    CHECK(m.getProgress() == 0.0); // pending missions don't progress
     CHECK_FALSE(m.fail());
     CHECK(m.start());
     CHECK_FALSE(m.start());
@@ -123,7 +124,7 @@ TEST_CASE("FleetFormation owns ships and retires completed missions", "[modern][
     REQUIRE(f.findShip(2) != nullptr);
     CHECK(f.findShip(3) == nullptr);
 
-    f.assignMission(Missions::MissionFactory::create(1, Missions::MissionType::Rescue, "X"));  // 5 time units
+    f.assignMission(Missions::MissionFactory::create(1, Missions::MissionType::Rescue, "X")); // 5 time units
     CHECK(f.getActiveMissionCount() == 1);
     f.findShip(1)->setVelocity({100, 0, 0});
     f.update(2.0);
@@ -160,7 +161,7 @@ TEST_CASE("GameUniverse sample simulation", "[modern][modules]") {
     const auto report = u.getUniverseReport();
     REQUIRE(report.size() == 1 + 2 + 2);
     CHECK(report[0].rfind("t=5", 0) == 0);
-    CHECK(report[1].find("completed=1") != std::string::npos);  // Alpha's 5-unit rescue finished
+    CHECK(report[1].find("completed=1") != std::string::npos); // Alpha's 5-unit rescue finished
 }
 
 TEST_CASE("Planet serialisation round-trips", "[modern][modules]") {
@@ -193,7 +194,9 @@ TEST_CASE("Module graph yields a dependency-respecting build order", "[modern][m
     REQUIRE(graph.size() == 5);
     const auto order = topologicalBuildOrder(graph);
     REQUIRE(order.has_value());
-    auto pos = [&](const std::string& n) { return std::find(order->begin(), order->end(), n) - order->begin(); };
+    auto pos = [&](const std::string& n) {
+        return std::find(order->begin(), order->end(), n) - order->begin();
+    };
     for (const auto& unit : graph) {
         for (const auto& imp : unit.imports) {
             CHECK(pos(imp) < pos(unit.name));

@@ -55,8 +55,8 @@ TEST_CASE("parseIso8601 handles date-only and round-trips formatIso8601", "[util
 
 TEST_CASE("parseIso8601 rejects malformed or out-of-range input", "[utils][time]") {
     const auto text = GENERATE(as<std::string>{}, "", "2024", "2024-13-01", "2023-02-29", "2024-01-01T24:00",
-                               "2024-01-01T10:61", "2024-01-01T10:00:00.", "2024-01-01T10:00Zjunk", "24-01-01",
-                               "2024-01-01T10:00+25:00");
+                               "2024-01-01T10:61", "2024-01-01T10:00:00.", "2024-01-01T10:00Zjunk",
+                               "24-01-01", "2024-01-01T10:00+25:00");
     CHECK_FALSE(parseIso8601(text).has_value());
 }
 
@@ -147,7 +147,8 @@ TEST_CASE("TaskScheduler runs tasks in due-time order", "[utils][time][scheduler
     CHECK(scheduler.now() == milliseconds{600});
 }
 
-TEST_CASE("TaskScheduler repeating tasks honour repetition counts and cancellation", "[utils][time][scheduler]") {
+TEST_CASE("TaskScheduler repeating tasks honour repetition counts and cancellation",
+          "[utils][time][scheduler]") {
     TaskScheduler scheduler;
     int limited = 0;
     int unlimited = 0;
@@ -197,9 +198,7 @@ TEST_CASE("PerformanceProfiler aggregates samples and reports", "[utils][time]")
     profiler.record("physics", 2ms);
     profiler.record("physics", 4ms);
     profiler.record("ai", 1ms);
-    {
-        const PerformanceProfiler::Scope scope{profiler, "scoped"};
-    }
+    { const PerformanceProfiler::Scope scope{profiler, "scoped"}; }
     const auto stats = profiler.stats("physics");
     REQUIRE(stats.has_value());
     CHECK(stats->count == 2);
@@ -220,7 +219,8 @@ TEST_CASE("PerformanceProfiler aggregates samples and reports", "[utils][time]")
 
 TEST_CASE("SpaceTime helpers", "[utils][time]") {
     static_assert(SpaceTime::lightTravelTime(SpaceTime::kSpeedOfLight).count() == 1.0);
-    CHECK(SpaceTime::lightTravelTime(SpaceTime::kAstronomicalUnit).count() == Approx(499.004784).epsilon(1e-6));
+    CHECK(SpaceTime::lightTravelTime(SpaceTime::kAstronomicalUnit).count() ==
+          Approx(499.004784).epsilon(1e-6));
     const SystemClock::time_point newYear{sys_days{2023y / January / 1}};
     CHECK(SpaceTime::decimalYear(newYear) == Approx(2023.0));
     const SystemClock::time_point midYear{sys_days{2023y / January / 1} + hours{365 * 12}};

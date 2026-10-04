@@ -11,13 +11,13 @@
  */
 #pragma once
 
+#include "core/Exceptions.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <random>
 #include <sstream>
 #include <string>
-
-#include "core/Exceptions.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -132,7 +132,9 @@ public:
     }
 
     /// @brief Engines compare equal iff their future sequences are identical. @return Equality.
-    friend bool operator==(const DeterministicRng& a, const DeterministicRng& b) { return a.engine_ == b.engine_; }
+    friend bool operator==(const DeterministicRng& a, const DeterministicRng& b) {
+        return a.engine_ == b.engine_;
+    }
 
 private:
     std::mt19937_64 engine_;

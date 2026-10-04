@@ -61,10 +61,10 @@ namespace CppVerseHub::Algorithms {
 template <class T>
 class DynamicArray {
 public:
-    using value_type = T;                    ///< Element type.
-    using size_type = std::size_t;           ///< Size type.
-    using iterator = T*;                     ///< Contiguous iterator.
-    using const_iterator = const T*;         ///< Contiguous const iterator.
+    using value_type = T;            ///< Element type.
+    using size_type = std::size_t;   ///< Size type.
+    using iterator = T*;             ///< Contiguous iterator.
+    using const_iterator = const T*; ///< Contiguous const iterator.
 
     /// @brief Creates an empty array without allocating.
     DynamicArray() noexcept = default;
@@ -107,9 +107,9 @@ public:
 
     /// @brief Steals `other`'s buffer. O(1), leaves `other` empty.
     DynamicArray(DynamicArray&& other) noexcept
-        : data_(std::exchange(other.data_, nullptr)),
-          size_(std::exchange(other.size_, 0)),
-          capacity_(std::exchange(other.capacity_, 0)) {}
+        : data_(std::exchange(other.data_, nullptr))
+        , size_(std::exchange(other.size_, 0))
+        , capacity_(std::exchange(other.capacity_, 0)) {}
 
     /// @brief Copy assignment with the strong guarantee (copy-and-swap).
     DynamicArray& operator=(const DynamicArray& other)
@@ -372,19 +372,20 @@ class LinkedList {
     template <bool Const>
     class Iterator {
     public:
-        using iterator_concept = std::forward_iterator_tag;   ///< Iterator category.
-        using iterator_category = std::forward_iterator_tag;  ///< Legacy category.
-        using value_type = T;                                 ///< Element type.
-        using difference_type = std::ptrdiff_t;               ///< Distance type.
-        using reference = std::conditional_t<Const, const T&, T&>;  ///< Reference type.
-        using pointer = std::conditional_t<Const, const T*, T*>;    ///< Pointer type.
+        using iterator_concept = std::forward_iterator_tag;        ///< Iterator category.
+        using iterator_category = std::forward_iterator_tag;       ///< Legacy category.
+        using value_type = T;                                      ///< Element type.
+        using difference_type = std::ptrdiff_t;                    ///< Distance type.
+        using reference = std::conditional_t<Const, const T&, T&>; ///< Reference type.
+        using pointer = std::conditional_t<Const, const T*, T*>;   ///< Pointer type.
 
         Iterator() noexcept = default;
         explicit Iterator(Node* node) noexcept : node_(node) {}
         /// Conversion from mutable to const iterator.
         template <bool C = Const>
             requires C
-        Iterator(const Iterator<false>& other) noexcept : node_(other.node_) {}  // NOLINT(google-explicit-constructor)
+        Iterator(const Iterator<false>& other) noexcept
+            : node_(other.node_) {} // NOLINT(google-explicit-constructor)
 
         reference operator*() const noexcept { return node_->value; }
         pointer operator->() const noexcept { return &node_->value; }
@@ -407,9 +408,9 @@ class LinkedList {
     };
 
 public:
-    using value_type = T;                    ///< Element type.
-    using iterator = Iterator<false>;        ///< Mutable forward iterator.
-    using const_iterator = Iterator<true>;   ///< Const forward iterator.
+    using value_type = T;                  ///< Element type.
+    using iterator = Iterator<false>;      ///< Mutable forward iterator.
+    using const_iterator = Iterator<true>; ///< Const forward iterator.
 
     /// @brief Creates an empty list.
     LinkedList() noexcept = default;
@@ -437,8 +438,9 @@ public:
 
     /// @brief Takes ownership of `other`'s nodes. O(1).
     LinkedList(LinkedList&& other) noexcept
-        : head_(std::move(other.head_)), tail_(std::exchange(other.tail_, nullptr)),
-          size_(std::exchange(other.size_, 0)) {}
+        : head_(std::move(other.head_))
+        , tail_(std::exchange(other.tail_, nullptr))
+        , size_(std::exchange(other.size_, 0)) {}
 
     /// @brief Copy assignment (copy-and-swap, strong guarantee).
     LinkedList& operator=(const LinkedList& other)
@@ -616,7 +618,7 @@ public:
 
 private:
     std::unique_ptr<Node> head_;
-    Node* tail_ = nullptr;  // non-owning
+    Node* tail_ = nullptr; // non-owning
     std::size_t size_ = 0;
 };
 
@@ -677,7 +679,9 @@ public:
 
     /// @brief Takes ownership of `other`'s nodes. O(1).
     BinarySearchTree(BinarySearchTree&& other) noexcept(std::is_nothrow_move_constructible_v<Compare>)
-        : root_(std::move(other.root_)), comp_(std::move(other.comp_)), size_(std::exchange(other.size_, 0)) {}
+        : root_(std::move(other.root_))
+        , comp_(std::move(other.comp_))
+        , size_(std::exchange(other.size_, 0)) {}
 
     /// @brief Copy assignment (copy-and-swap).
     BinarySearchTree& operator=(const BinarySearchTree& other)
@@ -1324,8 +1328,8 @@ public:
      * @param limit  Maximum number of results.
      * @return Matching words (sorted).
      */
-    [[nodiscard]] std::vector<std::string> with_prefix(std::string_view prefix,
-                                                       std::size_t limit = static_cast<std::size_t>(-1)) const;
+    [[nodiscard]] std::vector<std::string> with_prefix(
+        std::string_view prefix, std::size_t limit = static_cast<std::size_t>(-1)) const;
 
     /**
      * @brief Removes a word, pruning nodes that no longer lead to any word.
@@ -1488,8 +1492,8 @@ class SkipList {
 
     struct Node {
         K key;
-        std::vector<Node*> forward;   // non-owning, one per level
-        std::unique_ptr<Node> next0;  // owning level-0 successor (== forward[0])
+        std::vector<Node*> forward;  // non-owning, one per level
+        std::unique_ptr<Node> next0; // owning level-0 successor (== forward[0])
         Node(K k, std::size_t levels) : key(std::move(k)), forward(levels, nullptr) {}
     };
 
@@ -1553,7 +1557,7 @@ public:
         Search s = search(key);
         Node* candidate = (*s.update[0])[0];
         if (candidate != nullptr && !comp_(key, candidate->key)) {
-            return false;  // equivalent key present
+            return false; // equivalent key present
         }
         const std::size_t lvl = random_level();
         for (std::size_t l = level_; l < lvl; ++l) {
@@ -1691,6 +1695,6 @@ private:
  */
 void demonstrate_data_structures(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms
 
-#endif  // CPPVERSEHUB_ALGORITHMS_DATASTRUCTURES_HPP
+#endif // CPPVERSEHUB_ALGORITHMS_DATASTRUCTURES_HPP

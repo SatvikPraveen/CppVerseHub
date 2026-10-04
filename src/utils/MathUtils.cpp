@@ -316,8 +316,8 @@ double Numerical::integrateSimpson(const std::function<double(double)>& f, doubl
 }
 
 std::optional<double> Numerical::newtonRaphson(const std::function<double(double)>& f,
-                                               const std::function<double(double)>& df, double x0, double tolerance,
-                                               int maxIterations) {
+                                               const std::function<double(double)>& df, double x0,
+                                               double tolerance, int maxIterations) {
     double x = x0;
     for (int i = 0; i < maxIterations; ++i) {
         const double d = df(x);
@@ -340,8 +340,10 @@ std::optional<double> Numerical::bisection(const std::function<double(double)>& 
                                            double tolerance) {
     double flo = f(lo);
     const double fhi = f(hi);
-    if (flo == 0.0) return lo;
-    if (fhi == 0.0) return hi;
+    if (flo == 0.0)
+        return lo;
+    if (fhi == 0.0)
+        return hi;
     if ((flo < 0.0) == (fhi < 0.0)) {
         return std::nullopt;
     }
@@ -400,7 +402,9 @@ double Statistics::standardDeviation(std::span<const double> data, bool sample) 
     return std::sqrt(variance(data, sample));
 }
 
-double Statistics::median(std::span<const double> data) { return percentile(data, 50.0); }
+double Statistics::median(std::span<const double> data) {
+    return percentile(data, 50.0);
+}
 
 double Statistics::percentile(std::span<const double> data, double p) {
     requireNonEmpty(data, "percentile");
@@ -488,7 +492,9 @@ PerlinNoise::PerlinNoise(std::uint64_t seed) {
 }
 
 namespace {
-constexpr double fade(double t) noexcept { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+constexpr double fade(double t) noexcept {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
 
 constexpr double grad(std::uint8_t hash, double x, double y, double z) noexcept {
     const unsigned h = hash & 15U;
@@ -523,7 +529,8 @@ double PerlinNoise::noise(double x, double y, double z) const noexcept {
     return lerp(lerp(lerp(grad(perm_[aa], x, y, z), grad(perm_[ba], x - 1, y, z), u),
                      lerp(grad(perm_[ab], x, y - 1, z), grad(perm_[bb], x - 1, y - 1, z), u), v),
                 lerp(lerp(grad(perm_[aa + 1], x, y, z - 1), grad(perm_[ba + 1], x - 1, y, z - 1), u),
-                     lerp(grad(perm_[ab + 1], x, y - 1, z - 1), grad(perm_[bb + 1], x - 1, y - 1, z - 1), u), v),
+                     lerp(grad(perm_[ab + 1], x, y - 1, z - 1), grad(perm_[bb + 1], x - 1, y - 1, z - 1), u),
+                     v),
                 w);
 }
 
@@ -607,8 +614,8 @@ int orientation(const Vec2& a, const Vec2& b, const Vec2& c) noexcept {
     return v > 0.0 ? 1 : -1;
 }
 bool onSegment(const Vec2& a, const Vec2& b, const Vec2& p) noexcept {
-    return std::min(a.x(), b.x()) <= p.x() && p.x() <= std::max(a.x(), b.x()) && std::min(a.y(), b.y()) <= p.y() &&
-           p.y() <= std::max(a.y(), b.y());
+    return std::min(a.x(), b.x()) <= p.x() && p.x() <= std::max(a.x(), b.x()) &&
+           std::min(a.y(), b.y()) <= p.y() && p.y() <= std::max(a.y(), b.y());
 }
 } // namespace
 
@@ -642,9 +649,13 @@ double Space::orbitalPeriod(double semiMajorAxis, double mu) {
     return Constants::kTau * std::sqrt(semiMajorAxis * semiMajorAxis * semiMajorAxis / mu);
 }
 
-double Space::circularVelocity(double radius, double mu) { return std::sqrt(mu / radius); }
+double Space::circularVelocity(double radius, double mu) {
+    return std::sqrt(mu / radius);
+}
 
-double Space::escapeVelocity(double radius, double mu) { return std::sqrt(2.0 * mu / radius); }
+double Space::escapeVelocity(double radius, double mu) {
+    return std::sqrt(2.0 * mu / radius);
+}
 
 Space::HohmannTransfer Space::hohmannTransfer(double r1, double r2, double mu) {
     if (r1 <= 0.0 || r2 <= 0.0 || mu <= 0.0) {
@@ -751,12 +762,14 @@ void demonstrateMath(std::ostream& out) {
     for (const auto p : NumberTheory::primesUpTo(30)) {
         out << p << ' ';
     }
-    out << "\nC(52,5) = " << NumberTheory::binomial(52, 5) << ", F(50) = " << NumberTheory::fibonacci(50) << '\n';
+    out << "\nC(52,5) = " << NumberTheory::binomial(52, 5) << ", F(50) = " << NumberTheory::fibonacci(50)
+        << '\n';
 
-    const double integral = Numerical::integrateSimpson([](double x) { return std::sin(x); }, 0.0, Constants::kPi);
+    const double integral = Numerical::integrateSimpson([](double x) { return std::sin(x); }, 0.0,
+                                                        Constants::kPi);
     out << "integral of sin over [0, pi] = " << std::setprecision(6) << integral << '\n';
-    if (const auto root =
-            Numerical::newtonRaphson([](double x) { return x * x - 2.0; }, [](double x) { return 2.0 * x; }, 1.0)) {
+    if (const auto root = Numerical::newtonRaphson([](double x) { return x * x - 2.0; },
+                                                   [](double x) { return 2.0 * x; }, 1.0)) {
         out << "Newton sqrt(2) = " << std::setprecision(10) << *root << '\n';
     }
 
@@ -776,14 +789,14 @@ void demonstrateMath(std::ostream& out) {
     out << "Perlin fractal(0.5, 0.25) = " << noise.fractal(0.5, 0.25, 0.0, 4) << '\n';
 
     const std::vector<Vec2> square{{0.0, 0.0}, {2.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}};
-    out << "square area = " << Geometry::polygonArea(square)
-        << ", contains (1,1): " << std::boolalpha << Geometry::pointInPolygon(Vec2{1.0, 1.0}, square) << '\n';
+    out << "square area = " << Geometry::polygonArea(square) << ", contains (1,1): " << std::boolalpha
+        << Geometry::pointInPolygon(Vec2{1.0, 1.0}, square) << '\n';
 
     const double leo = Constants::kEarthRadius + 400e3;
     const double geo = 42'164e3;
     const auto transfer = Space::hohmannTransfer(leo, geo);
-    out << "LEO->GEO Hohmann: total dv = " << std::setprecision(1) << transfer.totalDeltaV << " m/s, time = "
-        << transfer.transferTime / 3600.0 << " h\n";
+    out << "LEO->GEO Hohmann: total dv = " << std::setprecision(1) << transfer.totalDeltaV
+        << " m/s, time = " << transfer.transferTime / 3600.0 << " h\n";
 
     Space::NBodySimulator sim{1.0};
     sim.addBody({Vec3{0.0, 0.0, 0.0}, Vec3{0.0, 0.0, 0.0}, 1.0});

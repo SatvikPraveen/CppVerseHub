@@ -59,7 +59,7 @@ public:
      * @return Reference to the instance (valid until static destruction).
      */
     [[nodiscard]] static Derived& instance() {
-        static Derived inst;  // thread-safe initialisation guaranteed by the language
+        static Derived inst; // thread-safe initialisation guaranteed by the language
         return inst;
     }
 
@@ -147,8 +147,8 @@ class LogManager final : public Singleton<LogManager> {
 public:
     /// @brief A stored log record.
     struct Record {
-        LogLevel level;       ///< Severity.
-        std::string message;  ///< Text.
+        LogLevel level;      ///< Severity.
+        std::string message; ///< Text.
     };
 
     /// @brief Maximum number of retained records (oldest dropped first).
@@ -209,7 +209,9 @@ class IdGenerator final : public Singleton<IdGenerator> {
 
 public:
     /// @brief Next id (starts at 1). @return A value never returned before.
-    [[nodiscard]] std::uint64_t next() noexcept { return counter_.fetch_add(1, std::memory_order_relaxed) + 1; }
+    [[nodiscard]] std::uint64_t next() noexcept {
+        return counter_.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
 
     /// @brief Number of ids issued so far. @return Count.
     [[nodiscard]] std::uint64_t issued() const noexcept { return counter_.load(std::memory_order_relaxed); }
@@ -229,8 +231,8 @@ inline void demonstrateSingleton(std::ostream& out = std::cout) {
     out << "=== Singleton pattern ===\n";
     auto& config = ConfigManager::instance();
     config.set("galaxy.name", "Andromeda");
-    out << "  same ConfigManager instance: " << std::boolalpha
-        << (&config == &ConfigManager::instance()) << '\n';
+    out << "  same ConfigManager instance: " << std::boolalpha << (&config == &ConfigManager::instance())
+        << '\n';
     out << "  galaxy.name = " << ConfigManager::instance().getOr("galaxy.name", "?") << '\n';
 
     auto& ids = IdGenerator::instance();
@@ -242,4 +244,4 @@ inline void demonstrateSingleton(std::ostream& out = std::cout) {
     out << "  log records retained: " << LogManager::instance().size() << '\n';
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

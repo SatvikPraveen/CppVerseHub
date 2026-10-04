@@ -55,17 +55,21 @@ static_assert(specOf(ShipType::Scout).speed > specOf(ShipType::Colonizer).speed)
 
 /// @brief One ship: its class and remaining hull.
 struct Ship {
-    ShipType type{ShipType::Fighter}; ///< Class.
+    ShipType type{ShipType::Fighter};               ///< Class.
     double hull{specOf(ShipType::Fighter).maxHull}; ///< Remaining hit points.
 
     /// @brief A brand-new ship of a class. @param type Class. @return Ship at full hull.
-    [[nodiscard]] static constexpr Ship make(ShipType type) noexcept { return Ship{type, specOf(type).maxHull}; }
+    [[nodiscard]] static constexpr Ship make(ShipType type) noexcept {
+        return Ship{type, specOf(type).maxHull};
+    }
 
     /// @brief Hull fraction in [0,1]. @return hull / maxHull.
     [[nodiscard]] constexpr double integrity() const noexcept { return hull / specOf(type).maxHull; }
 
     /// @brief Effective damage per second (attack scaled by integrity). @return Attack.
-    [[nodiscard]] constexpr double effectiveAttack() const noexcept { return specOf(type).attack * integrity(); }
+    [[nodiscard]] constexpr double effectiveAttack() const noexcept {
+        return specOf(type).attack * integrity();
+    }
 
     /// @brief Equality. @return true if same class and hull.
     friend constexpr bool operator==(const Ship&, const Ship&) noexcept = default;

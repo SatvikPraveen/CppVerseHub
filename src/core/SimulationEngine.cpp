@@ -4,12 +4,12 @@
  */
 #include "core/SimulationEngine.hpp"
 
-#include <cmath>
-#include <vector>
+#include "core/Events.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include "core/Events.hpp"
+#include <cmath>
+#include <vector>
 
 namespace CppVerseHub::Core {
 
@@ -37,10 +37,12 @@ SimulationEngine::SimulationEngine(std::unique_ptr<Galaxy> galaxy, SimulationCon
     if (config_.maxStepsPerAdvance == 0) {
         throw InvalidArgumentException("maxStepsPerAdvance must be positive");
     }
-    startedCounter_ = events_.subscribe<MissionStarted>([this](const MissionStarted&) { ++stats_.missionsStarted; });
-    completedCounter_ =
-        events_.subscribe<MissionCompleted>([this](const MissionCompleted&) { ++stats_.missionsCompleted; });
-    failedCounter_ = events_.subscribe<MissionFailed>([this](const MissionFailed&) { ++stats_.missionsFailed; });
+    startedCounter_ = events_.subscribe<MissionStarted>(
+        [this](const MissionStarted&) { ++stats_.missionsStarted; });
+    completedCounter_ = events_.subscribe<MissionCompleted>(
+        [this](const MissionCompleted&) { ++stats_.missionsCompleted; });
+    failedCounter_ = events_.subscribe<MissionFailed>(
+        [this](const MissionFailed&) { ++stats_.missionsFailed; });
 }
 
 SimulationEngine::~SimulationEngine() = default;
@@ -143,7 +145,8 @@ std::uint64_t SimulationEngine::runUntil(const std::function<bool(const Simulati
 }
 
 std::uint64_t SimulationEngine::runUntilMissionsFinished(std::uint64_t maxSteps) {
-    return runUntil([](const SimulationEngine& e) { return e.galaxy().unfinishedMissionCount() == 0; }, maxSteps);
+    return runUntil([](const SimulationEngine& e) { return e.galaxy().unfinishedMissionCount() == 0; },
+                    maxSteps);
 }
 
 void SimulationEngine::toJson(nlohmann::json& out) const {

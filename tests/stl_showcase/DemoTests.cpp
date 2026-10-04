@@ -1,15 +1,15 @@
 // End-to-end tests for the stl_showcase demonstrations.
-#include <catch2/catch_test_macros.hpp>
-
-#include <sstream>
-#include <string>
-
 #include "stl_showcase/Algorithms.hpp"
 #include "stl_showcase/Containers.hpp"
 #include "stl_showcase/Demo.hpp"
 #include "stl_showcase/Functors.hpp"
 #include "stl_showcase/Iterators.hpp"
 #include "stl_showcase/STLUtilities.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <sstream>
+#include <string>
 
 using namespace CppVerseHub::STL;
 
@@ -18,9 +18,9 @@ TEST_CASE("runDemo writes every section to the supplied stream", "[demo]") {
     REQUIRE_NOTHROW(runDemo(oss));
     const std::string text = oss.str();
     REQUIRE_FALSE(text.empty());
-    for (const char* heading : {"Sequence Containers", "Container Adapters", "Sorting Algorithms", "Set Algorithms",
-                                "Custom Iterators", "Lambda Expressions", "Function Binding", "std::variant",
-                                "std::any", "STL Showcase complete"}) {
+    for (const char* heading : {"Sequence Containers", "Container Adapters", "Sorting Algorithms",
+                                "Set Algorithms", "Custom Iterators", "Lambda Expressions",
+                                "Function Binding", "std::variant", "std::any", "STL Showcase complete"}) {
         CAPTURE(heading);
         REQUIRE(text.find(heading) != std::string::npos);
     }

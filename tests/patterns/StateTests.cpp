@@ -3,10 +3,10 @@
  * @brief Tests for the OO mission state machine and the std::variant warp-drive machine.
  */
 
+#include "patterns/State.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-
-#include "patterns/State.hpp"
 
 using namespace CppVerseHub::Patterns;
 
@@ -20,7 +20,7 @@ TEST_CASE("Mission follows the happy path to Completed", "[state][oo]") {
     CHECK(m.progress() == 50.0);
     CHECK(m.advance(75.0));
     CHECK(m.phase() == MissionPhase::Completed);
-    CHECK(m.progress() == 100.0);  // clamped
+    CHECK(m.progress() == 100.0); // clamped
     CHECK(m.finished());
     REQUIRE(m.history().size() == 3);
     CHECK(m.history()[2].from == MissionPhase::Active);
@@ -51,7 +51,7 @@ TEST_CASE("Pause and resume preserve progress", "[state][oo]") {
     CHECK(m.progress() == 30.0);
     CHECK(m.resume());
     CHECK(m.phase() == MissionPhase::Active);
-    CHECK_FALSE(m.advance(0.0));  // non-positive progress rejected
+    CHECK_FALSE(m.advance(0.0)); // non-positive progress rejected
     CHECK_FALSE(m.advance(-5.0));
 }
 
@@ -74,9 +74,12 @@ TEST_CASE("Failure records a reason and is terminal", "[state][oo]") {
 TEST_CASE("Abort is accepted from every non-terminal phase", "[state][oo]") {
     const int steps = GENERATE(0, 1, 2, 3);
     MissionContext m("Any");
-    if (steps >= 1) m.plan();
-    if (steps >= 2) m.launch();
-    if (steps >= 3) m.pause();
+    if (steps >= 1)
+        m.plan();
+    if (steps >= 2)
+        m.launch();
+    if (steps >= 3)
+        m.pause();
     CHECK(m.abort());
     CHECK(m.phase() == MissionPhase::Aborted);
     CHECK_FALSE(m.abort());
@@ -117,16 +120,16 @@ TEST_CASE("WarpDrive charges, jumps and cools down", "[state][variant]") {
 
 TEST_CASE("WarpDrive rejects invalid events", "[state][variant]") {
     WarpDrive drive;
-    CHECK_FALSE(drive.handle(Warp::Charge{10.0}));   // offline
-    CHECK_FALSE(drive.handle(Warp::Shutdown{}));     // already offline
+    CHECK_FALSE(drive.handle(Warp::Charge{10.0})); // offline
+    CHECK_FALSE(drive.handle(Warp::Shutdown{}));   // already offline
     drive.handle(Warp::PowerOn{});
-    CHECK_FALSE(drive.handle(Warp::Engage{"X"}));    // not charged
-    CHECK_FALSE(drive.handle(Warp::Charge{0.0}));    // non-positive charge
+    CHECK_FALSE(drive.handle(Warp::Engage{"X"})); // not charged
+    CHECK_FALSE(drive.handle(Warp::Charge{0.0})); // non-positive charge
     CHECK_FALSE(drive.handle(Warp::Charge{-5.0}));
     drive.handle(Warp::Charge{100.0});
-    CHECK_FALSE(drive.handle(Warp::Engage{""}));     // empty destination
+    CHECK_FALSE(drive.handle(Warp::Engage{""})); // empty destination
     drive.handle(Warp::Engage{"Y"});
-    CHECK_FALSE(drive.handle(Warp::Shutdown{}));     // cannot shut down mid-jump
+    CHECK_FALSE(drive.handle(Warp::Shutdown{})); // cannot shut down mid-jump
     CHECK(drive.is<Warp::Jumping>());
     CHECK(drive.rejected() == 7);
 }
@@ -134,8 +137,9 @@ TEST_CASE("WarpDrive rejects invalid events", "[state][variant]") {
 TEST_CASE("Shutdown returns to Offline from every interruptible state", "[state][variant]") {
     WarpDrive drive;
     drive.handle(Warp::PowerOn{});
-    const int stage = GENERATE(0, 1, 2);  // Charging, Ready, Cooldown
-    if (stage >= 1) drive.handle(Warp::Charge{100.0});
+    const int stage = GENERATE(0, 1, 2); // Charging, Ready, Cooldown
+    if (stage >= 1)
+        drive.handle(Warp::Charge{100.0});
     if (stage >= 2) {
         drive.handle(Warp::Engage{"Z"});
         drive.handle(Warp::Tick{});
@@ -164,14 +168,16 @@ using TurnState = std::variant<Locked, Unlocked>;
 using TurnEvent = std::variant<Coin, Push>;
 struct TurnTransitions {
     std::optional<TurnState> operator()(const Locked&, const Coin&) const { return Unlocked{1}; }
-    std::optional<TurnState> operator()(const Unlocked& u, const Coin&) const { return Unlocked{u.coins + 1}; }
+    std::optional<TurnState> operator()(const Unlocked& u, const Coin&) const {
+        return Unlocked{u.coins + 1};
+    }
     std::optional<TurnState> operator()(const Unlocked&, const Push&) const { return Locked{}; }
     template <typename S, typename E>
     std::optional<TurnState> operator()(const S&, const E&) const {
         return std::nullopt;
     }
 };
-}  // namespace
+} // namespace
 
 TEST_CASE("VariantStateMachine is reusable for arbitrary state/event sets", "[state][variant][generic]") {
     VariantStateMachine<TurnState, TurnEvent, TurnTransitions> turnstile{Locked{}};
@@ -189,8 +195,7 @@ TEST_CASE("VariantStateMachine is reusable for arbitrary state/event sets", "[st
 
 TEST_CASE("Overloaded builds a visitor from lambdas", "[state][variant]") {
     const std::variant<int, std::string> v = std::string("abc");
-    const auto size = std::visit(Overloaded{[](int) { return std::size_t{0}; },
-                                            [](const std::string& s) { return s.size(); }},
-                                 v);
+    const auto size = std::visit(
+        Overloaded{[](int) { return std::size_t{0}; }, [](const std::string& s) { return s.size(); }}, v);
     CHECK(size == 3);
 }

@@ -9,15 +9,15 @@
  */
 #pragma once
 
+#include "core/Galaxy.hpp"
+#include "core/SimulationEngine.hpp"
+
+#include <nlohmann/json.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-
-#include <nlohmann/json.hpp>
-
-#include "core/Galaxy.hpp"
-#include "core/SimulationEngine.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -44,10 +44,10 @@ void saveScenarioFile(const SimulationEngine& engine, const std::filesystem::pat
 /// @brief Parameters of the procedural sample scenario.
 struct SampleScenarioOptions {
     std::uint64_t seed{DeterministicRng::kDefaultSeed}; ///< Seed for both world generation and the engine.
-    std::size_t planets{8};                            ///< Number of planets (>= 1).
-    std::size_t fleets{4};                             ///< Number of fleets; each receives one mission.
-    double timeStep{0.1};                              ///< Engine time step.
-    double radius{500.0};                              ///< Planets are placed within [-radius, radius]^3.
+    std::size_t planets{8};                             ///< Number of planets (>= 1).
+    std::size_t fleets{4};                              ///< Number of fleets; each receives one mission.
+    double timeStep{0.1};                               ///< Engine time step.
+    double radius{500.0};                               ///< Planets are placed within [-radius, radius]^3.
 };
 
 /**
@@ -58,7 +58,8 @@ struct SampleScenarioOptions {
  */
 [[nodiscard]] std::unique_ptr<Galaxy> makeSampleGalaxy(const SampleScenarioOptions& options = {});
 
-/// @brief makeSampleGalaxy wrapped in an engine seeded with options.seed. @param options Parameters. @return Engine.
+/// @brief makeSampleGalaxy wrapped in an engine seeded with options.seed. @param options Parameters. @return
+/// Engine.
 [[nodiscard]] std::unique_ptr<SimulationEngine> makeSampleScenario(const SampleScenarioOptions& options = {});
 
 } // namespace CppVerseHub::Core

@@ -17,29 +17,29 @@
  */
 #pragma once
 
+#include "core/Identifiers.hpp"
+#include "core/Resources.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
 #include <cstddef>
 #include <map>
 #include <mutex>
 #include <vector>
 
-#include <nlohmann/json_fwd.hpp>
-
-#include "core/Identifiers.hpp"
-#include "core/Resources.hpp"
-
 namespace CppVerseHub::Core {
 
 /// @brief One unmet consumption demand reported by ResourceManager::tick.
 struct ResourceShortfall {
-    EntityId account;        ///< Account that could not consume what it needed.
-    ResourceType type;       ///< Resource that ran short.
+    EntityId account;         ///< Account that could not consume what it needed.
+    ResourceType type;        ///< Resource that ran short.
     ResourceAmount shortfall; ///< Units demanded but not available.
 };
 
 /// @brief Summary of one ResourceManager::tick.
 struct ResourceTickReport {
-    ResourceAmounts produced;                ///< Units minted by producers this tick.
-    ResourceAmounts consumed;                ///< Units burned by consumers this tick.
+    ResourceAmounts produced;                  ///< Units minted by producers this tick.
+    ResourceAmounts consumed;                  ///< Units burned by consumers this tick.
     std::vector<ResourceShortfall> shortfalls; ///< Unmet demands, ordered by account id then type.
 };
 
@@ -169,7 +169,8 @@ public:
     /// @brief Units ever burned. @param type Resource. @return Total burned.
     [[nodiscard]] ResourceAmount totalBurned(ResourceType type) const;
 
-    /// @brief Check `total == minted - burned` for every type and no negative balance. @return true if it holds.
+    /// @brief Check `total == minted - burned` for every type and no negative balance. @return true if it
+    /// holds.
     [[nodiscard]] bool checkConservation() const;
 
     /// @brief Remove every account and reset the minted/burned counters.

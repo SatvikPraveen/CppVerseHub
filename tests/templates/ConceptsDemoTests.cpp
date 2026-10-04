@@ -49,11 +49,13 @@ static_assert(Comparable<int> && Comparable<std::string> && !Comparable<Opaque>)
 static_assert(Hashable<std::string> && !Hashable<Opaque>);
 static_assert(Copyable<std::string> && !Copyable<std::unique_ptr<int>>);
 static_assert(Movable<std::unique_ptr<int>>);
-static_assert(SmartPointer<std::unique_ptr<int>> && SmartPointer<std::shared_ptr<int>> && !SmartPointer<int*>);
+static_assert(SmartPointer<std::unique_ptr<int>> && SmartPointer<std::shared_ptr<int>> &&
+              !SmartPointer<int*>);
 static_assert(Predicate<bool (*)(int), int> && !Predicate<void (*)(int), int>);
 static_assert(UnaryPredicate<decltype([](int v) { return v > 0; }), int>);
 static_assert(BinaryPredicate<std::less<int>, int>);
-static_assert(Range<std::vector<int>> && RandomAccessRange<std::vector<int>> && !RandomAccessRange<std::list<int>>);
+static_assert(Range<std::vector<int>> && RandomAccessRange<std::vector<int>> &&
+              !RandomAccessRange<std::list<int>>);
 static_assert(Numeric<int> && Numeric<double> && !Numeric<std::string>);
 static_assert(Additive<std::string> && !Multiplicative<std::string>);
 static_assert(Ring<int> && Ring<double> && !Ring<unsigned char*>);
@@ -172,7 +174,8 @@ TEST_CASE("constrained algorithm wrappers", "[templates][concepts]") {
     CHECK(values == std::vector<int>{1, 2, 3, 4});
 }
 
-TEST_CASE("ContainerAdapter exposes sequence and associative operations conditionally", "[templates][concepts]") {
+TEST_CASE("ContainerAdapter exposes sequence and associative operations conditionally",
+          "[templates][concepts]") {
     ContainerAdapter<std::vector<int>> seq;
     CHECK(seq.empty());
     seq.push_back(1);

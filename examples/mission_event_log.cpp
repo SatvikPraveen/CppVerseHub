@@ -28,16 +28,19 @@ int main() {
 
     std::map<std::string, int> tally;
     const auto onStart = engine->events().subscribe<core::MissionStarted>([&](const core::MissionStarted& e) {
-        std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " (" << core::toString(e.type)
-                  << ") started: fleet #" << e.fleet.value() << " -> planet #" << e.target.value() << '\n';
+        std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " ("
+                  << core::toString(e.type) << ") started: fleet #" << e.fleet.value() << " -> planet #"
+                  << e.target.value() << '\n';
         ++tally["started"];
     });
-    const auto onDone = engine->events().subscribe<core::MissionCompleted>([&](const core::MissionCompleted& e) {
-        std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " completed\n";
-        ++tally["completed"];
-    });
+    const auto onDone = engine->events().subscribe<core::MissionCompleted>(
+        [&](const core::MissionCompleted& e) {
+            std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " completed\n";
+            ++tally["completed"];
+        });
     const auto onFail = engine->events().subscribe<core::MissionFailed>([&](const core::MissionFailed& e) {
-        std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " failed: " << e.reason << '\n';
+        std::cout << "[t=" << engine->time() << "] mission #" << e.id.value() << " failed: " << e.reason
+                  << '\n';
         ++tally["failed"];
     });
 

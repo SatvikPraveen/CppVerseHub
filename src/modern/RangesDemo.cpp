@@ -32,14 +32,14 @@ std::vector<Planet> generatePlanets() {
 
 std::vector<Fleet> generateFleets() {
     return {
-        {1, "Zhang", 12, 85.0, true}, {2, "Okafor", 4, 95.0, true},  {3, "Ivanova", 20, 30.0, true},
+        {1, "Zhang", 12, 85.0, true},  {2, "Okafor", 4, 95.0, true}, {3, "Ivanova", 20, 30.0, true},
         {4, "Reyes", 15, 70.0, false}, {5, "Tanaka", 9, 60.0, true}, {6, "Novak", 18, 99.0, true},
     };
 }
 
 std::vector<Mission> generateMissions() {
     return {
-        {1, "Exploration", 2, 40.0}, {2, "Combat", 5, 10.0}, {3, "Trade", 1, 90.0},  {4, "Rescue", 5, 70.0},
+        {1, "Exploration", 2, 40.0}, {2, "Combat", 5, 10.0}, {3, "Trade", 1, 90.0},    {4, "Rescue", 5, 70.0},
         {5, "Research", 3, 0.0},     {6, "Patrol", 2, 15.0}, {7, "Colonize", 4, 55.0}, {8, "Combat", 5, 10.0},
     };
 }
@@ -155,7 +155,7 @@ void printRange(std::ostream& out, std::string_view label, R&& r) {
     out << '\n';
 }
 
-}  // namespace
+} // namespace
 
 void demonstrateBasicRanges(std::ostream& out) {
     out << "\n--- Basic view pipelines ---\n";
@@ -182,8 +182,9 @@ void demonstrateDomainQueries(std::ostream& out) {
     const auto richest = rng::max_element(planets, {}, &Planet::resourceValue);
     out << "  richest (max_element with projection): " << richest->name << '\n';
     out << "  any planet beyond 5 AU? " << std::boolalpha
-        << rng::any_of(planets, [](double d) { return d > 5.0; }, &Planet::distanceAu) << std::noboolalpha
-        << '\n';
+        << rng::any_of(
+               planets, [](double d) { return d > 5.0; }, &Planet::distanceAu)
+        << std::noboolalpha << '\n';
     for (const auto& [system, names] : planetsBySystem(planets)) {
         out << "  " << system << ": " << names.size() << " planets\n";
     }
@@ -211,8 +212,7 @@ void demonstrateCustomView(std::ostream& out) {
     std::iota(data.begin(), data.end(), 1);
     printRange(out, "every 3rd", data | everyNth(3));
     printRange(out, "every 5th of iota(0,20)", views::iota(0, 20) | everyNth(5));
-    printRange(out, "every 2nd, squared",
-               data | everyNth(2) | views::transform([](int x) { return x * x; }));
+    printRange(out, "every 2nd, squared", data | everyNth(2) | views::transform([](int x) { return x * x; }));
     auto planets = generatePlanets();
     printRange(out, "every 4th planet", planets | everyNth(4) | views::transform(&Planet::name));
 }
@@ -236,4 +236,4 @@ void demonstrateAllRanges(std::ostream& out) {
     demonstrateLaziness(out);
 }
 
-}  // namespace CppVerseHub::Modern::Ranges
+} // namespace CppVerseHub::Modern::Ranges

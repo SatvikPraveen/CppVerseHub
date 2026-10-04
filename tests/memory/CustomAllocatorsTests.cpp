@@ -24,25 +24,25 @@
 using namespace CppVerseHub::Memory;
 
 namespace {
-    struct alignas(64) CacheLine {
-        double values[8]{};
-    };
+struct alignas(64) CacheLine {
+    double values[8]{};
+};
 
-    struct ThrowOnCopy {
-        static inline int copies_until_throw = -1;
-        int value = 0;
-        explicit ThrowOnCopy(int v) : value(v) {}
-        ThrowOnCopy(const ThrowOnCopy& other) : value(other.value) {
-            if (copies_until_throw == 0) {
-                throw std::runtime_error("copy failed");
-            }
-            if (copies_until_throw > 0) {
-                --copies_until_throw;
-            }
+struct ThrowOnCopy {
+    static inline int copies_until_throw = -1;
+    int value = 0;
+    explicit ThrowOnCopy(int v) : value(v) {}
+    ThrowOnCopy(const ThrowOnCopy& other) : value(other.value) {
+        if (copies_until_throw == 0) {
+            throw std::runtime_error("copy failed");
         }
-        ThrowOnCopy& operator=(const ThrowOnCopy&) = default;
-        ~ThrowOnCopy() = default;
-    };
+        if (copies_until_throw > 0) {
+            --copies_until_throw;
+        }
+    }
+    ThrowOnCopy& operator=(const ThrowOnCopy&) = default;
+    ~ThrowOnCopy() = default;
+};
 } // namespace
 
 TEST_CASE("AllocatorUtils alignment arithmetic", "[memory][allocators][utils]") {
@@ -111,7 +111,8 @@ TEST_CASE("TrackingAllocator with std::vector reports no leaks", "[memory][alloc
     CHECK(stats.peak_bytes() >= 1000 * sizeof(int));
 }
 
-TEST_CASE("TrackingAllocator works with node-based containers via rebinding", "[memory][allocators][tracking]") {
+TEST_CASE("TrackingAllocator works with node-based containers via rebinding",
+          "[memory][allocators][tracking]") {
     AllocationStats stats;
     {
         std::list<std::string, TrackingAllocator<std::string>> lst{TrackingAllocator<std::string>(stats)};
@@ -186,7 +187,8 @@ TEST_CASE("TrackingAllocator honours over-alignment", "[memory][allocators][alig
     CHECK_FALSE(stats.has_leaks());
 }
 
-TEST_CASE("TrackingAllocator rejects impossible sizes without side effects", "[memory][allocators][exceptions]") {
+TEST_CASE("TrackingAllocator rejects impossible sizes without side effects",
+          "[memory][allocators][exceptions]") {
     AllocationStats stats;
     TrackingAllocator<CacheLine> alloc(stats);
     CHECK_THROWS_AS(alloc.allocate(alloc.max_size() + 1), std::bad_array_new_length);
@@ -290,7 +292,8 @@ TEST_CASE("StackAllocator LIFO deallocation, markers and reset", "[memory][alloc
     CHECK_FALSE(stack.deallocate(nullptr, 4));
 }
 
-TEST_CASE("StackAllocator throws on exhaustion and bad alignment", "[memory][allocators][stack][exceptions]") {
+TEST_CASE("StackAllocator throws on exhaustion and bad alignment",
+          "[memory][allocators][stack][exceptions]") {
     StackAllocator<64> stack;
     static_cast<void>(stack.allocate(60, 1));
     const auto used = stack.bytes_used();
@@ -328,7 +331,8 @@ TEST_CASE("MonotonicArena serves aligned requests and grows chunks", "[memory][a
     CHECK(upstream.misaligned_count() == 0);
 }
 
-TEST_CASE("MonotonicArena handles requests larger than a chunk and huge alignments", "[memory][allocators][arena]") {
+TEST_CASE("MonotonicArena handles requests larger than a chunk and huge alignments",
+          "[memory][allocators][arena]") {
     TrackingMemoryResource upstream;
     MonotonicArena arena(64, &upstream);
     void* big = arena.allocate(10000, 16);
@@ -344,7 +348,8 @@ TEST_CASE("MonotonicArena handles requests larger than a chunk and huge alignmen
     CHECK_FALSE(upstream.stats().has_leaks());
 }
 
-TEST_CASE("MonotonicArena with an initial buffer avoids upstream allocations", "[memory][allocators][arena]") {
+TEST_CASE("MonotonicArena with an initial buffer avoids upstream allocations",
+          "[memory][allocators][arena]") {
     TrackingMemoryResource upstream;
     alignas(std::max_align_t) std::byte buffer[512];
     MonotonicArena arena(buffer, sizeof(buffer), &upstream);
@@ -359,7 +364,8 @@ TEST_CASE("MonotonicArena with an initial buffer avoids upstream allocations", "
     CHECK_FALSE(upstream.stats().has_leaks());
 }
 
-TEST_CASE("MonotonicArena backs pmr containers and ArenaAllocator containers", "[memory][allocators][arena]") {
+TEST_CASE("MonotonicArena backs pmr containers and ArenaAllocator containers",
+          "[memory][allocators][arena]") {
     TrackingMemoryResource upstream;
     {
         MonotonicArena arena(256, &upstream);
@@ -384,7 +390,8 @@ TEST_CASE("MonotonicArena backs pmr containers and ArenaAllocator containers", "
     CHECK_FALSE(upstream.stats().has_leaks());
 }
 
-TEST_CASE("MonotonicArena leaves state unchanged when upstream fails", "[memory][allocators][arena][exceptions]") {
+TEST_CASE("MonotonicArena leaves state unchanged when upstream fails",
+          "[memory][allocators][arena][exceptions]") {
     MonotonicArena arena(64, std::pmr::null_memory_resource());
     CHECK_THROWS_AS(arena.allocate(16, 8), std::bad_alloc);
     CHECK(arena.chunk_count() == 0);

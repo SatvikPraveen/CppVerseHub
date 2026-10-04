@@ -9,13 +9,13 @@
  */
 #pragma once
 
+#include "core/Entity.hpp"
+#include "core/Ship.hpp"
+
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include "core/Entity.hpp"
-#include "core/Ship.hpp"
 
 namespace CppVerseHub::Core {
 

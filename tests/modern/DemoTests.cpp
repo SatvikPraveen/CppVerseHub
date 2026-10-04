@@ -1,18 +1,19 @@
+#include "modern/Demo.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <sstream>
 #include <string>
-
-#include "modern/Demo.hpp"
 
 TEST_CASE("runDemo runs every showcase without throwing", "[modern][demo]") {
     std::ostringstream os;
     REQUIRE_NOTHROW(CppVerseHub::Modern::runDemo(os));
     const auto text = os.str();
     CHECK_FALSE(text.empty());
-    for (const char* section : {"=== C++20 Concepts ===", "=== Compile-time Programming", "=== Lambda Expressions ===",
-                                "=== Move Semantics", "=== C++20 Ranges ===", "=== Structured Bindings ===",
-                                "=== C++20 Modules (emulated", "showcase complete"}) {
+    for (const char* section :
+         {"=== C++20 Concepts ===", "=== Compile-time Programming",
+          "=== Lambda Expressions ===", "=== Move Semantics", "=== C++20 Ranges ===",
+          "=== Structured Bindings ===", "=== C++20 Modules (emulated", "showcase complete"}) {
         CHECK(text.find(section) != std::string::npos);
     }
     CHECK(text.find("aborted") == std::string::npos);

@@ -3,13 +3,13 @@
  * @brief Tests for routing strategies (runtime, compile-time) and target selectors.
  */
 
+#include "patterns/Strategy.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <random>
-
-#include "patterns/Strategy.hpp"
 
 using namespace CppVerseHub::Patterns;
 using Catch::Approx;
@@ -22,7 +22,7 @@ NavigationContext hazardOnAxis() {
 }
 constexpr Coordinate3D kFrom{0.0, 0.0, 0.0};
 constexpr Coordinate3D kTo{100.0, 0.0, 0.0};
-}  // namespace
+} // namespace
 
 TEST_CASE("Coordinate3D vector maths", "[strategy][geometry]") {
     constexpr Coordinate3D a{1.0, 2.0, 3.0};
@@ -38,8 +38,8 @@ TEST_CASE("segmentIntersects detects crossings", "[strategy][geometry]") {
     const Hazard h{{50.0, 0.0, 0.0}, 10.0, 1.0};
     CHECK(segmentIntersects(kFrom, kTo, h));
     CHECK_FALSE(segmentIntersects({0, 20, 0}, {100, 20, 0}, h));
-    CHECK_FALSE(segmentIntersects({0, 0, 0}, {30, 0, 0}, h));  // stops short
-    CHECK(segmentIntersects({50, 0, 0}, {50, 0, 0}, h));        // degenerate segment inside
+    CHECK_FALSE(segmentIntersects({0, 0, 0}, {30, 0, 0}, h)); // stops short
+    CHECK(segmentIntersects({50, 0, 0}, {50, 0, 0}, h));      // degenerate segment inside
 }
 
 TEST_CASE("DirectLineStrategy produces the straight full-throttle route", "[strategy]") {
@@ -63,7 +63,7 @@ TEST_CASE("FuelOptimizedStrategy trades time for fuel quadratically", "[strategy
     CHECK(r.fuel == Approx(direct.fuel * throttle * throttle));
     CHECK(r.time == Approx(direct.time / throttle));
     CHECK(s.throttle() == throttle);
-    CHECK(FuelOptimizedStrategy(5.0).throttle() == 1.0);  // clamped
+    CHECK(FuelOptimizedStrategy(5.0).throttle() == 1.0); // clamped
 }
 
 TEST_CASE("SafeRouteStrategy detours around hazards", "[strategy][safe]") {
@@ -93,10 +93,11 @@ TEST_CASE("SafeRouteStrategy avoids several random hazards (seeded)", "[strategy
     CHECK(safe.risk == 0.0);
 }
 
-TEST_CASE("SafeRouteStrategy leaves clear routes straight and ignores unavoidable hazards", "[strategy][safe]") {
+TEST_CASE("SafeRouteStrategy leaves clear routes straight and ignores unavoidable hazards",
+          "[strategy][safe]") {
     NavigationContext ctx;
     CHECK(SafeRouteStrategy{}.plan(kFrom, kTo, ctx).waypoints.size() == 2);
-    ctx.hazards.push_back({kTo, 5.0, 3.0});  // destination inside a hazard
+    ctx.hazards.push_back({kTo, 5.0, 3.0}); // destination inside a hazard
     const Route r = SafeRouteStrategy{}.plan(kFrom, kTo, ctx);
     CHECK(r.waypoints.size() == 2);
     CHECK(r.risk == 3.0);
@@ -142,11 +143,11 @@ TEST_CASE("FleetRouter swaps strategies at run time", "[strategy][router]") {
 }
 
 TEST_CASE("makeRoutingStrategy creates every type", "[strategy][factory]") {
-    const auto [type, name] = GENERATE(table<RoutingStrategyType, std::string_view>(
-        {{RoutingStrategyType::Direct, "Direct"},
-         {RoutingStrategyType::FuelOptimized, "FuelOptimized"},
-         {RoutingStrategyType::SafeRoute, "SafeRoute"},
-         {RoutingStrategyType::Balanced, "Balanced"}}));
+    const auto [type, name] = GENERATE(
+        table<RoutingStrategyType, std::string_view>({{RoutingStrategyType::Direct, "Direct"},
+                                                      {RoutingStrategyType::FuelOptimized, "FuelOptimized"},
+                                                      {RoutingStrategyType::SafeRoute, "SafeRoute"},
+                                                      {RoutingStrategyType::Balanced, "Balanced"}}));
     const auto s = makeRoutingStrategy(type);
     REQUIRE(s != nullptr);
     CHECK(s->name() == name);
@@ -154,13 +155,14 @@ TEST_CASE("makeRoutingStrategy creates every type", "[strategy][factory]") {
 
 namespace {
 struct ManhattanPolicy {
-    [[nodiscard]] Route plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+    [[nodiscard]] Route plan(const Coordinate3D& from, const Coordinate3D& to,
+                             const NavigationContext& ctx) const {
         const Coordinate3D corner{to.x, from.y, from.z};
         return evaluateRoute({from, corner, to}, 1.0, ctx, "Manhattan");
     }
 };
 struct NotAPolicy {};
-}  // namespace
+} // namespace
 
 TEST_CASE("StaticRouter accepts any RoutingPolicy at compile time", "[strategy][policy]") {
     STATIC_REQUIRE(RoutingPolicy<ManhattanPolicy>);
@@ -182,7 +184,7 @@ TEST_CASE("Target selectors choose according to their criteria", "[strategy][tar
     CHECK(highestValueTarget(targets, kFrom) == 1u);
     CHECK(bestValueRatioTarget(targets, kFrom) == 2u);
     const TargetSelector capped = weakerThan(10.0, highestValueTarget);
-    CHECK(capped(targets, kFrom) == 2u);  // index refers to the original list
+    CHECK(capped(targets, kFrom) == 2u); // index refers to the original list
     CHECK_FALSE(weakerThan(0.5, nearestTarget)(targets, kFrom).has_value());
     CHECK_THROWS_AS(weakerThan(1.0, nullptr), std::invalid_argument);
 }

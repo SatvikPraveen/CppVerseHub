@@ -35,10 +35,10 @@ namespace CppVerseHub::Modern::MoveSemantics {
 
 /// @brief Tally of special-member invocations observed by `TrackedResource` (not thread-safe).
 struct OperationCounts {
-    std::size_t constructions = 0;   ///< Value constructions.
-    std::size_t copies = 0;          ///< Copy constructions + copy assignments.
-    std::size_t moves = 0;           ///< Move constructions + move assignments.
-    std::size_t destructions = 0;    ///< Destructor calls.
+    std::size_t constructions = 0; ///< Value constructions.
+    std::size_t copies = 0;        ///< Copy constructions + copy assignments.
+    std::size_t moves = 0;         ///< Move constructions + move assignments.
+    std::size_t destructions = 0;  ///< Destructor calls.
 
     /// @brief Resets every counter to zero.
     constexpr void reset() noexcept { *this = OperationCounts{}; }
@@ -90,7 +90,7 @@ public:
 private:
     std::string name_;
     std::unique_ptr<std::vector<int>> payload_;
-    OperationCounts* counts_ = nullptr;  // non-owning observer
+    OperationCounts* counts_ = nullptr; // non-owning observer
 };
 
 static_assert(std::is_nothrow_move_constructible_v<TrackedResource>);
@@ -169,7 +169,8 @@ enum class ValueCategory { LValue, ConstLValue, RValue };
 template <typename T>
 [[nodiscard]] constexpr ValueCategory categoryOf(T&& /*unused*/) noexcept {
     if constexpr (std::is_lvalue_reference_v<T>) {
-        return std::is_const_v<std::remove_reference_t<T>> ? ValueCategory::ConstLValue : ValueCategory::LValue;
+        return std::is_const_v<std::remove_reference_t<T>> ? ValueCategory::ConstLValue
+                                                           : ValueCategory::LValue;
     } else {
         return ValueCategory::RValue;
     }
@@ -235,10 +236,10 @@ class MoveAwareVector {
     static_assert(std::is_nothrow_destructible_v<T>, "MoveAwareVector requires nothrow destructible T");
 
 public:
-    using value_type = T;                ///< Element type.
-    using size_type = std::size_t;       ///< Size type.
-    using iterator = T*;                 ///< Mutable iterator.
-    using const_iterator = const T*;     ///< Const iterator.
+    using value_type = T;            ///< Element type.
+    using size_type = std::size_t;   ///< Size type.
+    using iterator = T*;             ///< Mutable iterator.
+    using const_iterator = const T*; ///< Const iterator.
 
     MoveAwareVector() noexcept = default;
 
@@ -260,9 +261,9 @@ public:
 
     /// @brief Steals `other`'s buffer in O(1). @param other Source (left empty).
     MoveAwareVector(MoveAwareVector&& other) noexcept
-        : data_(std::exchange(other.data_, nullptr)),
-          size_(std::exchange(other.size_, 0)),
-          capacity_(std::exchange(other.capacity_, 0)) {}
+        : data_(std::exchange(other.data_, nullptr))
+        , size_(std::exchange(other.size_, 0))
+        , capacity_(std::exchange(other.capacity_, 0)) {}
 
     /// @brief Copy-and-swap assignment (strong guarantee). @param other Source. @return *this.
     MoveAwareVector& operator=(const MoveAwareVector& other) {
@@ -436,7 +437,7 @@ private:
         capacity_ = 0;
     }
 
-    T* data_ = nullptr;  // owned; managed exclusively by this class
+    T* data_ = nullptr; // owned; managed exclusively by this class
     size_type size_ = 0;
     size_type capacity_ = 0;
     size_type reallocations_ = 0;
@@ -457,4 +458,4 @@ void demonstrateOptimizationPatterns(std::ostream& out = std::cout);
 /// @brief Runs every move-semantics showcase. @param out Destination stream.
 void demonstrateAllMoveSemantics(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Modern::MoveSemantics
+} // namespace CppVerseHub::Modern::MoveSemantics

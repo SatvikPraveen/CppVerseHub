@@ -13,11 +13,11 @@
 
 namespace CppVerseHub::Memory {
 
-    /**
-     * @brief Run every memory showcase end-to-end.
-     * @param out Stream receiving the narration (exceptions are caught and reported to it).
-     */
-    void runDemo(std::ostream& out = std::cout);
+/**
+ * @brief Run every memory showcase end-to-end.
+ * @param out Stream receiving the narration (exceptions are caught and reported to it).
+ */
+void runDemo(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Memory
 

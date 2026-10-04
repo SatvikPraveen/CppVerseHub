@@ -7,13 +7,13 @@
  */
 #pragma once
 
+#include "core/Mission.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
-
-#include "core/Mission.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -42,7 +42,8 @@ public:
     CombatMission(MissionId id, EntityId fleet, EntityId target, double duration,
                   CombatStrategy strategy = CombatStrategy::Balanced);
 
-    /// @brief Construct from JSON (base keys plus "strategy", "damageDealt", "damageTaken"). @param id Id. @param params Params.
+    /// @brief Construct from JSON (base keys plus "strategy", "damageDealt", "damageTaken"). @param id Id.
+    /// @param params Params.
     CombatMission(MissionId id, const nlohmann::json& params);
 
     /// @brief Type tag. @return MissionType::Combat.
@@ -54,15 +55,16 @@ public:
     /// @brief Total hull lost by the fleet. @return Damage.
     [[nodiscard]] double damageTaken() const noexcept { return damageTaken_; }
 
-    /// @brief (Damage dealt multiplier, damage taken multiplier) of a strategy. @param s Strategy. @return Pair.
+    /// @brief (Damage dealt multiplier, damage taken multiplier) of a strategy. @param s Strategy. @return
+    /// Pair.
     [[nodiscard]] static constexpr std::pair<double, double> modifiers(CombatStrategy s) noexcept {
         switch (s) {
-        case CombatStrategy::Aggressive:
-            return {1.5, 1.3};
-        case CombatStrategy::Defensive:
-            return {0.7, 0.6};
-        case CombatStrategy::Balanced:
-            break;
+            case CombatStrategy::Aggressive:
+                return {1.5, 1.3};
+            case CombatStrategy::Defensive:
+                return {0.7, 0.6};
+            case CombatStrategy::Balanced:
+                break;
         }
         return {1.0, 1.0};
     }
@@ -71,8 +73,10 @@ public:
     void toJson(nlohmann::json& out) const override;
 
 protected:
-    /// @brief Fail when the fleet carries no weapons. @param fleet Fleet. @param target Planet. @return Reason.
-    [[nodiscard]] std::optional<std::string> checkStart(const Fleet& fleet, const Planet& target) const override;
+    /// @brief Fail when the fleet carries no weapons. @param fleet Fleet. @param target Planet. @return
+    /// Reason.
+    [[nodiscard]] std::optional<std::string> checkStart(const Fleet& fleet,
+                                                        const Planet& target) const override;
     /// @brief One exchange of fire. @return Outcome.
     StepOutcome execute(MissionContext& ctx, Fleet& fleet, Planet& target, double dt) override;
 

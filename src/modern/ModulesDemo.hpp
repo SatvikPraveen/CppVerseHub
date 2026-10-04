@@ -42,9 +42,9 @@ inline namespace v1 {
 
 /// @brief A 3D vector.
 struct Vec3 {
-    double x = 0.0;  ///< X.
-    double y = 0.0;  ///< Y.
-    double z = 0.0;  ///< Z.
+    double x = 0.0; ///< X.
+    double y = 0.0; ///< Y.
+    double z = 0.0; ///< Z.
 
     /// @brief Memberwise equality.
     friend bool operator==(const Vec3&, const Vec3&) = default;
@@ -93,8 +93,8 @@ protected:
     IEntity& operator=(IEntity&&) = default;
 };
 
-}  // namespace v1
-}  // namespace SpaceGame::Core
+} // namespace v1
+} // namespace SpaceGame::Core
 
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.Entities" — import Core;
@@ -140,8 +140,8 @@ private:
 /// @brief A starship that moves with constant velocity and burns fuel proportional to distance.
 class Starship final : public Core::IEntity {
 public:
-    static constexpr double kMaxFuel = 1000.0;      ///< Tank size.
-    static constexpr double kFuelPerUnit = 1.0;     ///< Fuel burned per distance unit.
+    static constexpr double kMaxFuel = 1000.0;  ///< Tank size.
+    static constexpr double kFuelPerUnit = 1.0; ///< Fuel burned per distance unit.
 
     /// @brief Creates a ship with a full tank. @param id Id. @param name Name. @param classType Class.
     /// @param position Start position. @param crewSize Crew.
@@ -165,7 +165,9 @@ public:
     /// @brief Fuel level. @return Percentage 0..100.
     [[nodiscard]] double getFuelPercentage() const noexcept { return fuel_ / kMaxFuel * 100.0; }
     /// @brief Whether a trip is affordable. @param distance Trip length. @return True if enough fuel.
-    [[nodiscard]] bool hasEnoughFuelFor(double distance) const noexcept { return fuel_ >= distance * kFuelPerUnit; }
+    [[nodiscard]] bool hasEnoughFuelFor(double distance) const noexcept {
+        return fuel_ >= distance * kFuelPerUnit;
+    }
     /// @brief Crew. @return Crew size.
     [[nodiscard]] int getCrewSize() const noexcept { return crewSize_; }
     /// @brief Ship class. @return Class name.
@@ -181,7 +183,7 @@ private:
     int crewSize_;
 };
 
-}  // namespace SpaceGame::Entities
+} // namespace SpaceGame::Entities
 
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.Missions" — import Core;
@@ -259,7 +261,7 @@ public:
     [[nodiscard]] static std::unique_ptr<Mission> create(int id, MissionType type, const std::string& target);
 };
 
-}  // namespace SpaceGame::Missions
+} // namespace SpaceGame::Missions
 
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.Fleet" — import Entities; import Missions;
@@ -268,9 +270,9 @@ namespace SpaceGame::Fleet {
 
 /// @brief Commanding officer of a formation.
 struct FleetCommander {
-    std::string name;            ///< Name.
-    std::string rank;            ///< Rank.
-    int experience = 1;          ///< Experience level.
+    std::string name;   ///< Name.
+    std::string rank;   ///< Rank.
+    int experience = 1; ///< Experience level.
 };
 
 /// @brief A formation that owns its ships and missions.
@@ -286,7 +288,8 @@ public:
     /// @brief Non-owning lookup. @param shipId Id. @return Pointer or null.
     [[nodiscard]] Entities::Starship* findShip(int shipId) const noexcept;
 
-    /// @brief Takes a mission, starts it and assigns all current ships. @param mission Mission (null ignored).
+    /// @brief Takes a mission, starts it and assigns all current ships. @param mission Mission (null
+    /// ignored).
     void assignMission(std::unique_ptr<Missions::Mission> mission);
     /// @brief Advances ships and missions; completed missions are retired.
     /// @param deltaTime Time step.
@@ -320,7 +323,7 @@ private:
     std::size_t completedMissions_ = 0;
 };
 
-}  // namespace SpaceGame::Fleet
+} // namespace SpaceGame::Fleet
 
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.System" — import Core; import Entities; import Missions; import Fleet;
@@ -349,7 +352,8 @@ public:
     /// @brief Habitable planets. @return Non-owning pointers.
     [[nodiscard]] std::vector<const Entities::Planet*> findHabitablePlanets() const;
     /// @brief Missions with a status. @param status Status. @return Non-owning pointers.
-    [[nodiscard]] std::vector<const Missions::Mission*> findMissionsByStatus(Missions::MissionStatus status) const;
+    [[nodiscard]] std::vector<const Missions::Mission*> findMissionsByStatus(
+        Missions::MissionStatus status) const;
 
     /// @brief Planets. @return Count.
     [[nodiscard]] std::size_t getPlanetCount() const noexcept { return planets_.size(); }
@@ -369,7 +373,8 @@ public:
     [[nodiscard]] std::string serializePlanets() const;
     /// @brief Parses the output of `serializePlanets` (ids are assigned 1..n).
     /// @param data Text. @return Planets. @throws std::invalid_argument on malformed input.
-    [[nodiscard]] static std::vector<std::unique_ptr<Entities::Planet>> deserializePlanets(std::string_view data);
+    [[nodiscard]] static std::vector<std::unique_ptr<Entities::Planet>> deserializePlanets(
+        std::string_view data);
 
     /// @brief Deterministic sample universe: 4 planets, 2 fleets, 2 global missions.
     /// @return The universe.
@@ -382,7 +387,7 @@ private:
     double gameTime_ = 0.0;
 };
 
-}  // namespace SpaceGame::System
+} // namespace SpaceGame::System
 
 // ======================================================================================
 // Module metadata (what the real module units would declare)
@@ -390,9 +395,9 @@ private:
 
 /// @brief One module unit of the emulated hierarchy.
 struct ModuleUnit {
-    std::string name;                  ///< Module name, e.g. "CppVerseHub.SpaceGame.Core".
-    std::vector<std::string> imports;  ///< Modules it imports.
-    std::vector<std::string> exports;  ///< Entities it exports.
+    std::string name;                 ///< Module name, e.g. "CppVerseHub.SpaceGame.Core".
+    std::vector<std::string> imports; ///< Modules it imports.
+    std::vector<std::string> exports; ///< Entities it exports.
 };
 
 /// @brief The emulated module dependency graph. @return All module units.
@@ -400,7 +405,8 @@ struct ModuleUnit {
 
 /// @brief A build order in which every module is compiled after its imports (Kahn's algorithm).
 /// @param graph Module units. @return Module names, or nullopt if the graph has a cycle or an unknown import.
-[[nodiscard]] std::optional<std::vector<std::string>> topologicalBuildOrder(const std::vector<ModuleUnit>& graph);
+[[nodiscard]] std::optional<std::vector<std::string>> topologicalBuildOrder(
+    const std::vector<ModuleUnit>& graph);
 
 /// @brief Source text of the module interface units this file emulates. @return C++ module code.
 [[nodiscard]] std::string moduleInterfaceSketch();
@@ -408,4 +414,4 @@ struct ModuleUnit {
 /// @brief Showcase of the emulated module system and the game it organises. @param out Destination stream.
 void demonstrateModules(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Modern::Modules
+} // namespace CppVerseHub::Modern::Modules

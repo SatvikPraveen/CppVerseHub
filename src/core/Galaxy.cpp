@@ -4,11 +4,11 @@
  */
 #include "core/Galaxy.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
-
-#include <nlohmann/json.hpp>
 
 namespace CppVerseHub::Core {
 
@@ -26,8 +26,11 @@ std::string requireName(std::string name) {
 } // namespace
 
 Galaxy::Galaxy(std::string name, const Vector3D& minCorner, const Vector3D& maxCorner)
-    : name_(requireName(std::move(name))), min_(minCorner), max_(maxCorner),
-      entityFactory_(makeDefaultEntityFactory()), missionFactory_(makeDefaultMissionFactory()) {
+    : name_(requireName(std::move(name)))
+    , min_(minCorner)
+    , max_(maxCorner)
+    , entityFactory_(makeDefaultEntityFactory())
+    , missionFactory_(makeDefaultMissionFactory()) {
     if (!(min_.x <= max_.x && min_.y <= max_.y && min_.z <= max_.z)) {
         throw InvalidArgumentException("galaxy bounds: minCorner must not exceed maxCorner");
     }
@@ -43,7 +46,8 @@ bool Galaxy::contains(const Vector3D& p) const noexcept {
     return p.x >= min_.x && p.x <= max_.x && p.y >= min_.y && p.y <= max_.y && p.z >= min_.z && p.z <= max_.z;
 }
 
-Planet& Galaxy::createPlanet(std::string name, const Vector3D& position, PlanetType type, double habitability) {
+Planet& Galaxy::createPlanet(std::string name, const Vector3D& position, PlanetType type,
+                             double habitability) {
     auto planet = std::make_unique<Planet>(allocateEntityId(), std::move(name), position, type, habitability);
     return static_cast<Planet&>(addEntity(std::move(planet)));
 }
@@ -175,7 +179,8 @@ bool Galaxy::isFleetAssigned(EntityId fleet) const noexcept {
 }
 
 std::size_t Galaxy::pruneFinishedMissions() {
-    return static_cast<std::size_t>(std::erase_if(missions_, [](const auto& e) { return e.second->isFinished(); }));
+    return static_cast<std::size_t>(
+        std::erase_if(missions_, [](const auto& e) { return e.second->isFinished(); }));
 }
 
 void Galaxy::toJson(nlohmann::json& out) const {
@@ -210,7 +215,8 @@ void Galaxy::toJson(nlohmann::json& out) const {
 std::unique_ptr<Galaxy> Galaxy::fromJson(const nlohmann::json& in, EntityFactory entityFactory,
                                          MissionFactory missionFactory) {
     try {
-        auto galaxy = std::make_unique<Galaxy>(in.at("name").get<std::string>(), vectorFromJson(in.at("minCorner")),
+        auto galaxy = std::make_unique<Galaxy>(in.at("name").get<std::string>(),
+                                               vectorFromJson(in.at("minCorner")),
                                                vectorFromJson(in.at("maxCorner")));
         galaxy->entityFactory_ = std::move(entityFactory);
         galaxy->missionFactory_ = std::move(missionFactory);
@@ -231,7 +237,8 @@ std::unique_ptr<Galaxy> Galaxy::fromJson(const nlohmann::json& in, EntityFactory
             }
         }
         galaxy->nextEntityId_ = std::max(galaxy->nextEntityId_, in.at("nextEntityId").get<std::uint64_t>());
-        galaxy->nextMissionId_ = std::max(galaxy->nextMissionId_, in.at("nextMissionId").get<std::uint64_t>());
+        galaxy->nextMissionId_ = std::max(galaxy->nextMissionId_,
+                                          in.at("nextMissionId").get<std::uint64_t>());
         return galaxy;
     } catch (const nlohmann::json::exception& e) {
         throw SerializationException(std::string("galaxy: ") + e.what());

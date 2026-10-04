@@ -10,13 +10,13 @@
  */
 #pragma once
 
-#include <numeric>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <span>
 #include <string>
 #include <string_view>
@@ -151,7 +151,8 @@ public:
      * @param prefix Name prefix.
      * @param start First serial number.
      */
-    explicit StarshipNameGenerator(std::string prefix, int start = 1) : prefix_(std::move(prefix)), next_(start) {}
+    explicit StarshipNameGenerator(std::string prefix, int start = 1)
+        : prefix_(std::move(prefix)), next_(start) {}
 
     /**
      * @brief Produce the next name.
@@ -179,7 +180,8 @@ public:
      * @brief Wrap a predicate.
      * @param pred Predicate to wrap.
      */
-    explicit SharedCallCounter(Pred pred) : pred_(std::move(pred)), calls_(std::make_shared<std::size_t>(0)) {}
+    explicit SharedCallCounter(Pred pred)
+        : pred_(std::move(pred)), calls_(std::make_shared<std::size_t>(0)) {}
 
     /**
      * @brief Invoke the predicate and bump the shared counter.
@@ -343,7 +345,8 @@ private:
  * @param ready Readiness predicate.
  * @return Names in input order.
  */
-[[nodiscard]] std::vector<std::string> namesNotReady(std::span<const Starship> ships, const IsCombatReady& ready);
+[[nodiscard]] std::vector<std::string> namesNotReady(std::span<const Starship> ships,
+                                                     const IsCombatReady& ready);
 
 /**
  * @brief Publish/subscribe dispatcher built on std::function and a transparent std::map.
@@ -404,4 +407,4 @@ void demonstrateFunctionBinding(std::ostream& out = std::cout);
 /// @brief Run every functor demonstration. @param out Destination stream.
 void runFunctorsDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

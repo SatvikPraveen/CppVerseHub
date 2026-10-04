@@ -11,25 +11,46 @@ namespace CppVerseHub::Patterns {
 
 std::string_view toString(MissionPhase phase) noexcept {
     switch (phase) {
-        case MissionPhase::Pending: return "Pending";
-        case MissionPhase::Planning: return "Planning";
-        case MissionPhase::Active: return "Active";
-        case MissionPhase::Paused: return "Paused";
-        case MissionPhase::Completed: return "Completed";
-        case MissionPhase::Failed: return "Failed";
-        case MissionPhase::Aborted: return "Aborted";
+        case MissionPhase::Pending:
+            return "Pending";
+        case MissionPhase::Planning:
+            return "Planning";
+        case MissionPhase::Active:
+            return "Active";
+        case MissionPhase::Paused:
+            return "Paused";
+        case MissionPhase::Completed:
+            return "Completed";
+        case MissionPhase::Failed:
+            return "Failed";
+        case MissionPhase::Aborted:
+            return "Aborted";
     }
     return "Unknown";
 }
 
 // Default handlers: reject.
-StateOutcome IMissionState::plan(MissionContext&) { return StateOutcome::reject(); }
-StateOutcome IMissionState::launch(MissionContext&) { return StateOutcome::reject(); }
-StateOutcome IMissionState::pause(MissionContext&) { return StateOutcome::reject(); }
-StateOutcome IMissionState::resume(MissionContext&) { return StateOutcome::reject(); }
-StateOutcome IMissionState::advance(MissionContext&, double) { return StateOutcome::reject(); }
-StateOutcome IMissionState::fail(MissionContext&, const std::string&) { return StateOutcome::reject(); }
-StateOutcome IMissionState::abort(MissionContext&) { return StateOutcome::reject(); }
+StateOutcome IMissionState::plan(MissionContext&) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::launch(MissionContext&) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::pause(MissionContext&) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::resume(MissionContext&) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::advance(MissionContext&, double) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::fail(MissionContext&, const std::string&) {
+    return StateOutcome::reject();
+}
+StateOutcome IMissionState::abort(MissionContext&) {
+    return StateOutcome::reject();
+}
 
 namespace {
 
@@ -47,7 +68,9 @@ using AbortedState = TerminalState<MissionPhase::Aborted>;
 /// Shared behaviour for every non-terminal state: abort is always allowed.
 class AbortableState : public IMissionState {
 public:
-    StateOutcome abort(MissionContext&) override { return StateOutcome::to(std::make_unique<AbortedState>()); }
+    StateOutcome abort(MissionContext&) override {
+        return StateOutcome::to(std::make_unique<AbortedState>());
+    }
 };
 
 class ActiveState;
@@ -82,23 +105,30 @@ public:
     }
 };
 
-StateOutcome PausedState::resume(MissionContext&) { return StateOutcome::to(std::make_unique<ActiveState>()); }
+StateOutcome PausedState::resume(MissionContext&) {
+    return StateOutcome::to(std::make_unique<ActiveState>());
+}
 
 class PlanningState final : public AbortableState {
 public:
     [[nodiscard]] MissionPhase phase() const noexcept override { return MissionPhase::Planning; }
-    StateOutcome launch(MissionContext&) override { return StateOutcome::to(std::make_unique<ActiveState>()); }
+    StateOutcome launch(MissionContext&) override {
+        return StateOutcome::to(std::make_unique<ActiveState>());
+    }
 };
 
 class PendingState final : public AbortableState {
 public:
     [[nodiscard]] MissionPhase phase() const noexcept override { return MissionPhase::Pending; }
-    StateOutcome plan(MissionContext&) override { return StateOutcome::to(std::make_unique<PlanningState>()); }
+    StateOutcome plan(MissionContext&) override {
+        return StateOutcome::to(std::make_unique<PlanningState>());
+    }
 };
 
-}  // namespace
+} // namespace
 
-MissionContext::MissionContext(std::string name) : name_(std::move(name)), state_(std::make_unique<PendingState>()) {}
+MissionContext::MissionContext(std::string name)
+    : name_(std::move(name)), state_(std::make_unique<PendingState>()) {}
 
 bool MissionContext::apply(StateOutcome outcome, std::string_view trigger) {
     if (!outcome.accepted) {
@@ -112,15 +142,31 @@ bool MissionContext::apply(StateOutcome outcome, std::string_view trigger) {
     return true;
 }
 
-bool MissionContext::plan() { return apply(state_->plan(*this), "plan"); }
-bool MissionContext::launch() { return apply(state_->launch(*this), "launch"); }
-bool MissionContext::pause() { return apply(state_->pause(*this), "pause"); }
-bool MissionContext::resume() { return apply(state_->resume(*this), "resume"); }
-bool MissionContext::advance(double percent) { return apply(state_->advance(*this, percent), "advance"); }
-bool MissionContext::fail(std::string reason) { return apply(state_->fail(*this, reason), "fail"); }
-bool MissionContext::abort() { return apply(state_->abort(*this), "abort"); }
+bool MissionContext::plan() {
+    return apply(state_->plan(*this), "plan");
+}
+bool MissionContext::launch() {
+    return apply(state_->launch(*this), "launch");
+}
+bool MissionContext::pause() {
+    return apply(state_->pause(*this), "pause");
+}
+bool MissionContext::resume() {
+    return apply(state_->resume(*this), "resume");
+}
+bool MissionContext::advance(double percent) {
+    return apply(state_->advance(*this, percent), "advance");
+}
+bool MissionContext::fail(std::string reason) {
+    return apply(state_->fail(*this, reason), "fail");
+}
+bool MissionContext::abort() {
+    return apply(state_->abort(*this), "abort");
+}
 
-void MissionContext::setProgress(double percent) noexcept { progress_ = std::clamp(percent, 0.0, 100.0); }
+void MissionContext::setProgress(double percent) noexcept {
+    progress_ = std::clamp(percent, 0.0, 100.0);
+}
 
 // ---------------------------------------------------------------------------
 // Variant machine
@@ -148,12 +194,12 @@ void demonstrateState(std::ostream& out) {
     out << "=== State pattern ===\n";
     out << "-- classic OO states --\n";
     MissionContext mission("Survey Kepler-22b");
-    (void)mission.launch();  // rejected: still Pending
+    (void)mission.launch(); // rejected: still Pending
     (void)mission.plan();
     (void)mission.launch();
     (void)mission.advance(40.0);
     (void)mission.pause();
-    (void)mission.advance(10.0);  // rejected while paused
+    (void)mission.advance(10.0); // rejected while paused
     (void)mission.resume();
     (void)mission.advance(60.0);
     for (const auto& t : mission.history()) {
@@ -164,10 +210,10 @@ void demonstrateState(std::ostream& out) {
 
     out << "-- std::variant state machine --\n";
     WarpDrive drive;
-    const std::vector<Warp::Event> script{Warp::PowerOn{}, Warp::Charge{60.0}, Warp::Engage{"Vega"},
+    const std::vector<Warp::Event> script{Warp::PowerOn{},    Warp::Charge{60.0},   Warp::Engage{"Vega"},
                                           Warp::Charge{50.0}, Warp::Engage{"Vega"}, Warp::Shutdown{},
-                                          Warp::Tick{},      Warp::Tick{},          Warp::Tick{},
-                                          Warp::Tick{},      Warp::Shutdown{}};
+                                          Warp::Tick{},       Warp::Tick{},         Warp::Tick{},
+                                          Warp::Tick{},       Warp::Shutdown{}};
     for (const auto& event : script) {
         const bool ok = drive.handle(event);
         out << "  " << (ok ? "ok      " : "rejected") << " -> " << drive.stateName() << '\n';
@@ -175,4 +221,4 @@ void demonstrateState(std::ostream& out) {
     out << "  jumps: " << drive.jumps() << ", rejected: " << drive.rejected() << '\n';
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

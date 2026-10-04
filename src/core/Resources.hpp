@@ -31,8 +31,11 @@ inline constexpr std::array<ResourceType, kResourceTypeCount> kAllResourceTypes{
     ResourceType::Minerals, ResourceType::Energy, ResourceType::Food, ResourceType::Water,
     ResourceType::Technology};
 
-/// @brief Array index of a resource type. @param type Resource type. @return Index in [0, kResourceTypeCount).
-[[nodiscard]] constexpr std::size_t indexOf(ResourceType type) noexcept { return static_cast<std::size_t>(type); }
+/// @brief Array index of a resource type. @param type Resource type. @return Index in [0,
+/// kResourceTypeCount).
+[[nodiscard]] constexpr std::size_t indexOf(ResourceType type) noexcept {
+    return static_cast<std::size_t>(type);
+}
 
 /// @brief Lower-case name of a resource type. @param type Resource type. @return Name such as "minerals".
 [[nodiscard]] std::string_view toString(ResourceType type) noexcept;
@@ -49,7 +52,9 @@ struct ResourceArray {
     /// @brief Mutable access. @param type Resource. @return Reference to the element.
     [[nodiscard]] constexpr T& operator[](ResourceType type) noexcept { return values[indexOf(type)]; }
     /// @brief Const access. @param type Resource. @return Element value.
-    [[nodiscard]] constexpr const T& operator[](ResourceType type) const noexcept { return values[indexOf(type)]; }
+    [[nodiscard]] constexpr const T& operator[](ResourceType type) const noexcept {
+        return values[indexOf(type)];
+    }
 
     /// @brief Sum of all elements. @return Total.
     [[nodiscard]] constexpr T sum() const noexcept {

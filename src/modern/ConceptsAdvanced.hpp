@@ -78,11 +78,10 @@ concept Iterable = std::ranges::range<T>;
 
 /// @brief A container offering O(1) indexed access (refines `Container`).
 template <typename T>
-concept RandomAccessContainer =
-    Container<T> && std::random_access_iterator<typename T::iterator> &&
-    requires(T& c, typename T::size_type n) {
-        { c[n] } -> std::same_as<typename T::value_type&>;
-    };
+concept RandomAccessContainer = Container<T> && std::random_access_iterator<typename T::iterator> &&
+                                requires(T& c, typename T::size_type n) {
+                                    { c[n] } -> std::same_as<typename T::value_type&>;
+                                };
 
 /// @brief A container whose elements are `Numeric` (refines `Container`).
 template <typename T>
@@ -92,7 +91,8 @@ concept NumericContainer = Container<T> && Numeric<typename T::value_type>;
 
 /// @brief `F(Args...)` is invocable and its result converts to `R`.
 template <typename F, typename R, typename... Args>
-concept InvocableReturning = std::invocable<F, Args...> && std::convertible_to<std::invoke_result_t<F, Args...>, R>;
+concept InvocableReturning = std::invocable<F, Args...> &&
+                             std::convertible_to<std::invoke_result_t<F, Args...>, R>;
 
 /// @brief A callable `T -> T` (closed under the element type).
 template <typename F, typename T>
@@ -276,12 +276,12 @@ template <MovableSpaceEntity T>
 
 /// @brief Which of the module's concepts a type satisfies, computed at compile time.
 struct ConceptProfile {
-    bool numeric = false;     ///< Satisfies `Numeric`.
-    bool printable = false;   ///< Satisfies `Printable`.
-    bool comparable = false;  ///< Satisfies `Comparable`.
-    bool hashable = false;    ///< Satisfies `Hashable`.
-    bool container = false;   ///< Satisfies `Container`.
-    bool iterable = false;    ///< Satisfies `Iterable`.
+    bool numeric = false;    ///< Satisfies `Numeric`.
+    bool printable = false;  ///< Satisfies `Printable`.
+    bool comparable = false; ///< Satisfies `Comparable`.
+    bool hashable = false;   ///< Satisfies `Hashable`.
+    bool container = false;  ///< Satisfies `Container`.
+    bool iterable = false;   ///< Satisfies `Iterable`.
 
     /// @brief Memberwise equality.
     friend constexpr bool operator==(const ConceptProfile&, const ConceptProfile&) = default;
@@ -391,7 +391,7 @@ private:
 /// @brief A stationary entity: models `SpaceEntity` but not `Movable`.
 class DemoEntity {
 public:
-    using EntityType = int;  ///< Required by `Entity`.
+    using EntityType = int; ///< Required by `Entity`.
 
     DemoEntity() = default;
     /// @brief Constructs an entity with an id and name.
@@ -560,4 +560,4 @@ inline void demonstrateConcepts(std::ostream& out = std::cout) {
     out << "ConceptFactory created '" << entity.getName() << "' and '" << owned->getName() << "'\n";
 }
 
-}  // namespace CppVerseHub::Modern::Concepts
+} // namespace CppVerseHub::Modern::Concepts

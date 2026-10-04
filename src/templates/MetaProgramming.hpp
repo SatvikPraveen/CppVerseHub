@@ -376,8 +376,8 @@ template <std::size_t N>
  */
 template <std::size_t N>
 struct compile_time_string {
-    char data[N]{};          ///< NUL-terminated character buffer
-    std::size_t length = 0;  ///< number of characters (excluding NUL)
+    char data[N]{};         ///< NUL-terminated character buffer
+    std::size_t length = 0; ///< number of characters (excluding NUL)
 
     /** @brief Empty string. */
     constexpr compile_time_string() noexcept = default;
@@ -440,7 +440,8 @@ struct named_tag {
     static constexpr std::string_view name = Name.view();
 };
 
-/** @brief 64-bit FNV-1a hash, usable in constant expressions (e.g. switch on strings). @param str input @return hash */
+/** @brief 64-bit FNV-1a hash, usable in constant expressions (e.g. switch on strings). @param str input
+ * @return hash */
 [[nodiscard]] constexpr std::uint64_t hash_string(std::string_view str) noexcept {
     constexpr std::uint64_t fnv_offset_basis = 14695981039346656037ULL;
     constexpr std::uint64_t fnv_prime = 1099511628211ULL;
@@ -508,8 +509,8 @@ constexpr auto filter_one(const E& element) {
  */
 template <template <typename> class Pred, typename Tuple>
 [[nodiscard]] constexpr auto tuple_filter(const Tuple& t) {
-    return std::apply([](const auto&... elements) { return std::tuple_cat(detail::filter_one<Pred>(elements)...); },
-                      t);
+    return std::apply(
+        [](const auto&... elements) { return std::tuple_cat(detail::filter_one<Pred>(elements)...); }, t);
 }
 
 /**
@@ -535,7 +536,9 @@ public:
     /** @return *this as Derived& */
     [[nodiscard]] constexpr Derived& derived() noexcept { return static_cast<Derived&>(*this); }
     /** @return *this as const Derived& */
-    [[nodiscard]] constexpr const Derived& derived() const noexcept { return static_cast<const Derived&>(*this); }
+    [[nodiscard]] constexpr const Derived& derived() const noexcept {
+        return static_cast<const Derived&>(*this);
+    }
 
 protected:
     constexpr CRTP_Base() noexcept = default;
@@ -555,13 +558,21 @@ template <typename Derived>
 class TotallyOrdered : public CRTP_Base<Derived> {
 public:
     /** @return !(lhs == rhs) */
-    [[nodiscard]] friend constexpr bool operator!=(const Derived& lhs, const Derived& rhs) { return !(lhs == rhs); }
+    [[nodiscard]] friend constexpr bool operator!=(const Derived& lhs, const Derived& rhs) {
+        return !(lhs == rhs);
+    }
     /** @return rhs < lhs */
-    [[nodiscard]] friend constexpr bool operator>(const Derived& lhs, const Derived& rhs) { return rhs < lhs; }
+    [[nodiscard]] friend constexpr bool operator>(const Derived& lhs, const Derived& rhs) {
+        return rhs < lhs;
+    }
     /** @return !(rhs < lhs) */
-    [[nodiscard]] friend constexpr bool operator<=(const Derived& lhs, const Derived& rhs) { return !(rhs < lhs); }
+    [[nodiscard]] friend constexpr bool operator<=(const Derived& lhs, const Derived& rhs) {
+        return !(rhs < lhs);
+    }
     /** @return !(lhs < rhs) */
-    [[nodiscard]] friend constexpr bool operator>=(const Derived& lhs, const Derived& rhs) { return !(lhs < rhs); }
+    [[nodiscard]] friend constexpr bool operator>=(const Derived& lhs, const Derived& rhs) {
+        return !(lhs < rhs);
+    }
 };
 
 /**
@@ -584,7 +595,9 @@ public:
     /** @param radius circle radius */
     constexpr explicit CircleShape(double radius) noexcept : radius_(radius) {}
     /** @return pi * r^2 */
-    [[nodiscard]] constexpr double area_impl() const noexcept { return 3.14159265358979323846 * radius_ * radius_; }
+    [[nodiscard]] constexpr double area_impl() const noexcept {
+        return 3.14159265358979323846 * radius_ * radius_;
+    }
     /** @return "circle" */
     [[nodiscard]] constexpr std::string_view name_impl() const noexcept { return "circle"; }
 
@@ -677,14 +690,14 @@ using dimension_multiply = dimension<D1::mass + D2::mass, D1::length + D2::lengt
 template <typename D1, typename D2>
 using dimension_divide = dimension<D1::mass - D2::mass, D1::length - D2::length, D1::time - D2::time>;
 
-using dimensionless = dimension<0, 0, 0>;          ///< pure number
-using mass_dimension = dimension<1, 0, 0>;         ///< kg
-using length_dimension = dimension<0, 1, 0>;       ///< m
-using time_dimension = dimension<0, 0, 1>;         ///< s
-using velocity_dimension = dimension<0, 1, -1>;    ///< m/s
+using dimensionless = dimension<0, 0, 0>;           ///< pure number
+using mass_dimension = dimension<1, 0, 0>;          ///< kg
+using length_dimension = dimension<0, 1, 0>;        ///< m
+using time_dimension = dimension<0, 0, 1>;          ///< s
+using velocity_dimension = dimension<0, 1, -1>;     ///< m/s
 using acceleration_dimension = dimension<0, 1, -2>; ///< m/s^2
-using force_dimension = dimension<1, 1, -2>;       ///< N
-using energy_dimension = dimension<1, 2, -2>;      ///< J
+using force_dimension = dimension<1, 1, -2>;        ///< N
+using energy_dimension = dimension<1, 2, -2>;       ///< J
 
 /**
  * @brief A value tagged with a physical dimension; mixing incompatible units fails to compile.

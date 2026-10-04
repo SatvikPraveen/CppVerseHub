@@ -4,13 +4,13 @@
  */
 #include "stl_showcase/Demo.hpp"
 
-#include <exception>
-
 #include "stl_showcase/Algorithms.hpp"
 #include "stl_showcase/Containers.hpp"
 #include "stl_showcase/Functors.hpp"
 #include "stl_showcase/Iterators.hpp"
 #include "stl_showcase/STLUtilities.hpp"
+
+#include <exception>
 
 namespace CppVerseHub::STL {
 
@@ -30,4 +30,4 @@ void runDemo(std::ostream& out) {
     }
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

@@ -32,13 +32,13 @@ namespace CppVerseHub::Modern::ConstexprProgramming {
 
 // ===== COMPILE-TIME CONSTANTS =====
 
-inline constexpr double PI = 3.14159265358979323846;            ///< pi.
-inline constexpr double LIGHT_SPEED = 299792458.0;              ///< Speed of light in m/s.
-inline constexpr double EARTH_MASS = 5.972e24;                  ///< Earth mass in kg.
-inline constexpr double EARTH_RADIUS = 6.371e6;                 ///< Earth mean radius in m.
-inline constexpr double SUN_MASS = 1.989e30;                    ///< Solar mass in kg.
-inline constexpr double ASTRONOMICAL_UNIT = 1.496e11;           ///< Earth-Sun distance in m.
-inline constexpr double GRAVITATIONAL_CONSTANT = 6.67430e-11;   ///< G in m^3 kg^-1 s^-2.
+inline constexpr double PI = 3.14159265358979323846;          ///< pi.
+inline constexpr double LIGHT_SPEED = 299792458.0;            ///< Speed of light in m/s.
+inline constexpr double EARTH_MASS = 5.972e24;                ///< Earth mass in kg.
+inline constexpr double EARTH_RADIUS = 6.371e6;               ///< Earth mean radius in m.
+inline constexpr double SUN_MASS = 1.989e30;                  ///< Solar mass in kg.
+inline constexpr double ASTRONOMICAL_UNIT = 1.496e11;         ///< Earth-Sun distance in m.
+inline constexpr double GRAVITATIONAL_CONSTANT = 6.67430e-11; ///< G in m^3 kg^-1 s^-2.
 
 // ===== COMPILE-TIME MATH =====
 
@@ -304,10 +304,10 @@ template <std::size_t N>
 /// @tparam N Size of the literal including the terminating null.
 template <std::size_t N>
 struct FixedString {
-    std::array<char, N> chars{};  ///< Characters including the null terminator.
+    std::array<char, N> chars{}; ///< Characters including the null terminator.
 
     /// @brief Captures a string literal. @param text The literal.
-    constexpr FixedString(const char (&text)[N]) noexcept {  // NOLINT(google-explicit-constructor)
+    constexpr FixedString(const char (&text)[N]) noexcept { // NOLINT(google-explicit-constructor)
         for (std::size_t i = 0; i < N; ++i) {
             chars[i] = text[i];
         }
@@ -322,7 +322,7 @@ struct FixedString {
 /// @tparam Name The tag name.
 template <FixedString Name>
 struct NamedTag {
-    static constexpr std::string_view name = Name.view();  ///< The tag name.
+    static constexpr std::string_view name = Name.view();   ///< The tag name.
     static constexpr std::uint32_t id = fnv1a(Name.view()); ///< Hash of the name.
 };
 
@@ -448,7 +448,7 @@ template <std::size_t N>
     for (std::int64_t s : squares) {
         sum += s;
     }
-    return sum;  // the vector's storage is released before the constant evaluation ends
+    return sum; // the vector's storage is released before the constant evaluation ends
 #else
     std::int64_t sum = 0;
     for (int i = 1; i <= n; ++i) {
@@ -468,11 +468,11 @@ enum class MissionType : int { Exploration = 1, Combat = 2, Colonization = 3, Tr
 
 /// @brief A literal-type planet whose derived quantities can be computed at compile time.
 struct ConstexprPlanet {
-    int id = 0;                                  ///< Identifier.
-    PlanetType type = PlanetType::Terrestrial;   ///< Classification.
-    double mass = 0.0;                           ///< Mass in kg.
-    double radius = 1.0;                         ///< Radius in m.
-    bool habitable = false;                      ///< Supports life.
+    int id = 0;                                ///< Identifier.
+    PlanetType type = PlanetType::Terrestrial; ///< Classification.
+    double mass = 0.0;                         ///< Mass in kg.
+    double radius = 1.0;                       ///< Radius in m.
+    bool habitable = false;                    ///< Supports life.
 
     /// @brief Surface gravity g = GM/r^2. @return m/s^2.
     [[nodiscard]] constexpr double surfaceGravity() const noexcept {
@@ -502,7 +502,9 @@ struct ConstexprFleet {
         return static_cast<double>(shipCount) * (fuelPercentage / 100.0) * 10.0;
     }
     /// @brief Operational if it has ships and more than 20% fuel. @return Operational flag.
-    [[nodiscard]] constexpr bool isOperational() const noexcept { return fuelPercentage > 20.0 && shipCount > 0; }
+    [[nodiscard]] constexpr bool isOperational() const noexcept {
+        return fuelPercentage > 20.0 && shipCount > 0;
+    }
     /// @brief Heuristic range. @return fuel * ships * 0.5.
     [[nodiscard]] constexpr double maxRange() const noexcept {
         return fuelPercentage * static_cast<double>(shipCount) * 0.5;
@@ -511,14 +513,14 @@ struct ConstexprFleet {
 
 /// @brief The eight planets of the solar system as a compile-time table.
 inline constexpr std::array<ConstexprPlanet, 8> SOLAR_SYSTEM{{
-    {1, PlanetType::Terrestrial, 3.301e23, 2.4397e6, false},  // Mercury
-    {2, PlanetType::Terrestrial, 4.867e24, 6.0518e6, false},  // Venus
-    {3, PlanetType::Terrestrial, 5.972e24, 6.371e6, true},    // Earth
-    {4, PlanetType::Terrestrial, 6.417e23, 3.3896e6, false},  // Mars
-    {5, PlanetType::GasGiant, 1.898e27, 6.9911e7, false},     // Jupiter
-    {6, PlanetType::GasGiant, 5.683e26, 5.8232e7, false},     // Saturn
-    {7, PlanetType::IceGiant, 8.681e25, 2.5362e7, false},     // Uranus
-    {8, PlanetType::IceGiant, 1.024e26, 2.4622e7, false},     // Neptune
+    {1, PlanetType::Terrestrial, 3.301e23, 2.4397e6, false}, // Mercury
+    {2, PlanetType::Terrestrial, 4.867e24, 6.0518e6, false}, // Venus
+    {3, PlanetType::Terrestrial, 5.972e24, 6.371e6, true},   // Earth
+    {4, PlanetType::Terrestrial, 6.417e23, 3.3896e6, false}, // Mars
+    {5, PlanetType::GasGiant, 1.898e27, 6.9911e7, false},    // Jupiter
+    {6, PlanetType::GasGiant, 5.683e26, 5.8232e7, false},    // Saturn
+    {7, PlanetType::IceGiant, 8.681e25, 2.5362e7, false},    // Uranus
+    {8, PlanetType::IceGiant, 1.024e26, 2.4622e7, false},    // Neptune
 }};
 
 /// @brief Counts habitable planets. @param planets Input. @return Count.
@@ -533,7 +535,8 @@ template <std::size_t N>
 
 /// @brief Counts planets of a given type. @param planets Input. @param type Type. @return Count.
 template <std::size_t N>
-[[nodiscard]] constexpr int countOfType(const std::array<ConstexprPlanet, N>& planets, PlanetType type) noexcept {
+[[nodiscard]] constexpr int countOfType(const std::array<ConstexprPlanet, N>& planets,
+                                        PlanetType type) noexcept {
     int count = 0;
     for (const auto& p : planets) {
         count += (p.type == type) ? 1 : 0;
@@ -557,7 +560,8 @@ template <std::size_t N>
 /// @return Whether the configuration is valid.
 template <std::size_t N>
 [[nodiscard]] constexpr bool validateFleetConfiguration(const std::array<ConstexprFleet, N>& fleets,
-                                                        int minShips = 10, double minMeanFuel = 50.0) noexcept {
+                                                        int minShips = 10,
+                                                        double minMeanFuel = 50.0) noexcept {
     if constexpr (N == 0) {
         return false;
     } else {
@@ -614,15 +618,16 @@ template <auto... Values>
 
 // ===== COMPILE-TIME TABLES =====
 
-inline constexpr auto FIBONACCI_SEQUENCE = generateFibonacci<20>();  ///< F(0)..F(19).
-inline constexpr auto FIRST_PRIMES = generatePrimes<10>();           ///< First 10 primes.
-inline constexpr auto SQUARES_TABLE =
-    makeTable<16>([](std::size_t i) { return static_cast<int>(i * i); });  ///< i^2 for i < 16.
-inline constexpr auto SINE_TABLE =
-    makeTable<9>([](std::size_t i) { return sinTaylor(static_cast<double>(i) * PI / 8.0); });  ///< sin(k*pi/8).
-inline constexpr double EARTH_ESCAPE_VELOCITY = escapeVelocity(EARTH_MASS, EARTH_RADIUS);   ///< ~11186 m/s.
-inline constexpr double EARTH_ORBITAL_VELOCITY = orbitalVelocity(SUN_MASS, ASTRONOMICAL_UNIT); ///< ~29780 m/s.
-inline constexpr std::uint32_t GAME_NAME_HASH = fnv1a("CppVerseHub");  ///< FNV-1a of the project name.
+inline constexpr auto FIBONACCI_SEQUENCE = generateFibonacci<20>(); ///< F(0)..F(19).
+inline constexpr auto FIRST_PRIMES = generatePrimes<10>();          ///< First 10 primes.
+inline constexpr auto SQUARES_TABLE = makeTable<16>(
+    [](std::size_t i) { return static_cast<int>(i * i); }); ///< i^2 for i < 16.
+inline constexpr auto SINE_TABLE = makeTable<9>(
+    [](std::size_t i) { return sinTaylor(static_cast<double>(i) * PI / 8.0); });          ///< sin(k*pi/8).
+inline constexpr double EARTH_ESCAPE_VELOCITY = escapeVelocity(EARTH_MASS, EARTH_RADIUS); ///< ~11186 m/s.
+inline constexpr double EARTH_ORBITAL_VELOCITY = orbitalVelocity(SUN_MASS,
+                                                                 ASTRONOMICAL_UNIT); ///< ~29780 m/s.
+inline constexpr std::uint32_t GAME_NAME_HASH = fnv1a("CppVerseHub"); ///< FNV-1a of the project name.
 
 // ===== COMPILE-TIME VERIFICATION =====
 
@@ -635,13 +640,15 @@ inline constexpr std::uint32_t GAME_NAME_HASH = fnv1a("CppVerseHub");  ///< FNV-
 static_assert(power(2.0, 10) == 1024.0 && power(2.0, -2) == 0.25 && power(5.0, 0) == 1.0);
 static_assert(factorial(0) == 1 && factorial(10) == 3628800 && factorial(20) == 2432902008176640000ULL);
 static_assert(compileTimeFactorial(12) == 479001600);
-static_assert(compileTimeFibonacci(0) == 0 && compileTimeFibonacci(10) == 55 && compileTimeFibonacci(50) == 12586269025ULL);
-static_assert(approxEqual(sqrtNewton(2.0), 1.4142135623730951) && sqrtNewton(81.0) == 9.0 && sqrtNewton(0.0) == 0.0);
+static_assert(compileTimeFibonacci(0) == 0 && compileTimeFibonacci(10) == 55 &&
+              compileTimeFibonacci(50) == 12586269025ULL);
+static_assert(approxEqual(sqrtNewton(2.0), 1.4142135623730951) && sqrtNewton(81.0) == 9.0 &&
+              sqrtNewton(0.0) == 0.0);
 static_assert(approxEqual(sqrtNewton(0.25), 0.5));
 static_assert(approxEqual(sinTaylor(PI / 2.0), 1.0) && approxEqual(sinTaylor(0.0), 0.0));
 static_assert(approxEqual(sinTaylor(7.0 * PI / 2.0), -1.0, 1e-8));
 static_assert(gcd(48, 18) == 6 && gcd(-48, 18) == 6 && lcm(4, 6) == 12 && lcm(0, 5) == 0);
-static_assert(lcm(3037000499LL, 3037000493LL) > 0);  // no overflow in a / gcd * b
+static_assert(lcm(3037000499LL, 3037000493LL) > 0); // no overflow in a / gcd * b
 static_assert(isPrime(2) && isPrime(97) && !isPrime(1) && !isPrime(91));
 static_assert(toUpper('q') == 'Q' && toUpper('7') == '7' && isDigit('5') && !isAlpha('5'));
 static_assert(countChar("CppVerseHub", 'p') == 2);
@@ -720,9 +727,10 @@ inline void demonstrateConstexpr(std::ostream& out = std::cout) {
     const auto& earth = SOLAR_SYSTEM[2];
     const auto& jupiter = SOLAR_SYSTEM[4];
     out << "Earth:   g=" << earth.surfaceGravity() << " m/s^2, density=" << earth.density() << " kg/m^3\n";
-    out << "Jupiter: g=" << jupiter.surfaceGravity() << " m/s^2, v_esc=" << jupiter.escapeVelocity() << " m/s\n";
-    out << "Habitable planets: " << countHabitable(SOLAR_SYSTEM) << ", gas giants: "
-        << countOfType(SOLAR_SYSTEM, PlanetType::GasGiant) << '\n';
+    out << "Jupiter: g=" << jupiter.surfaceGravity() << " m/s^2, v_esc=" << jupiter.escapeVelocity()
+        << " m/s\n";
+    out << "Habitable planets: " << countHabitable(SOLAR_SYSTEM)
+        << ", gas giants: " << countOfType(SOLAR_SYSTEM, PlanetType::GasGiant) << '\n';
     out << "Metaprogramming: countTypes<int,double,float,char>=" << countTypes<int, double, float, char>()
         << " indexOfType<char,...>=" << indexOfType<char, int, double, char>()
         << " sumValues<1..5>=" << sumValues<1, 2, 3, 4, 5>() << '\n';
@@ -730,4 +738,4 @@ inline void demonstrateConstexpr(std::ostream& out = std::cout) {
     out << "demonstrateConstexpr invocations (constinit counter): " << invocations.load() << '\n';
 }
 
-}  // namespace CppVerseHub::Modern::ConstexprProgramming
+} // namespace CppVerseHub::Modern::ConstexprProgramming

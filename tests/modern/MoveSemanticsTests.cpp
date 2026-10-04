@@ -1,11 +1,11 @@
+#include "modern/MoveSemantics.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include "modern/MoveSemantics.hpp"
 
 using namespace CppVerseHub::Modern::MoveSemantics;
 
@@ -30,7 +30,7 @@ struct FragileCopy {
     ~FragileCopy() = default;
 };
 
-}  // namespace
+} // namespace
 
 TEST_CASE("TrackedResource copy is deep and counted", "[modern][move]") {
     OperationCounts c;
@@ -52,12 +52,12 @@ TEST_CASE("TrackedResource move steals state and leaves source empty", "[modern]
     TrackedResource b = std::move(a);
     CHECK(c.moves == 1);
     CHECK(c.copies == 0);
-    CHECK(a.isMovedFrom());  // NOLINT(bugprone-use-after-move)
+    CHECK(a.isMovedFrom()); // NOLINT(bugprone-use-after-move)
     CHECK(a.name().empty());
     CHECK(a.size() == 0);
     CHECK(b.name() == "ore");
     CHECK(b.checksum() == 10);
-    a.append(3);  // a moved-from object is still usable
+    a.append(3); // a moved-from object is still usable
     CHECK(a.size() == 1);
 }
 
@@ -72,10 +72,10 @@ TEST_CASE("TrackedResource assignment operators", "[modern][move]") {
     TrackedResource d("d", 2, &c);
     d = std::move(b);
     CHECK(d.name() == "a");
-    CHECK(b.isMovedFrom());  // NOLINT(bugprone-use-after-move)
+    CHECK(b.isMovedFrom()); // NOLINT(bugprone-use-after-move)
     CHECK(c.moves == 1);
     const TrackedResource& alias = d;
-    d = alias;  // self-assignment is safe
+    d = alias; // self-assignment is safe
     CHECK(d.name() == "a");
 }
 
@@ -89,7 +89,7 @@ TEST_CASE("TrackedResource destructions balance constructions", "[modern][move]"
         auto copy = v;
         auto moved = std::move(copy);
     }
-    CHECK(c.destructions == c.constructions + c.copies + c.moves);  // no assignments happened
+    CHECK(c.destructions == c.constructions + c.copies + c.moves); // no assignments happened
     CHECK(c.copies == 5);
 }
 
@@ -115,13 +115,13 @@ TEST_CASE("Spacecraft is move-only and transfers ownership", "[modern][move]") {
     s.loadCargo(std::move(item));
     s.emplaceCargo("water", std::size_t{2}, &c);
     CHECK(s.cargoCount() == 3);
-    CHECK(c.copies == 1);  // only the lvalue load copied
+    CHECK(c.copies == 1); // only the lvalue load copied
 
     Spacecraft t = std::move(s);
     CHECK(t.id() == 1);
     CHECK(t.logSize() == 2);
     CHECK(t.cargoCount() == 3);
-    CHECK(s.id() == -1);  // NOLINT(bugprone-use-after-move)
+    CHECK(s.id() == -1); // NOLINT(bugprone-use-after-move)
     CHECK_FALSE(s.isValid());
     s.log("revived");
     CHECK(s.logSize() == 1);
@@ -214,7 +214,7 @@ TEST_CASE("MoveAwareVector grows geometrically", "[modern][move]") {
     }
     CHECK(v.size() == 100);
     CHECK(v.capacity() == 128);
-    CHECK(v.reallocations() == 8);  // 1,2,4,...,128
+    CHECK(v.reallocations() == 8); // 1,2,4,...,128
     CHECK(v[99] == 99);
     MoveAwareVector<int> r;
     r.reserve(50);
@@ -230,7 +230,7 @@ TEST_CASE("MoveAwareVector copy, move and swap", "[modern][move]") {
     CHECK(a[0] == "x");
     MoveAwareVector<std::string> c = std::move(a);
     CHECK(c.size() == 3);
-    CHECK(a.empty());  // NOLINT(bugprone-use-after-move)
+    CHECK(a.empty()); // NOLINT(bugprone-use-after-move)
     CHECK(a.capacity() == 0);
     a = c;
     CHECK(a.size() == 3);
@@ -247,7 +247,7 @@ TEST_CASE("MoveAwareVector uses move_if_noexcept on reallocation", "[modern][mov
         for (int i = 0; i < 9; ++i) {
             v.emplace_back("r", 1, &c);
         }
-        CHECK(v.reallocations() == 5);  // capacities 1,2,4,8,16
+        CHECK(v.reallocations() == 5); // capacities 1,2,4,8,16
     }
     CHECK(c.copies == 0);
     CHECK(c.moves == 1 + 2 + 4 + 8);
@@ -261,7 +261,7 @@ TEST_CASE("MoveAwareVector keeps the strong guarantee when growth throws", "[mod
         v.emplace_back(i);
     }
     REQUIRE(v.capacity() == 4);
-    FragileCopy::copiesUntilThrow = 2;  // the third copy during reallocation throws
+    FragileCopy::copiesUntilThrow = 2; // the third copy during reallocation throws
     CHECK_THROWS_AS(v.emplace_back(99), std::runtime_error);
     FragileCopy::copiesUntilThrow = -1;
     REQUIRE(v.size() == 4);
@@ -274,7 +274,7 @@ TEST_CASE("MoveAwareVector keeps the strong guarantee when growth throws", "[mod
 TEST_CASE("MoveAwareVector handles aliasing push_back during growth", "[modern][move]") {
     MoveAwareVector<std::string> v{"alpha"};
     REQUIRE(v.size() == v.capacity());
-    v.push_back(v[0]);  // argument refers into the buffer that is about to be reallocated
+    v.push_back(v[0]); // argument refers into the buffer that is about to be reallocated
     CHECK(v[1] == "alpha");
     v.emplace_back(v[1]);
     CHECK(v[2] == "alpha");

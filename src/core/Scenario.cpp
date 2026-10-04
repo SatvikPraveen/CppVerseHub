@@ -4,13 +4,13 @@
  */
 #include "core/Scenario.hpp"
 
-#include <array>
-#include <fstream>
-#include <string>
-
 #include "core/ColonizationMission.hpp"
 #include "core/CombatMission.hpp"
 #include "core/ExplorationMission.hpp"
+
+#include <array>
+#include <fstream>
+#include <string>
 
 namespace CppVerseHub::Core {
 
@@ -100,36 +100,37 @@ std::unique_ptr<Galaxy> makeSampleGalaxy(const SampleScenarioOptions& options) {
         }
         Planet& targetPlanet = galaxy->get<Planet>(target);
         switch (i % 3) {
-        case 0:
-            fleet.addShips(ShipType::Scout, 2);
-            galaxy->addMission<ExplorationMission>(fleet.id(), target, rng.uniform(1.0, 4.0));
-            break;
-        case 1:
-            fleet.addShips(ShipType::Cruiser, 3 + rng.below(3));
-            fleet.addShips(ShipType::Battleship, 1 + rng.below(2));
-            if (!targetPlanet.isHostile()) {
-                targetPlanet.setDefense(rng.uniform(40.0, 150.0));
-            }
-            galaxy->addMission<CombatMission>(fleet.id(), target, 30.0, CombatStrategy::Aggressive);
-            break;
-        default: {
-            // Colonists need a peaceful world: prefer a non-hostile target, otherwise pacify this one.
-            std::vector<EntityId> peaceful;
-            for (std::size_t k = 1; k < planets.size(); ++k) {
-                if (!galaxy->get<Planet>(planets[k]).isHostile()) {
-                    peaceful.push_back(planets[k]);
+            case 0:
+                fleet.addShips(ShipType::Scout, 2);
+                galaxy->addMission<ExplorationMission>(fleet.id(), target, rng.uniform(1.0, 4.0));
+                break;
+            case 1:
+                fleet.addShips(ShipType::Cruiser, 3 + rng.below(3));
+                fleet.addShips(ShipType::Battleship, 1 + rng.below(2));
+                if (!targetPlanet.isHostile()) {
+                    targetPlanet.setDefense(rng.uniform(40.0, 150.0));
                 }
+                galaxy->addMission<CombatMission>(fleet.id(), target, 30.0, CombatStrategy::Aggressive);
+                break;
+            default: {
+                // Colonists need a peaceful world: prefer a non-hostile target, otherwise pacify this one.
+                std::vector<EntityId> peaceful;
+                for (std::size_t k = 1; k < planets.size(); ++k) {
+                    if (!galaxy->get<Planet>(planets[k]).isHostile()) {
+                        peaceful.push_back(planets[k]);
+                    }
+                }
+                const EntityId colonyTarget = peaceful.empty() ? target
+                                                               : peaceful[rng.below(peaceful.size())];
+                galaxy->get<Planet>(colonyTarget).setDefense(0.0);
+                fleet.addShips(ShipType::Colonizer, 1);
+                fleet.addShips(ShipType::Transport, 2);
+                ledger.deposit(fleet.id(), ResourceType::Minerals, 500);
+                ledger.deposit(fleet.id(), ResourceType::Food, 800);
+                galaxy->addMission<ColonizationMission>(fleet.id(), colonyTarget, rng.uniform(2.0, 5.0),
+                                                        rng.uniform(500.0, 5000.0));
+                break;
             }
-            const EntityId colonyTarget = peaceful.empty() ? target : peaceful[rng.below(peaceful.size())];
-            galaxy->get<Planet>(colonyTarget).setDefense(0.0);
-            fleet.addShips(ShipType::Colonizer, 1);
-            fleet.addShips(ShipType::Transport, 2);
-            ledger.deposit(fleet.id(), ResourceType::Minerals, 500);
-            ledger.deposit(fleet.id(), ResourceType::Food, 800);
-            galaxy->addMission<ColonizationMission>(fleet.id(), colonyTarget, rng.uniform(2.0, 5.0),
-                                                    rng.uniform(500.0, 5000.0));
-            break;
-        }
         }
     }
     return galaxy;

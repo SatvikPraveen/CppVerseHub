@@ -42,7 +42,8 @@ TEST_CASE("join concatenates any range of string-likes", "[utils][string]") {
 }
 
 TEST_CASE("tokenize honours quotes and escapes", "[utils][string]") {
-    CHECK(tokenize(R"(move "Fleet Alpha" --to 'Mars Base')") == Strings{"move", "Fleet Alpha", "--to", "Mars Base"});
+    CHECK(tokenize(R"(move "Fleet Alpha" --to 'Mars Base')") ==
+          Strings{"move", "Fleet Alpha", "--to", "Mars Base"});
     CHECK(tokenize(R"(say "he said \"hi\"" x\ y)") == Strings{"say", "he said \"hi\"", "x y"});
     CHECK(tokenize(R"(empty "" arg)") == Strings{"empty", "", "arg"});
     CHECK(tokenize("   ").empty());
@@ -178,12 +179,12 @@ TEST_CASE("Number formatting helpers", "[utils][string]") {
 
 TEST_CASE("Base64 matches RFC 4648 test vectors and round-trips", "[utils][string]") {
     const auto [plain, encoded] = GENERATE(table<std::string, std::string>({{"", ""},
-                                                                             {"f", "Zg=="},
-                                                                             {"fo", "Zm8="},
-                                                                             {"foo", "Zm9v"},
-                                                                             {"foob", "Zm9vYg=="},
-                                                                             {"fooba", "Zm9vYmE="},
-                                                                             {"foobar", "Zm9vYmFy"}}));
+                                                                            {"f", "Zg=="},
+                                                                            {"fo", "Zm8="},
+                                                                            {"foo", "Zm9v"},
+                                                                            {"foob", "Zm9vYg=="},
+                                                                            {"fooba", "Zm9vYmE="},
+                                                                            {"foobar", "Zm9vYmFy"}}));
     CHECK(base64Encode(plain) == encoded);
     CHECK(base64Decode(encoded) == plain);
 }
@@ -218,10 +219,10 @@ TEST_CASE("UTF-8 validation, counting and transcoding", "[utils][string][unicode
     CHECK(isValidUtf8("plain ascii"));
     CHECK(codePointCount("h\xC3\xA9llo") == 5u);
     CHECK(codePointCount("\xF0\x9F\x9A\x80") == 1u); // rocket emoji
-    CHECK_FALSE(isValidUtf8("\xC3"));             // truncated
-    CHECK_FALSE(isValidUtf8("\xC0\xAF"));         // overlong
-    CHECK_FALSE(isValidUtf8("\xED\xA0\x80"));     // surrogate
-    CHECK_FALSE(isValidUtf8("\xF4\x90\x80\x80")); // > U+10FFFF
+    CHECK_FALSE(isValidUtf8("\xC3"));                // truncated
+    CHECK_FALSE(isValidUtf8("\xC0\xAF"));            // overlong
+    CHECK_FALSE(isValidUtf8("\xED\xA0\x80"));        // surrogate
+    CHECK_FALSE(isValidUtf8("\xF4\x90\x80\x80"));    // > U+10FFFF
     CHECK(encodeUtf8(U'é') == "\xC3\xA9");
     CHECK(encodeUtf8(U'\U0001F680') == "\xF0\x9F\x9A\x80");
     CHECK(encodeUtf8(0xD800).empty());

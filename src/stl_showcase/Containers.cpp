@@ -99,7 +99,9 @@ std::vector<std::string> FleetRoster::namesOfClass(std::string_view class_type) 
 
 long long FleetRoster::totalCrew() const noexcept {
     return std::transform_reduce(ships_.begin(), ships_.end(), 0LL, std::plus<>{},
-                                 [](const Spacecraft& ship) { return static_cast<long long>(ship.crew_size); });
+                                 [](const Spacecraft& ship) {
+                                     return static_cast<long long>(ship.crew_size);
+                                 });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -115,7 +117,7 @@ std::vector<int> slidingWindowMaximum(std::span<const int> values, std::size_t w
         return maxima;
     }
     maxima.reserve(values.size() - window + 1);
-    std::deque<std::size_t> candidates;  // indices whose values are strictly decreasing
+    std::deque<std::size_t> candidates; // indices whose values are strictly decreasing
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (!candidates.empty() && candidates.front() + window <= i) {
             candidates.pop_front();
@@ -193,7 +195,8 @@ std::vector<std::pair<std::string, std::size_t>> topWords(
         return lhs.first < rhs.first;
     };
     const std::size_t n = std::min(k, entries.size());
-    std::partial_sort(entries.begin(), entries.begin() + static_cast<std::ptrdiff_t>(n), entries.end(), by_count);
+    std::partial_sort(entries.begin(), entries.begin() + static_cast<std::ptrdiff_t>(n), entries.end(),
+                      by_count);
     entries.resize(n);
     return entries;
 }
@@ -280,13 +283,14 @@ void printSequence(std::ostream& out, std::string_view label, const Range& range
     out << '\n';
 }
 
-}  // namespace
+} // namespace
 
 void demonstrateSequenceContainers(std::ostream& out) {
     out << "\n=== Sequence Containers ===\n";
 
     FleetRoster roster(sampleFleet());
-    out << "vector-backed roster holds " << roster.size() << " ships, total crew " << roster.totalCrew() << '\n';
+    out << "vector-backed roster holds " << roster.size() << " ships, total crew " << roster.totalCrew()
+        << '\n';
     const bool duplicate_added = roster.add({"Falcon", "Copy", 1.0, 1, 1.0, 1.0});
     out << "adding a duplicate name succeeded? " << std::boolalpha << duplicate_added << '\n';
     out << "ranked by combat rating:";
@@ -301,7 +305,7 @@ void demonstrateSequenceContainers(std::ostream& out) {
 
     std::list<std::string> route{"Sol", "Vega", "Sirius"};
     std::list<std::string> detour{"Altair", "Deneb"};
-    route.splice(std::next(route.begin()), detour);  // O(1), no copies, iterators stay valid
+    route.splice(std::next(route.begin()), detour); // O(1), no copies, iterators stay valid
     printSequence(out, "list after splice", route);
 
     std::forward_list<int> sensor_ids{7, 3, 3, 9, 1, 1, 1};
@@ -326,7 +330,7 @@ void demonstrateAssociativeContainers(std::ostream& out) {
     out << "multimap holds " << defense_index.count(7) << " planets with defense 7\n";
     printSequence(out, "defense in [4,7]", planetsWithDefenseBetween(defense_index, 4, 7));
 
-    std::set<std::string, std::less<>> resources;  // transparent comparator: lookup by string_view
+    std::set<std::string, std::less<>> resources; // transparent comparator: lookup by string_view
     for (const auto& planet : planets) {
         resources.insert(planet.resources.begin(), planet.resources.end());
     }
@@ -346,7 +350,8 @@ void demonstrateAssociativeContainers(std::ostream& out) {
         registry.insert(ship);
     }
     const bool inserted = registry.insert({"Enterprise", "Clone", 0.0, 0, 0.0, 0.0}).second;
-    out << "unordered_set with custom hash rejects duplicate Enterprise: " << std::boolalpha << !inserted << '\n';
+    out << "unordered_set with custom hash rejects duplicate Enterprise: " << std::boolalpha << !inserted
+        << '\n';
 
     LruCache<std::string, int> cache(2);
     cache.put("alpha", 1);
@@ -382,4 +387,4 @@ void runContainersDemo(std::ostream& out) {
     demonstrateContainerAdapters(out);
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

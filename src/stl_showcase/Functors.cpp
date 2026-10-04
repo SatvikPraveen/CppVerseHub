@@ -17,10 +17,8 @@ namespace CppVerseHub::STL {
 
 std::vector<Starship> sampleStarships() {
     return {
-        {"Enterprise", "Constitution", 85.0, 8.0, 430, 950.0},
-        {"Defiant", "Escort", 95.0, 9.5, 50, 1100.0},
-        {"Reliant", "Miranda", 40.0, 6.0, 300, 600.0},
-        {"Voyager", "Intrepid", 70.0, 9.9, 150, 800.0},
+        {"Enterprise", "Constitution", 85.0, 8.0, 430, 950.0}, {"Defiant", "Escort", 95.0, 9.5, 50, 1100.0},
+        {"Reliant", "Miranda", 40.0, 6.0, 300, 600.0},         {"Voyager", "Intrepid", 70.0, 9.9, 150, 800.0},
         {"Rocinante", "Corvette", 60.0, 3.0, 4, 400.0},
     };
 }
@@ -44,7 +42,7 @@ std::string StarshipNameGenerator::operator()() {
 }
 
 std::uint64_t memoizedFibonacci(unsigned n) {
-    constexpr unsigned max_index = 93;  // fib(94) overflows std::uint64_t
+    constexpr unsigned max_index = 93; // fib(94) overflows std::uint64_t
     if (n > max_index) {
         throw std::out_of_range("memoizedFibonacci: n > 93 overflows 64 bits");
     }
@@ -140,8 +138,8 @@ void demonstrateFunctionObjects(std::ostream& out) {
     out << "\n=== Function Objects ===\n";
     auto ships = sampleStarships();
     const IsCombatReady ready;
-    out << "combat ready (functor predicate): " << std::ranges::count_if(ships, ready) << " of " << ships.size()
-        << '\n';
+    out << "combat ready (functor predicate): " << std::ranges::count_if(ships, ready) << " of "
+        << ships.size() << '\n';
 
     std::ranges::sort(ships, ByCombatEffectivenessDesc{});
     out << "sorted by effectiveness (comparator functor):";
@@ -156,7 +154,7 @@ void demonstrateFunctionObjects(std::ostream& out) {
 
     StarshipNameGenerator generator("NCC");
     std::vector<std::string> names;
-    std::generate_n(std::back_inserter(names), 3, std::ref(generator));  // std::ref keeps the state
+    std::generate_n(std::back_inserter(names), 3, std::ref(generator)); // std::ref keeps the state
     out << "generator via std::ref produced " << generator.generated() << " names:";
     for (const auto& name : names) {
         out << ' ' << name;
@@ -164,7 +162,7 @@ void demonstrateFunctionObjects(std::ostream& out) {
     out << '\n';
 
     const SharedCallCounter counter([](const Starship& s) { return s.crew > 100; });
-    const auto big_crews = std::ranges::count_if(ships, counter);  // copied, yet the count is shared
+    const auto big_crews = std::ranges::count_if(ships, counter); // copied, yet the count is shared
     out << "shared-state predicate counted " << counter.calls() << " calls, " << big_crews << " matches\n";
 }
 
@@ -184,7 +182,7 @@ void demonstrateLambdas(std::ostream& out) {
     std::ranges::for_each(ships, [&total_crew](const Starship& s) { total_crew += s.crew; });
     out << "capture-by-reference accumulation: crew = " << total_crew << '\n';
 
-    const auto is_fast = [](const auto& s) { return s.warp_speed > 9.0; };  // generic lambda
+    const auto is_fast = [](const auto& s) { return s.warp_speed > 9.0; }; // generic lambda
     out << "generic lambda: fast ships = " << countWhere(ships, is_fast) << '\n';
 
     const auto inc = [](int x) { return x + 1; };
@@ -202,7 +200,8 @@ void demonstrateStandardFunctionObjects(std::ostream& out) {
     out << "\n=== Standard Function Objects ===\n";
     std::vector<int> values{5, 2, 9, 1, 7};
     out << "accumulate with std::plus<>: " << std::accumulate(values.begin(), values.end(), 0, std::plus<>{})
-        << ", std::multiplies<>: " << std::accumulate(values.begin(), values.end(), 1, std::multiplies<>{}) << '\n';
+        << ", std::multiplies<>: " << std::accumulate(values.begin(), values.end(), 1, std::multiplies<>{})
+        << '\n';
     std::ranges::sort(values, std::greater<>{});
     out << "sort with std::greater<>:";
     for (const int v : values) {
@@ -245,7 +244,8 @@ void demonstrateFunctionBinding(std::ostream& out) {
     int alerts = 0;
     std::vector<std::string> log;
     dispatcher.subscribe("red_alert", [&alerts](const Starship&) { ++alerts; });
-    const auto token = dispatcher.subscribe("red_alert", [&log](const Starship& s) { log.push_back(s.name); });
+    const auto token = dispatcher.subscribe("red_alert",
+                                            [&log](const Starship& s) { log.push_back(s.name); });
     const auto invoked = dispatcher.dispatch("red_alert", ships.front());
     dispatcher.unsubscribe(token);
     out << "std::function dispatcher invoked " << invoked << " handlers; after unsubscribe "
@@ -262,4 +262,4 @@ void runFunctorsDemo(std::ostream& out) {
     demonstrateFunctionBinding(out);
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

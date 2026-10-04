@@ -51,7 +51,8 @@ static_assert(sizeof(V::RecursiveTuple<int>) == sizeof(int)); // empty base opti
 // ----- utilities -----
 static_assert(V::make_array<int>(1, 2.9, 'a') == std::array<int, 3>{1, 2, 97});
 static_assert(V::compose([](int x) { return x + 1; }, [](int x) { return x * 3; })(2) == 7);
-static_assert(std::is_same_v<decltype(V::transform_args([](auto v) { return v * 2; }, 1, 2.0)), std::tuple<int, double>>);
+static_assert(std::is_same_v<decltype(V::transform_args([](auto v) { return v * 2; }, 1, 2.0)),
+                             std::tuple<int, double>>);
 static_assert(V::filter_args<std::is_integral>(1, 2.0, 'c', 3L) == std::tuple{1, 'c', 3L});
 static_assert(V::zip(std::tuple{1, 2, 3}, std::tuple{'a', 'b'}) ==
               std::tuple{std::tuple{1, 'a'}, std::tuple{2, 'b'}});
@@ -130,9 +131,10 @@ TEST_CASE("overload builds visitor sets from lambdas", "[templates][variadic]") 
 }
 
 TEST_CASE("multifunction dispatches to the first viable callable", "[templates][variadic]") {
-    const V::multifunction dispatch(
-        [](const std::string& s) { return "string " + s; }, [](double) { return std::string("double"); },
-        [](int) { return std::string("int"); }, [](auto&&) { return std::string("other"); });
+    const V::multifunction dispatch([](const std::string& s) { return "string " + s; },
+                                    [](double) { return std::string("double"); },
+                                    [](int) { return std::string("int"); },
+                                    [](auto&&) { return std::string("other"); });
     CHECK(dispatch(std::string("s")) == "string s");
     CHECK(dispatch(2.5) == "double");
     CHECK(dispatch(3) == "double"); // first match, not best match: int converts to double before int is tried
@@ -238,7 +240,8 @@ TEST_CASE("optional_chain short-circuits on the first empty result", "[templates
         return v == 0 ? std::nullopt : std::optional<double>(1.0 / v);
     };
 
-    CHECK(V::optional_chain(std::optional<std::string>("4"), parse, reciprocal) == std::optional<double>(0.25));
+    CHECK(V::optional_chain(std::optional<std::string>("4"), parse, reciprocal) ==
+          std::optional<double>(0.25));
     CHECK(calls == 2);
     CHECK_FALSE(V::optional_chain(std::optional<std::string>("x"), parse, reciprocal));
     CHECK(calls == 3); // reciprocal skipped

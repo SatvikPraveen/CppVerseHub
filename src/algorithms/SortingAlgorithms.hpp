@@ -114,7 +114,7 @@ constexpr void insertion_sort_impl(I first, I last, Less& less) {
     }
     for (I i = std::next(first); i != last; ++i) {
         if (!less(*i, *std::prev(i))) {
-            continue;  // already in place; keeps sorted input O(n)
+            continue; // already in place; keeps sorted input O(n)
         }
         std::iter_value_t<I> tmp = std::ranges::iter_move(i);
         I j = i;
@@ -128,7 +128,8 @@ constexpr void insertion_sort_impl(I first, I last, Less& less) {
 
 /// Restores the max-heap property below `root` within the heap [first, first + size).
 template <std::random_access_iterator I, class Less>
-constexpr void sift_down(I first, std::iter_difference_t<I> root, std::iter_difference_t<I> size, Less& less) {
+constexpr void sift_down(I first, std::iter_difference_t<I> root, std::iter_difference_t<I> size,
+                         Less& less) {
     while (true) {
         auto child = 2 * root + 1;
         if (child >= size) {
@@ -171,7 +172,7 @@ constexpr void median_of_three_to_front(I a, I b, I c, Less& less) {
             std::ranges::iter_swap(a, b);
         }
     }
-    std::ranges::iter_swap(a, b);  // median to the front
+    std::ranges::iter_swap(a, b); // median to the front
 }
 
 /**
@@ -191,7 +192,7 @@ constexpr I hoare_partition(I first, I last, Less& less) {
         } while (i != last && less(*i, *first));
         do {
             --j;
-        } while (less(*first, *j));  // terminates at `first` because !(p < p)
+        } while (less(*first, *j)); // terminates at `first` because !(p < p)
         if (!(i < j)) {
             break;
         }
@@ -238,7 +239,7 @@ constexpr void quick_sort_loop(I first, I last, Less& less, int depth_limit) {
 template <std::random_access_iterator I, class Less>
 void merge_adjacent(I first, I mid, I last, std::vector<std::iter_value_t<I>>& buf, Less& less) {
     if (first == mid || mid == last || !less(*mid, *std::prev(mid))) {
-        return;  // one side empty or already ordered
+        return; // one side empty or already ordered
     }
     buf.clear();
     for (I it = first; it != mid; ++it) {
@@ -296,7 +297,7 @@ constexpr std::make_unsigned_t<K> to_ordered_unsigned(K key) noexcept {
     return u;
 }
 
-}  // namespace detail
+} // namespace detail
 
 // ============================================================================================
 // Elementary O(n^2) comparison sorts
@@ -333,7 +334,7 @@ struct BubbleSortFn : detail::SortRangeAdaptor<BubbleSortFn> {
                     last_swap = i;
                 }
             }
-            bound = last_swap;  // everything at or beyond the last swap is in final position
+            bound = last_swap; // everything at or beyond the last swap is in final position
         }
         return end;
     }
@@ -646,9 +647,9 @@ private:
             const auto n = last - first;
             detail::median_of_three_to_front(first, first + n / 2, last - 1, less);
             const std::iter_value_t<I> pivot = *first;
-            I lt = first;  // [first, lt) < pivot
-            I i = first;   // [lt, i) == pivot
-            I gt = last;   // [gt, last) > pivot
+            I lt = first; // [first, lt) < pivot
+            I i = first;  // [lt, i) == pivot
+            I gt = last;  // [gt, last) > pivot
             while (i < gt) {
                 if (less(*i, pivot)) {
                     std::ranges::iter_swap(lt, i);
@@ -831,9 +832,8 @@ struct TimSortFn : detail::SortRangeAdaptor<TimSortFn> {
         auto merge_collapse = [&] {
             while (stack.size() > 1) {
                 std::size_t k = stack.size() - 2;
-                const bool violates_c =
-                    (k > 0 && stack[k - 1].len <= stack[k].len + stack[k + 1].len) ||
-                    (k > 1 && stack[k - 2].len <= stack[k - 1].len + stack[k].len);
+                const bool violates_c = (k > 0 && stack[k - 1].len <= stack[k].len + stack[k + 1].len) ||
+                                        (k > 1 && stack[k - 2].len <= stack[k - 1].len + stack[k].len);
                 if (violates_c) {
                     if (stack[k - 1].len < stack[k + 1].len) {
                         --k;
@@ -1036,7 +1036,7 @@ struct RadixSortFn {
                 ++count[((k >> shift) & 0xFFU) + 1];
             }
             if (std::ranges::any_of(count, [n](std::size_t c) { return c == n; })) {
-                continue;  // every key has the same digit: this pass is the identity
+                continue; // every key has the same digit: this pass is the identity
             }
             std::partial_sum(count.begin(), count.end(), count.begin());
             for (std::size_t idx : order) {
@@ -1077,7 +1077,7 @@ struct BucketSortFn {
         }
         const auto [mn, mx] = std::ranges::minmax(keys);
         if (!(mn < mx)) {
-            return;  // all keys equal
+            return; // all keys equal
         }
         const K width = mx - mn;
         std::vector<std::vector<std::size_t>> buckets(n);
@@ -1153,8 +1153,8 @@ public:
      * @param counter Caller-owned counter, incremented once per comparison.
      * @param comp    Underlying comparator.
      */
-    explicit CountingComparator(std::atomic<std::size_t>& counter, Comp comp = {}) noexcept(
-        std::is_nothrow_move_constructible_v<Comp>)
+    explicit CountingComparator(std::atomic<std::size_t>& counter,
+                                Comp comp = {}) noexcept(std::is_nothrow_move_constructible_v<Comp>)
         : counter_(&counter), comp_(std::move(comp)) {}
 
     /**
@@ -1202,22 +1202,25 @@ enum class SortAlgorithm {
 
 /// @brief All values of SortAlgorithm, in declaration order.
 inline constexpr std::array<SortAlgorithm, 17> kAllSortAlgorithms{
-    SortAlgorithm::Bubble,        SortAlgorithm::CocktailShaker, SortAlgorithm::Insertion,
-    SortAlgorithm::BinaryInsertion, SortAlgorithm::Selection,    SortAlgorithm::Shell,
-    SortAlgorithm::Heap,          SortAlgorithm::Quick,          SortAlgorithm::Quick3Way,
-    SortAlgorithm::Intro,         SortAlgorithm::Merge,          SortAlgorithm::BottomUpMerge,
-    SortAlgorithm::Tim,           SortAlgorithm::ParallelMerge,  SortAlgorithm::Counting,
-    SortAlgorithm::Radix,         SortAlgorithm::Bucket};
+    SortAlgorithm::Bubble,    SortAlgorithm::CocktailShaker,
+    SortAlgorithm::Insertion, SortAlgorithm::BinaryInsertion,
+    SortAlgorithm::Selection, SortAlgorithm::Shell,
+    SortAlgorithm::Heap,      SortAlgorithm::Quick,
+    SortAlgorithm::Quick3Way, SortAlgorithm::Intro,
+    SortAlgorithm::Merge,     SortAlgorithm::BottomUpMerge,
+    SortAlgorithm::Tim,       SortAlgorithm::ParallelMerge,
+    SortAlgorithm::Counting,  SortAlgorithm::Radix,
+    SortAlgorithm::Bucket};
 
 /// @brief Static properties of a sorting algorithm.
 struct SortAlgorithmInfo {
-    std::string_view name;           ///< Human readable name.
-    bool stable;                     ///< Preserves the order of equivalent elements.
-    bool comparison_based;           ///< Uses only the comparator (vs. key distribution).
-    bool quadratic;                  ///< Average case is O(n^2) (avoid on large inputs).
-    std::string_view average_time;   ///< Average-case time complexity.
-    std::string_view worst_time;     ///< Worst-case time complexity.
-    std::string_view extra_space;    ///< Auxiliary space complexity.
+    std::string_view name;         ///< Human readable name.
+    bool stable;                   ///< Preserves the order of equivalent elements.
+    bool comparison_based;         ///< Uses only the comparator (vs. key distribution).
+    bool quadratic;                ///< Average case is O(n^2) (avoid on large inputs).
+    std::string_view average_time; ///< Average-case time complexity.
+    std::string_view worst_time;   ///< Worst-case time complexity.
+    std::string_view extra_space;  ///< Auxiliary space complexity.
 };
 
 /**
@@ -1236,11 +1239,20 @@ struct SortAlgorithmInfo {
 std::size_t sort_ints(SortAlgorithm algorithm, std::span<int> data);
 
 /// @brief Input distributions used to exercise sorting algorithms.
-enum class DataPattern { Random, Sorted, ReverseSorted, NearlySorted, FewUnique, Sawtooth, OrganPipe, AllEqual };
+enum class DataPattern {
+    Random,
+    Sorted,
+    ReverseSorted,
+    NearlySorted,
+    FewUnique,
+    Sawtooth,
+    OrganPipe,
+    AllEqual
+};
 
 /// @brief All values of DataPattern.
 inline constexpr std::array<DataPattern, 8> kAllDataPatterns{
-    DataPattern::Random,   DataPattern::Sorted,    DataPattern::ReverseSorted, DataPattern::NearlySorted,
+    DataPattern::Random,    DataPattern::Sorted,   DataPattern::ReverseSorted, DataPattern::NearlySorted,
     DataPattern::FewUnique, DataPattern::Sawtooth, DataPattern::OrganPipe,     DataPattern::AllEqual};
 
 /**
@@ -1266,6 +1278,6 @@ inline constexpr std::array<DataPattern, 8> kAllDataPatterns{
  */
 void demonstrate_sorting(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms
 
-#endif  // CPPVERSEHUB_ALGORITHMS_SORTINGALGORITHMS_HPP
+#endif // CPPVERSEHUB_ALGORITHMS_SORTINGALGORITHMS_HPP

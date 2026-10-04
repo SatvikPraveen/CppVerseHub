@@ -11,14 +11,14 @@
  */
 #pragma once
 
+#include "core/Identifiers.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
-
-#include <nlohmann/json_fwd.hpp>
-
-#include "core/Identifiers.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -134,7 +134,8 @@ protected:
      * @param target Target planet.
      * @return Failure reason, or std::nullopt if the mission can start.
      */
-    [[nodiscard]] virtual std::optional<std::string> checkStart(const Fleet& fleet, const Planet& target) const;
+    [[nodiscard]] virtual std::optional<std::string> checkStart(const Fleet& fleet,
+                                                                const Planet& target) const;
 
     /**
      * @brief One on-station step; elapsed() already includes dt.

@@ -14,20 +14,20 @@
 
 namespace CppVerseHub::Memory {
 
-    void runDemo(std::ostream& out) {
-        using Showcase = void (*)(std::ostream&);
-        constexpr Showcase showcases[] = {demonstrateCustomAllocators, demonstrateMemoryPools, demonstrateRAII,
-                                          demonstrateSmartPointers};
-        for (const Showcase showcase : showcases) {
-            try {
-                showcase(out);
-            } catch (const std::exception& e) {
-                out << "[memory demo error] " << e.what() << "\n";
-            } catch (...) {
-                out << "[memory demo error] unknown exception\n";
-            }
-            out << "\n";
+void runDemo(std::ostream& out) {
+    using Showcase = void (*)(std::ostream&);
+    constexpr Showcase showcases[] = {demonstrateCustomAllocators, demonstrateMemoryPools, demonstrateRAII,
+                                      demonstrateSmartPointers};
+    for (const Showcase showcase : showcases) {
+        try {
+            showcase(out);
+        } catch (const std::exception& e) {
+            out << "[memory demo error] " << e.what() << "\n";
+        } catch (...) {
+            out << "[memory demo error] unknown exception\n";
         }
+        out << "\n";
     }
+}
 
 } // namespace CppVerseHub::Memory

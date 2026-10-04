@@ -36,7 +36,8 @@ std::vector<std::string_view> splitFields(std::string_view line, char delimiter)
     std::size_t start = 0;
     while (true) {
         const std::size_t pos = line.find(delimiter, start);
-        fields.push_back(line.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start));
+        fields.push_back(
+            line.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start));
         if (pos == std::string_view::npos) {
             break;
         }
@@ -56,7 +57,7 @@ T parseNumber(std::string_view text) {
     return value;
 }
 
-}  // namespace
+} // namespace
 
 // ===== Core =====
 
@@ -87,19 +88,19 @@ std::string IdGenerator::next() {
     return prefix_ + '-' + std::to_string(++counter_);
 }
 
-}  // namespace v1
-}  // namespace SpaceGame::Core
+} // namespace v1
+} // namespace SpaceGame::Core
 
 // ===== Entities =====
 
 namespace SpaceGame::Entities {
 
 Planet::Planet(int id, std::string name, Core::Vec3 position, long long population, bool habitable)
-    : id_(id),
-      name_(std::move(name)),
-      position_(position),
-      population_(population < 0 ? 0 : population),
-      habitable_(habitable) {}
+    : id_(id)
+    , name_(std::move(name))
+    , position_(position)
+    , population_(population < 0 ? 0 : population)
+    , habitable_(habitable) {}
 
 void Planet::update(double deltaTime) {
     if (habitable_ && deltaTime > 0.0 && population_ > 0) {
@@ -119,7 +120,11 @@ double Planet::distanceTo(const Planet& other) const noexcept {
 }
 
 Starship::Starship(int id, std::string name, std::string classType, Core::Vec3 position, int crewSize)
-    : id_(id), name_(std::move(name)), classType_(std::move(classType)), position_(position), crewSize_(crewSize) {}
+    : id_(id)
+    , name_(std::move(name))
+    , classType_(std::move(classType))
+    , position_(position)
+    , crewSize_(crewSize) {}
 
 void Starship::update(double deltaTime) {
     if (deltaTime <= 0.0) {
@@ -128,7 +133,7 @@ void Starship::update(double deltaTime) {
     const Core::Vec3 step{velocity_.x * deltaTime, velocity_.y * deltaTime, velocity_.z * deltaTime};
     const double distance = Core::calculateDistance({}, step);
     if (!hasEnoughFuelFor(distance)) {
-        velocity_ = {};  // out of fuel: drift to a halt
+        velocity_ = {}; // out of fuel: drift to a halt
         return;
     }
     position_ = {position_.x + step.x, position_.y + step.y, position_.z + step.z};
@@ -141,7 +146,7 @@ void Starship::refuel(double amount) noexcept {
     }
 }
 
-}  // namespace SpaceGame::Entities
+} // namespace SpaceGame::Entities
 
 // ===== Missions =====
 
@@ -180,11 +185,11 @@ std::string_view toString(MissionType t) noexcept {
 }
 
 Mission::Mission(int id, std::string name, MissionType type, double estimatedDuration, int priority)
-    : id_(id),
-      name_(std::move(name)),
-      type_(type),
-      priority_(priority),
-      estimatedDuration_(estimatedDuration > 0.0 ? estimatedDuration : 1.0) {}
+    : id_(id)
+    , name_(std::move(name))
+    , type_(type)
+    , priority_(priority)
+    , estimatedDuration_(estimatedDuration > 0.0 ? estimatedDuration : 1.0) {}
 
 bool Mission::start() noexcept {
     if (status_ != MissionStatus::Pending) {
@@ -268,10 +273,11 @@ std::unique_ptr<Mission> MissionFactory::create(int id, MissionType type, const 
             priority = 4;
             break;
     }
-    return std::make_unique<Mission>(id, std::string(toString(type)) + ": " + target, type, duration, priority);
+    return std::make_unique<Mission>(id, std::string(toString(type)) + ": " + target, type, duration,
+                                     priority);
 }
 
-}  // namespace SpaceGame::Missions
+} // namespace SpaceGame::Missions
 
 // ===== Fleet =====
 
@@ -287,7 +293,8 @@ void FleetFormation::addShip(std::unique_ptr<Entities::Starship> ship) {
 }
 
 std::unique_ptr<Entities::Starship> FleetFormation::removeShip(int shipId) {
-    auto it = std::find_if(ships_.begin(), ships_.end(), [shipId](const auto& s) { return s->getId() == shipId; });
+    auto it = std::find_if(ships_.begin(), ships_.end(),
+                           [shipId](const auto& s) { return s->getId() == shipId; });
     if (it == ships_.end()) {
         return nullptr;
     }
@@ -327,7 +334,8 @@ void FleetFormation::update(double deltaTime) {
         m->update(deltaTime);
     }
     const auto before = missions_.size();
-    std::erase_if(missions_, [](const auto& m) { return m->getStatus() == Missions::MissionStatus::Completed; });
+    std::erase_if(missions_,
+                  [](const auto& m) { return m->getStatus() == Missions::MissionStatus::Completed; });
     completedMissions_ += before - missions_.size();
 }
 
@@ -356,7 +364,7 @@ int FleetFormation::getTotalCrewSize() const noexcept {
     return total;
 }
 
-}  // namespace SpaceGame::Fleet
+} // namespace SpaceGame::Fleet
 
 // ===== System =====
 
@@ -421,7 +429,8 @@ std::vector<const Entities::Planet*> GameUniverse::findHabitablePlanets() const 
     return result;
 }
 
-std::vector<const Missions::Mission*> GameUniverse::findMissionsByStatus(Missions::MissionStatus status) const {
+std::vector<const Missions::Mission*> GameUniverse::findMissionsByStatus(
+    Missions::MissionStatus status) const {
     std::vector<const Missions::Mission*> result;
     for (const auto& m : missions_) {
         if (m->getStatus() == status) {
@@ -447,16 +456,16 @@ std::vector<std::string> GameUniverse::getUniverseReport() const {
     lines.push_back(header.str());
     for (const auto& f : fleets_) {
         std::ostringstream os;
-        os << std::fixed << std::setprecision(1) << "fleet " << f->getName() << " (" << f->getCommander().rank << ' '
-           << f->getCommander().name << "): ships=" << f->getShipCount() << " crew=" << f->getTotalCrewSize()
-           << " fuel=" << f->getAverageFuelLevel() << "% active=" << f->getActiveMissionCount()
-           << " completed=" << f->getCompletedMissionCount();
+        os << std::fixed << std::setprecision(1) << "fleet " << f->getName() << " (" << f->getCommander().rank
+           << ' ' << f->getCommander().name << "): ships=" << f->getShipCount()
+           << " crew=" << f->getTotalCrewSize() << " fuel=" << f->getAverageFuelLevel()
+           << "% active=" << f->getActiveMissionCount() << " completed=" << f->getCompletedMissionCount();
         lines.push_back(os.str());
     }
     for (const auto& m : missions_) {
         std::ostringstream os;
-        os << std::fixed << std::setprecision(1) << "mission " << m->getName() << ": " << toString(m->getStatus())
-           << ' ' << m->getProgress() << '%';
+        os << std::fixed << std::setprecision(1) << "mission " << m->getName() << ": "
+           << toString(m->getStatus()) << ' ' << m->getProgress() << '%';
         lines.push_back(os.str());
     }
     return lines;
@@ -508,14 +517,16 @@ GameUniverse GameUniverse::createSample() {
     u.addPlanet(std::make_unique<Planet>(3, "Kepler-442b", Core::Vec3{300, 400, 0}, 1'000'000LL, true));
     u.addPlanet(std::make_unique<Planet>(4, "Proxima-b", Core::Vec3{-120, 80, 30}, 0, true));
 
-    auto alpha = std::make_unique<Fleet::FleetFormation>(1, "Alpha", Fleet::FleetCommander{"Zhang", "Admiral", 9});
+    auto alpha = std::make_unique<Fleet::FleetFormation>(1, "Alpha",
+                                                         Fleet::FleetCommander{"Zhang", "Admiral", 9});
     auto explorer = std::make_unique<Starship>(101, "Explorer", "Science", Core::Vec3{}, 150);
     explorer->setVelocity({10, 0, 0});
     alpha->addShip(std::move(explorer));
     alpha->addShip(std::make_unique<Starship>(102, "Guardian", "Battleship", Core::Vec3{}, 300));
     alpha->assignMission(MissionFactory::create(1, MissionType::Rescue, "Mars orbit"));
 
-    auto beta = std::make_unique<Fleet::FleetFormation>(2, "Beta", Fleet::FleetCommander{"Okafor", "Captain", 4});
+    auto beta = std::make_unique<Fleet::FleetFormation>(2, "Beta",
+                                                        Fleet::FleetCommander{"Okafor", "Captain", 4});
     beta->addShip(std::make_unique<Starship>(201, "Trader", "Freighter", Core::Vec3{50, 0, 0}, 40));
     beta->assignMission(MissionFactory::create(2, MissionType::Trade, "Earth-Mars route"));
 
@@ -529,18 +540,21 @@ GameUniverse GameUniverse::createSample() {
     return u;
 }
 
-}  // namespace SpaceGame::System
+} // namespace SpaceGame::System
 
 // ===== Module metadata =====
 
 std::vector<ModuleUnit> moduleGraph() {
     return {
-        {"CppVerseHub.SpaceGame.Core", {}, {"Vec3", "IEntity", "IdGenerator", "calculateDistance",
-                                            "parseCommaSeparatedList"}},
+        {"CppVerseHub.SpaceGame.Core",
+         {},
+         {"Vec3", "IEntity", "IdGenerator", "calculateDistance", "parseCommaSeparatedList"}},
         {"CppVerseHub.SpaceGame.Entities", {"CppVerseHub.SpaceGame.Core"}, {"Planet", "Starship"}},
-        {"CppVerseHub.SpaceGame.Missions", {"CppVerseHub.SpaceGame.Core"},
+        {"CppVerseHub.SpaceGame.Missions",
+         {"CppVerseHub.SpaceGame.Core"},
          {"MissionStatus", "MissionType", "Mission", "MissionFactory"}},
-        {"CppVerseHub.SpaceGame.Fleet", {"CppVerseHub.SpaceGame.Entities", "CppVerseHub.SpaceGame.Missions"},
+        {"CppVerseHub.SpaceGame.Fleet",
+         {"CppVerseHub.SpaceGame.Entities", "CppVerseHub.SpaceGame.Missions"},
          {"FleetCommander", "FleetFormation"}},
         {"CppVerseHub.SpaceGame.System",
          {"CppVerseHub.SpaceGame.Core", "CppVerseHub.SpaceGame.Entities", "CppVerseHub.SpaceGame.Missions",
@@ -558,7 +572,7 @@ std::optional<std::vector<std::string>> topologicalBuildOrder(const std::vector<
     for (const auto& unit : graph) {
         for (const auto& imp : unit.imports) {
             if (indegree.find(imp) == indegree.end()) {
-                return std::nullopt;  // import of an unknown module
+                return std::nullopt; // import of an unknown module
             }
             ++indegree[unit.name];
             dependents[imp].push_back(unit.name);
@@ -583,7 +597,7 @@ std::optional<std::vector<std::string>> topologicalBuildOrder(const std::vector<
         }
     }
     if (order.size() != indegree.size()) {
-        return std::nullopt;  // cycle: modules may not have circular imports
+        return std::nullopt; // cycle: modules may not have circular imports
     }
     return order;
 }
@@ -607,7 +621,7 @@ std::string moduleInterfaceSketch() {
 }
 
 void demonstrateModules(std::ostream& out) {
-    using namespace SpaceGame;  // NOLINT(google-build-using-namespace) -- function scope, emulates `import`
+    using namespace SpaceGame; // NOLINT(google-build-using-namespace) -- function scope, emulates `import`
     out << "\n=== C++20 Modules (emulated with namespaces) ===\n";
     out << "Module graph and a valid build order:\n";
     if (const auto order = topologicalBuildOrder(moduleGraph())) {
@@ -643,4 +657,4 @@ void demonstrateModules(std::ostream& out) {
     out << "Serialized and restored " << restored.size() << " planets\n";
 }
 
-}  // namespace CppVerseHub::Modern::Modules
+} // namespace CppVerseHub::Modern::Modules

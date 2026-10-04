@@ -48,23 +48,23 @@ bool is_quadratic() {
            std::is_same_v<Fn, SelectionSortFn>;
 }
 
-}  // namespace
+} // namespace
 
-#define ALL_COMPARISON_SORTS                                                                                  \
-    BubbleSortFn, CocktailShakerSortFn, InsertionSortFn, BinaryInsertionSortFn, SelectionSortFn, ShellSortFn, \
-        HeapSortFn, QuickSortFn, QuickSort3WayFn, IntroSortFn, MergeSortFn, BottomUpMergeSortFn, TimSortFn,  \
-        ParallelMergeSortFn
+#define ALL_COMPARISON_SORTS                                                                                 \
+    BubbleSortFn, CocktailShakerSortFn, InsertionSortFn, BinaryInsertionSortFn, SelectionSortFn,             \
+        ShellSortFn, HeapSortFn, QuickSortFn, QuickSort3WayFn, IntroSortFn, MergeSortFn,                     \
+        BottomUpMergeSortFn, TimSortFn, ParallelMergeSortFn
 
-#define STABLE_COMPARISON_SORTS                                                                       \
-    BubbleSortFn, CocktailShakerSortFn, InsertionSortFn, BinaryInsertionSortFn, MergeSortFn,         \
+#define STABLE_COMPARISON_SORTS                                                                              \
+    BubbleSortFn, CocktailShakerSortFn, InsertionSortFn, BinaryInsertionSortFn, MergeSortFn,                 \
         BottomUpMergeSortFn, TimSortFn, ParallelMergeSortFn
 
 // ---------------------------------------------------------------------------------------------
 // Property: every comparison sort agrees with std::sort
 // ---------------------------------------------------------------------------------------------
 
-TEMPLATE_TEST_CASE("comparison sorts agree with std::sort on every pattern, size and seed", "[sorting][property]",
-                   ALL_COMPARISON_SORTS) {
+TEMPLATE_TEST_CASE("comparison sorts agree with std::sort on every pattern, size and seed",
+                   "[sorting][property]", ALL_COMPARISON_SORTS) {
     const TestType sorter{};
     for (DataPattern pattern : kAllDataPatterns) {
         for (std::size_t n : kSizes) {
@@ -156,8 +156,8 @@ TEMPLATE_TEST_CASE("comparison sorts handle move-only element types", "[sorting]
 TEST_CASE("sort function objects are constrained by concepts", "[sorting][concepts]") {
     STATIC_REQUIRE(std::invocable<const MergeSortFn&, std::vector<int>&>);
     STATIC_REQUIRE(std::invocable<const MergeSortFn&, std::vector<int>&, std::ranges::greater>);
-    STATIC_REQUIRE_FALSE(std::invocable<const MergeSortFn&, std::list<int>&>);  // not random access
-    STATIC_REQUIRE_FALSE(std::invocable<const QuickSortFn&, const std::vector<int>&>);  // not permutable
+    STATIC_REQUIRE_FALSE(std::invocable<const MergeSortFn&, std::list<int>&>);         // not random access
+    STATIC_REQUIRE_FALSE(std::invocable<const QuickSortFn&, const std::vector<int>&>); // not permutable
     STATIC_REQUIRE_FALSE(std::invocable<const QuickSort3WayFn&, std::vector<std::unique_ptr<int>>&>);
     STATIC_REQUIRE(std::invocable<const RadixSortFn&, std::vector<long long>&>);
     STATIC_REQUIRE_FALSE(std::invocable<const RadixSortFn&, std::vector<double>&>);
@@ -190,7 +190,7 @@ TEST_CASE("counting sort matches std::sort and is stable", "[sorting][counting][
         for (std::uint64_t seed = 0; seed < 5; ++seed) {
             auto data = generate_data(n, DataPattern::FewUnique, seed);
             for (int& x : data) {
-                x -= 4;  // include negatives
+                x -= 4; // include negatives
             }
             auto expected = data;
             std::sort(expected.begin(), expected.end());
@@ -199,7 +199,8 @@ TEST_CASE("counting sort matches std::sort and is stable", "[sorting][counting][
 
             auto recs = make_records(n, 6, seed);
             auto stable = recs;
-            std::stable_sort(stable.begin(), stable.end(), [](const Rec& a, const Rec& b) { return a.key < b.key; });
+            std::stable_sort(stable.begin(), stable.end(),
+                             [](const Rec& a, const Rec& b) { return a.key < b.key; });
             counting_sort(recs, &Rec::key);
             REQUIRE(recs == stable);
         }
@@ -220,7 +221,8 @@ TEST_CASE("radix sort handles signed extremes, all widths and is stable", "[sort
     SECTION("int with full range including INT_MIN/INT_MAX") {
         for (std::uint64_t seed = 0; seed < 8; ++seed) {
             std::mt19937_64 rng(seed);
-            std::uniform_int_distribution<int> dist(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+            std::uniform_int_distribution<int> dist(std::numeric_limits<int>::min(),
+                                                    std::numeric_limits<int>::max());
             std::vector<int> data(500);
             for (int& x : data) {
                 x = dist(rng);
@@ -287,7 +289,8 @@ TEST_CASE("bucket sort orders floating-point keys stably", "[sorting][bucket][pr
 
     auto recs = make_records(300, 5, 9);
     auto expected = recs;
-    std::stable_sort(expected.begin(), expected.end(), [](const Rec& a, const Rec& b) { return a.key < b.key; });
+    std::stable_sort(expected.begin(), expected.end(),
+                     [](const Rec& a, const Rec& b) { return a.key < b.key; });
     bucket_sort(recs, [](const Rec& r) { return static_cast<double>(r.key); });
     REQUIRE(recs == expected);
 }
@@ -299,8 +302,8 @@ TEST_CASE("bucket sort orders floating-point keys stably", "[sorting][bucket][pr
 TEST_CASE("adaptive sorts use n-1 comparisons on sorted input", "[sorting][complexity]") {
     const std::size_t n = GENERATE(1u, 2u, 17u, 1000u, 1024u);
     auto data = generate_data(n, DataPattern::Sorted);
-    for (SortAlgorithm a : {SortAlgorithm::Insertion, SortAlgorithm::Merge, SortAlgorithm::Tim,
-                            SortAlgorithm::Bubble}) {
+    for (SortAlgorithm a :
+         {SortAlgorithm::Insertion, SortAlgorithm::Merge, SortAlgorithm::Tim, SortAlgorithm::Bubble}) {
         auto copy = data;
         CAPTURE(sort_algorithm_info(a).name, n);
         REQUIRE(sort_ints(a, copy) == n - 1);
@@ -315,9 +318,9 @@ TEST_CASE("comparison counts respect the documented asymptotic bounds", "[sortin
     auto sel = random;
     REQUIRE(sort_ints(SortAlgorithm::Selection, sel) == n * (n - 1) / 2);
 
-    for (SortAlgorithm a : {SortAlgorithm::Heap, SortAlgorithm::Merge, SortAlgorithm::BottomUpMerge,
-                            SortAlgorithm::Tim, SortAlgorithm::Intro, SortAlgorithm::Quick,
-                            SortAlgorithm::Quick3Way}) {
+    for (SortAlgorithm a :
+         {SortAlgorithm::Heap, SortAlgorithm::Merge, SortAlgorithm::BottomUpMerge, SortAlgorithm::Tim,
+          SortAlgorithm::Intro, SortAlgorithm::Quick, SortAlgorithm::Quick3Way}) {
         auto copy = random;
         CAPTURE(sort_algorithm_info(a).name);
         const auto cmps = static_cast<double>(sort_ints(a, copy));
@@ -396,7 +399,8 @@ TEST_CASE("generate_data is deterministic and produces the requested shapes", "[
 TEST_CASE("parallel merge sort matches std::stable_sort on large inputs", "[sorting][parallel]") {
     auto recs = make_records(200'000, 1000, 77);
     auto expected = recs;
-    std::stable_sort(expected.begin(), expected.end(), [](const Rec& a, const Rec& b) { return a.key < b.key; });
+    std::stable_sort(expected.begin(), expected.end(),
+                     [](const Rec& a, const Rec& b) { return a.key < b.key; });
     parallel_merge_sort(recs, {}, &Rec::key);
     REQUIRE(recs == expected);
 
@@ -461,5 +465,5 @@ TEST_CASE("sorting demo prints every algorithm without failures", "[sorting][dem
         REQUIRE(s.find(std::string(sort_algorithm_info(a).name)) != std::string::npos);
     }
     REQUIRE(s.find("FAILED") == std::string::npos);
-    REQUIRE(s.find("1b 1e 2d 3a 3c 3f") != std::string::npos);  // stable order of ties
+    REQUIRE(s.find("1b 1e 2d 3a 3c 3f") != std::string::npos); // stable order of ties
 }

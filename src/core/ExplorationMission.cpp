@@ -4,13 +4,13 @@
  */
 #include "core/ExplorationMission.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include "core/EventSystem.hpp"
 #include "core/Events.hpp"
 #include "core/Exceptions.hpp"
 #include "core/Galaxy.hpp"
 #include "core/Random.hpp"
+
+#include <nlohmann/json.hpp>
 
 namespace CppVerseHub::Core {
 
@@ -31,7 +31,8 @@ ExplorationMission::ExplorationMission(MissionId id, const nlohmann::json& param
     }
 }
 
-Mission::StepOutcome ExplorationMission::execute(MissionContext& ctx, Fleet& fleet, Planet& target, double dt) {
+Mission::StepOutcome ExplorationMission::execute(MissionContext& ctx, Fleet& fleet, Planet& target,
+                                                 double dt) {
     static_cast<void>(fleet);
     static_cast<void>(dt);
     if (!durationElapsed()) {

@@ -10,11 +10,11 @@
  */
 #pragma once
 
+#include "core/Identifiers.hpp"
+
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-
-#include "core/Identifiers.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -50,8 +50,8 @@ public:
      */
     explicit EntityNotFoundException(EntityId id, const std::string& detail = {})
         : CoreException("entity #" + std::to_string(id.value()) + " not found" +
-                        (detail.empty() ? std::string{} : ": " + detail)),
-          id_(id) {}
+                        (detail.empty() ? std::string{} : ": " + detail))
+        , id_(id) {}
 
     /// @brief The id that was looked up. @return Entity id.
     [[nodiscard]] EntityId id() const noexcept { return id_; }
@@ -74,8 +74,9 @@ public:
                                    std::int64_t available)
         : CoreException("insufficient " + resourceName + " in account #" + std::to_string(account.value()) +
                         ": requested " + std::to_string(requested) + ", available " +
-                        std::to_string(available)),
-          requested_(requested), available_(available) {}
+                        std::to_string(available))
+        , requested_(requested)
+        , available_(available) {}
 
     /// @brief Requested amount. @return Amount.
     [[nodiscard]] std::int64_t requested() const noexcept { return requested_; }
@@ -98,7 +99,8 @@ public:
 class SerializationException : public CoreException {
 public:
     /// @brief Construct with a message. @param message Description.
-    explicit SerializationException(const std::string& message) : CoreException("serialization: " + message) {}
+    explicit SerializationException(const std::string& message)
+        : CoreException("serialization: " + message) {}
 };
 
 } // namespace CppVerseHub::Core

@@ -1,3 +1,5 @@
+#include "modern/RangesDemo.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -6,8 +8,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "modern/RangesDemo.hpp"
 
 using namespace CppVerseHub::Modern::Ranges;
 
@@ -43,14 +43,15 @@ TEST_CASE("topByPopulation sorts by projection", "[modern][ranges]") {
 }
 
 TEST_CASE("totalPopulation sums a projected view", "[modern][ranges]") {
-    CHECK(totalPopulation(generatePlanets()) == 8'000'000'000LL + 2'000'000LL + 15'000'000LL + 50'000'000LL + 1'000LL);
+    CHECK(totalPopulation(generatePlanets()) ==
+          8'000'000'000LL + 2'000'000LL + 15'000'000LL + 50'000'000LL + 1'000LL);
     CHECK(totalPopulation({}) == 0);
 }
 
 TEST_CASE("readyFleetIds applies all criteria", "[modern][ranges]") {
     const auto fleets = generateFleets();
     CHECK(readyFleetIds(fleets, 60.0, 10) == std::vector<int>{1, 6});
-    CHECK(readyFleetIds(fleets, 0.0, 0) == std::vector<int>{1, 2, 3, 5, 6});  // fleet 4 inactive
+    CHECK(readyFleetIds(fleets, 0.0, 0) == std::vector<int>{1, 2, 3, 5, 6}); // fleet 4 inactive
     CHECK(readyFleetIds(fleets, 100.0, 0).empty());
 }
 
@@ -112,7 +113,7 @@ TEST_CASE("EveryNthView yields every n-th element", "[modern][ranges]") {
     CHECK(toVector(v | everyNth(1)) == v);
     CHECK(toVector(v | everyNth(10)) == std::vector<int>{0});
     CHECK(toVector(v | everyNth(25)) == std::vector<int>{0});
-    CHECK(toVector(v | everyNth(0)) == v);  // invalid strides are clamped to 1
+    CHECK(toVector(v | everyNth(0)) == v); // invalid strides are clamped to 1
     CHECK(toVector(std::vector<int>{} | everyNth(2)).empty());
 }
 
@@ -121,7 +122,8 @@ TEST_CASE("EveryNthView composes with standard adaptors", "[modern][ranges]") {
     auto view = l | everyNth(2) | std::views::transform([](int x) { return x * 10; });
     CHECK(toVector(view) == std::vector<int>{10, 30, 50, 70});
     CHECK(toVector(std::views::iota(0, 20) | everyNth(7)) == std::vector<int>{0, 7, 14});
-    CHECK(toVector(std::views::iota(0, 12) | std::views::reverse | everyNth(5)) == std::vector<int>{11, 6, 1});
+    CHECK(toVector(std::views::iota(0, 12) | std::views::reverse | everyNth(5)) ==
+          std::vector<int>{11, 6, 1});
     STATIC_CHECK(std::ranges::forward_range<decltype(view)>);
 }
 

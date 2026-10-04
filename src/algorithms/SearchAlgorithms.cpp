@@ -46,13 +46,17 @@ constexpr std::uint64_t add61(std::uint64_t a, std::uint64_t b) noexcept {
     return s >= kMod ? s - kMod : s;
 }
 
-constexpr std::uint64_t sub61(std::uint64_t a, std::uint64_t b) noexcept { return a >= b ? a - b : a + kMod - b; }
+constexpr std::uint64_t sub61(std::uint64_t a, std::uint64_t b) noexcept {
+    return a >= b ? a - b : a + kMod - b;
+}
 
 constexpr std::uint64_t kHashBase = 1'000'003;
 
-std::uint64_t byte_of(char c) noexcept { return static_cast<std::uint64_t>(static_cast<unsigned char>(c)) + 1; }
+std::uint64_t byte_of(char c) noexcept {
+    return static_cast<std::uint64_t>(static_cast<unsigned char>(c)) + 1;
+}
 
-}  // namespace
+} // namespace
 
 // --------------------------------------------------------------------------------------------
 // Exact string matching
@@ -118,7 +122,7 @@ std::vector<std::size_t> rabin_karp_search(std::string_view text, std::string_vi
     }
     std::uint64_t hp = 0;
     std::uint64_t ht = 0;
-    std::uint64_t high = 1;  // base^(m-1)
+    std::uint64_t high = 1; // base^(m-1)
     for (std::size_t i = 0; i < m; ++i) {
         hp = add61(mul61(hp, kHashBase), byte_of(pattern[i]));
         ht = add61(mul61(ht, kHashBase), byte_of(text[i]));
@@ -147,7 +151,7 @@ std::vector<std::size_t> z_function(std::string_view s) {
     }
     z[0] = n;
     std::size_t l = 0;
-    std::size_t r = 0;  // [l, r) is the rightmost window matching a prefix
+    std::size_t r = 0; // [l, r) is the rightmost window matching a prefix
     for (std::size_t i = 1; i < n; ++i) {
         if (i < r) {
             z[i] = std::min(r - i, z[i - l]);
@@ -243,7 +247,8 @@ std::vector<AhoCorasick::Match> AhoCorasick::find_all(std::string_view text) con
     std::size_t state = 0;
     for (std::size_t i = 0; i < text.size(); ++i) {
         state = static_cast<std::size_t>(nodes_[state].next[static_cast<unsigned char>(text[i])]);
-        for (auto s = static_cast<std::int32_t>(state); s > 0; s = nodes_[static_cast<std::size_t>(s)].dict_link) {
+        for (auto s = static_cast<std::int32_t>(state); s > 0;
+             s = nodes_[static_cast<std::size_t>(s)].dict_link) {
             for (std::size_t p : nodes_[static_cast<std::size_t>(s)].output) {
                 matches.push_back(Match{i + 1 - patterns_[p].size(), p});
             }
@@ -257,7 +262,8 @@ std::vector<AhoCorasick::Match> AhoCorasick::find_all(std::string_view text) con
 // Suffix array
 // --------------------------------------------------------------------------------------------
 
-SuffixArray::SuffixArray(std::string text) : text_(std::move(text)), sa_(text_.size()), lcp_(text_.size(), 0) {
+SuffixArray::SuffixArray(std::string text)
+    : text_(std::move(text)), sa_(text_.size()), lcp_(text_.size(), 0) {
     const std::size_t n = text_.size();
     if (n == 0) {
         return;
@@ -278,7 +284,7 @@ SuffixArray::SuffixArray(std::string text) : text_(std::move(text)), sa_(text_.s
         }
         rank.swap(tmp);
         if (rank[sa_[n - 1]] == n - 1 || k >= n) {
-            break;  // all ranks distinct
+            break; // all ranks distinct
         }
     }
     // Kasai: rank[] is now the inverse permutation of sa_.
@@ -345,15 +351,15 @@ std::string SuffixArray::longest_repeated_substring() const {
 
 std::size_t levenshtein_distance(std::string_view a, std::string_view b) {
     if (a.size() < b.size()) {
-        std::swap(a, b);  // b is the shorter: O(min) space
+        std::swap(a, b); // b is the shorter: O(min) space
     }
     std::vector<std::size_t> row(b.size() + 1);
     std::iota(row.begin(), row.end(), std::size_t{0});
     for (std::size_t i = 1; i <= a.size(); ++i) {
-        std::size_t diag = row[0];  // D[i-1][j-1]
+        std::size_t diag = row[0]; // D[i-1][j-1]
         row[0] = i;
         for (std::size_t j = 1; j <= b.size(); ++j) {
-            const std::size_t up = row[j];  // D[i-1][j]
+            const std::size_t up = row[j]; // D[i-1][j]
             const std::size_t cost = a[i - 1] == b[j - 1] ? 0 : 1;
             row[j] = std::min({up + 1, row[j - 1] + 1, diag + cost});
             diag = up;
@@ -397,7 +403,7 @@ void print_positions(std::ostream& out, std::string_view label, const std::vecto
     out << "]\n";
 }
 
-}  // namespace
+} // namespace
 
 void demonstrate_searching(std::ostream& out) {
     out << "=== Sequence search ===\n";
@@ -410,14 +416,15 @@ void demonstrate_searching(std::ostream& out) {
     out << "equal_range size    -> " << equal_range(sorted, target).size() << '\n';
     out << "exponential_search  -> index " << (exponential_search(sorted, 21) - sorted.begin()) << " (21)\n";
     out << "jump_search         -> index " << (jump_search(sorted, 55) - sorted.begin()) << " (55)\n";
-    out << "interpolation_search-> index " << (interpolation_search(sorted, 34) - sorted.begin()) << " (34)\n";
+    out << "interpolation_search-> index " << (interpolation_search(sorted, 34) - sorted.begin())
+        << " (34)\n";
     out << "binary_search(4)    -> " << std::boolalpha << binary_search(sorted, 4) << '\n';
 
     struct Planet {
         std::string name;
         double distance_au;
     };
-    const std::vector<Planet> planets{{"Mercury", 0.39}, {"Venus", 0.72}, {"Earth", 1.0},
+    const std::vector<Planet> planets{{"Mercury", 0.39}, {"Venus", 0.72},  {"Earth", 1.0},
                                       {"Mars", 1.52},    {"Jupiter", 5.2}, {"Saturn", 9.54}};
     const auto first_outer = upper_bound(planets, 1.6, {}, &Planet::distance_au);
     out << "first planet beyond 1.6 AU (projection) -> " << first_outer->name << '\n';
@@ -452,13 +459,13 @@ void demonstrate_searching(std::ostream& out) {
     for (std::size_t s : sa.suffixes()) {
         out << ' ' << s;
     }
-    out << "; count(\"ana\") = " << sa.count("ana") << "; longest repeat = \"" << sa.longest_repeated_substring()
-        << "\"\n";
+    out << "; count(\"ana\") = " << sa.count("ana") << "; longest repeat = \""
+        << sa.longest_repeated_substring() << "\"\n";
 
     out << "=== Approximate search ===\n";
     out << "levenshtein(kitten, sitting) = " << levenshtein_distance("kitten", "sitting") << '\n';
-    const std::vector<std::string> dict{"mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus",
-                                        "neptune"};
+    const std::vector<std::string> dict{"mercury", "venus",  "earth",  "mars",
+                                        "jupiter", "saturn", "uranus", "neptune"};
     out << "fuzzy_search(\"satrun\", 2):";
     for (const auto& m : fuzzy_search(dict, "satrun", 2)) {
         out << ' ' << m.word << '(' << m.distance << ')';
@@ -485,4 +492,4 @@ void demonstrate_searching(std::ostream& out) {
     out << "stars within 25 units of origin: " << tree.within_radius(probe, 25.0).size() << '\n';
 }
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms

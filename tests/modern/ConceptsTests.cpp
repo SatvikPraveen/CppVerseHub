@@ -1,3 +1,5 @@
+#include "modern/ConceptsAdvanced.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -6,8 +8,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "modern/ConceptsAdvanced.hpp"
 
 using namespace CppVerseHub::Modern::Concepts;
 using Catch::Approx;
@@ -20,7 +20,7 @@ struct NoVelocity {
     double getZ() const { return 0; }
     void setPosition(double, double, double) {}
 };
-}  // namespace
+} // namespace
 
 TEST_CASE("Basic concepts accept and reject the expected types", "[modern][concepts]") {
     STATIC_CHECK(Numeric<int>);
@@ -97,7 +97,7 @@ TEST_CASE("Overload resolution picks the most constrained classify", "[modern][c
     CHECK(classify(1) == "integral");
     CHECK(classify(1UL) == "integral");
     CHECK(classify(2.5f) == "numeric");
-    CHECK(classify(true) == "generic");  // bool is excluded from Numeric
+    CHECK(classify(true) == "generic"); // bool is excluded from Numeric
     CHECK(classify(std::vector<int>{}) == "random-access container");
     CHECK(classify(std::list<int>{}) == "container");
     CHECK(classify(DemoEntity{}) == "space entity");

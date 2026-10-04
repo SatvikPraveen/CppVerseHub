@@ -1,3 +1,5 @@
+#include "modern/StructuredBindings.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -6,8 +8,6 @@
 #include <string>
 #include <type_traits>
 #include <vector>
-
-#include "modern/StructuredBindings.hpp"
 
 using namespace CppVerseHub::Modern::StructuredBindings;
 using Catch::Approx;
@@ -34,7 +34,7 @@ TEST_CASE("findBestFleet returns the highest score or nullopt", "[modern][bindin
     const auto best = findBestFleet(sampleFleets());
     REQUIRE(best.has_value());
     const auto& [commander, score] = *best;
-    CHECK(commander == "Zhang");  // 12*0.85 = 10.2 beats 20*0.45 = 9.0
+    CHECK(commander == "Zhang"); // 12*0.85 = 10.2 beats 20*0.45 = 9.0
     CHECK(score == Approx(10.2));
 }
 
@@ -82,7 +82,7 @@ TEST_CASE("shipsByMission and busiestMission decompose map entries", "[modern][b
     CHECK(totals.at("Trade") == 15);
     const auto busiest = busiestMission(totals);
     REQUIRE(busiest);
-    CHECK(busiest->first == "Combat");  // tie broken by key order
+    CHECK(busiest->first == "Combat"); // tie broken by key order
     CHECK_FALSE(busiestMission({}).has_value());
 }
 
@@ -95,7 +95,7 @@ TEST_CASE("ShipRecord supports the tuple-like protocol", "[modern][bindings]") {
     CHECK(name == "Nova");
     crew = 55;
     CHECK(r.crew() == 55);
-    auto [cid, cname, ccrew] = r;  // by-value binding copies the record
+    auto [cid, cname, ccrew] = r; // by-value binding copies the record
     ccrew = 1;
     CHECK(r.crew() == 55);
     CHECK(cname == "Nova");

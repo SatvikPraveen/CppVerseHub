@@ -230,10 +230,10 @@ public:
 
     /** @brief Steal storage. @param other source, left empty */
     DynamicArray(DynamicArray&& other) noexcept
-        : data_(std::exchange(other.data_, nullptr)),
-          size_(std::exchange(other.size_, 0)),
-          capacity_(std::exchange(other.capacity_, 0)),
-          alloc_(std::move(other.alloc_)) {}
+        : data_(std::exchange(other.data_, nullptr))
+        , size_(std::exchange(other.size_, 0))
+        , capacity_(std::exchange(other.capacity_, 0))
+        , alloc_(std::move(other.alloc_)) {}
 
     /** @brief Destroy elements and free storage. */
     ~DynamicArray() { release_storage(); }
@@ -755,7 +755,7 @@ public:
 
     /** @brief Converting move-assignment. @param other source @return *this */
     template <typename U, typename E>
-        requires(std::convertible_to<U*, T*> && !std::is_array_v<U> && std::assignable_from<Deleter&, E&&>)
+        requires(std::convertible_to<U*, T*> && !std::is_array_v<U> && std::assignable_from<Deleter&, E &&>)
     constexpr UniquePtr& operator=(UniquePtr<U, E>&& other) noexcept {
         reset(other.release());
         deleter_ = std::move(other.get_deleter());
@@ -1101,7 +1101,9 @@ public:
     /** @return managed pointer */
     [[nodiscard]] T* operator->() const noexcept { return ptr_; }
     /** @return number of SharedPtr instances sharing ownership (0 if empty) */
-    [[nodiscard]] std::size_t use_count() const noexcept { return block_ != nullptr ? block_->use_count() : 0; }
+    [[nodiscard]] std::size_t use_count() const noexcept {
+        return block_ != nullptr ? block_->use_count() : 0;
+    }
     /** @return true if get() != nullptr */
     [[nodiscard]] explicit operator bool() const noexcept { return ptr_ != nullptr; }
 
@@ -1125,7 +1127,9 @@ public:
         return a.get() == b.get();
     }
     /** @return true if empty */
-    [[nodiscard]] friend bool operator==(const SharedPtr& a, std::nullptr_t) noexcept { return a.ptr_ == nullptr; }
+    [[nodiscard]] friend bool operator==(const SharedPtr& a, std::nullptr_t) noexcept {
+        return a.ptr_ == nullptr;
+    }
 
 private:
     template <typename>
@@ -1196,7 +1200,9 @@ public:
     }
 
     /** @return number of owners of the observed object */
-    [[nodiscard]] std::size_t use_count() const noexcept { return block_ != nullptr ? block_->use_count() : 0; }
+    [[nodiscard]] std::size_t use_count() const noexcept {
+        return block_ != nullptr ? block_->use_count() : 0;
+    }
     /** @return true if the observed object has been destroyed (or nothing is observed) */
     [[nodiscard]] bool expired() const noexcept { return use_count() == 0; }
 
@@ -1233,7 +1239,8 @@ template <typename T>
 class Optional {
     static_assert(!std::is_reference_v<T>, "Optional<T&> is not supported");
     static_assert(!std::is_same_v<std::remove_cv_t<T>, std::nullopt_t>, "Optional<nullopt_t> is ill-formed");
-    static_assert(!std::is_same_v<std::remove_cv_t<T>, std::in_place_t>, "Optional<in_place_t> is ill-formed");
+    static_assert(!std::is_same_v<std::remove_cv_t<T>, std::in_place_t>,
+                  "Optional<in_place_t> is ill-formed");
 
     template <typename U>
     static constexpr bool is_value_arg = std::constructible_from<T, U&&> &&

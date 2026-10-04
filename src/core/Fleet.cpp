@@ -4,18 +4,19 @@
  */
 #include "core/Fleet.hpp"
 
+#include "core/Exceptions.hpp"
+
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <sstream>
 
-#include <nlohmann/json.hpp>
-
-#include "core/Exceptions.hpp"
-
 namespace CppVerseHub::Core {
 
-Fleet::Fleet(EntityId id, std::string name, const Vector3D& position) : Entity(id, std::move(name), position) {}
+Fleet::Fleet(EntityId id, std::string name, const Vector3D& position)
+    : Entity(id, std::move(name), position) {}
 
 Fleet::Fleet(EntityId id, const nlohmann::json& params) : Entity(id, params) {
     try {
@@ -187,11 +188,14 @@ ResourceFlows Fleet::resourceFlows() const {
     return flows;
 }
 
-void Fleet::onResourceTick(const ResourceAmounts& shortfall) { lowPower_ = shortfall[ResourceType::Energy] > 0; }
+void Fleet::onResourceTick(const ResourceAmounts& shortfall) {
+    lowPower_ = shortfall[ResourceType::Energy] > 0;
+}
 
 std::string Fleet::describe() const {
     std::ostringstream os;
-    os << Entity::describe() << " ships " << ships_.size() << " attack " << attackPower() << " speed " << speed();
+    os << Entity::describe() << " ships " << ships_.size() << " attack " << attackPower() << " speed "
+       << speed();
     if (destination_) {
         os << " -> " << *destination_;
     }

@@ -1,10 +1,10 @@
+#include "core/Random.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <random>
-
-#include "core/Random.hpp"
 
 using namespace CppVerseHub::Core;
 

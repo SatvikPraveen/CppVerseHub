@@ -156,7 +156,8 @@ TEST_CASE("DynamicArray construction forms", "[templates][containers][dynamic_ar
     CHECK_THROWS_AS(from_init.at(3), std::out_of_range);
 }
 
-TEST_CASE("DynamicArray push_back grows geometrically and preserves elements", "[templates][containers][dynamic_array]") {
+TEST_CASE("DynamicArray push_back grows geometrically and preserves elements",
+          "[templates][containers][dynamic_array]") {
     DynamicArray<int> values;
     std::size_t reallocations = 0;
     std::size_t last_capacity = 0;
@@ -176,7 +177,8 @@ TEST_CASE("DynamicArray push_back grows geometrically and preserves elements", "
     CHECK(values.back() == 998);
 }
 
-TEST_CASE("DynamicArray emplace_back with an aliasing argument during reallocation", "[templates][containers][dynamic_array]") {
+TEST_CASE("DynamicArray emplace_back with an aliasing argument during reallocation",
+          "[templates][containers][dynamic_array]") {
     DynamicArray<std::string> words{"alpha"};
     REQUIRE(words.size() == words.capacity());
     words.emplace_back(words[0]); // argument refers into the buffer being reallocated
@@ -186,7 +188,8 @@ TEST_CASE("DynamicArray emplace_back with an aliasing argument during reallocati
     CHECK(words[2] == "alpha");
 }
 
-TEST_CASE("DynamicArray insert and emplace at arbitrary positions", "[templates][containers][dynamic_array]") {
+TEST_CASE("DynamicArray insert and emplace at arbitrary positions",
+          "[templates][containers][dynamic_array]") {
     DynamicArray<int> values{1, 2, 5};
     values.reserve(10);
 
@@ -320,7 +323,8 @@ TEST_CASE("DynamicArray iterators work with standard algorithms", "[templates][c
     CHECK(std::to_address(it) == values.data() + 5);
 }
 
-TEST_CASE("DynamicArray gives the strong guarantee when a copy throws during growth", "[templates][containers][dynamic_array]") {
+TEST_CASE("DynamicArray gives the strong guarantee when a copy throws during growth",
+          "[templates][containers][dynamic_array]") {
     ThrowOnCopy::live = 0;
     {
         DynamicArray<ThrowOnCopy> values;
@@ -343,7 +347,8 @@ TEST_CASE("DynamicArray gives the strong guarantee when a copy throws during gro
     CHECK(ThrowOnCopy::live == 0);
 }
 
-TEST_CASE("DynamicArray copy constructor cleans up when an element copy throws", "[templates][containers][dynamic_array]") {
+TEST_CASE("DynamicArray copy constructor cleans up when an element copy throws",
+          "[templates][containers][dynamic_array]") {
     ThrowOnCopy::live = 0;
     {
         DynamicArray<ThrowOnCopy> values;
@@ -465,7 +470,8 @@ TEST_CASE("SharedPtr reference counting", "[templates][smart_pointers]") {
     CHECK(Tracked::live == 0);
 }
 
-TEST_CASE("SharedPtr custom deleter, UniquePtr adoption, conversions and aliasing", "[templates][smart_pointers]") {
+TEST_CASE("SharedPtr custom deleter, UniquePtr adoption, conversions and aliasing",
+          "[templates][smart_pointers]") {
     int deletions = 0;
     {
         SharedPtr<int> p(new int(1), [&deletions](int* raw) {
@@ -518,7 +524,8 @@ TEST_CASE("WeakPtr observes without owning and lock() is safe", "[templates][sma
     CHECK(weak.use_count() == 0);
 }
 
-TEST_CASE("SharedPtr counts are thread-safe under concurrent copies", "[templates][smart_pointers][threads]") {
+TEST_CASE("SharedPtr counts are thread-safe under concurrent copies",
+          "[templates][smart_pointers][threads]") {
     Tracked::live = 0;
     {
         auto shared = make_shared_ptr<Tracked>(1);

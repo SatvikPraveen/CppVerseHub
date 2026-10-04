@@ -181,7 +181,7 @@ template <typename T>
 concept Numeric = Arithmetic<T> && requires(T a, T b) {
     { a + b } -> std::convertible_to<T>;
     { a - b } -> std::convertible_to<T>;
-    { a * b } -> std::convertible_to<T>;
+    { a* b } -> std::convertible_to<T>;
     { a / b } -> std::convertible_to<T>;
 };
 
@@ -195,7 +195,7 @@ concept Additive = requires(T a, T b) {
 /** @brief Types supporting `*` and `*=`. */
 template <typename T>
 concept Multiplicative = requires(T a, T b) {
-    { a * b } -> std::convertible_to<T>;
+    { a* b } -> std::convertible_to<T>;
     { a *= b } -> std::convertible_to<T&>;
 };
 
@@ -415,8 +415,8 @@ constexpr OutputIt copy_range(InputRange&& input, OutputIt output) {
  * @return iterator past the last written element
  */
 template <std::ranges::input_range InputRange, std::weakly_incrementable OutputIt, typename UnaryOp>
-    requires std::indirectly_writable<OutputIt,
-                                      std::invoke_result_t<UnaryOp&, std::ranges::range_reference_t<InputRange>>>
+    requires std::indirectly_writable<
+        OutputIt, std::invoke_result_t<UnaryOp&, std::ranges::range_reference_t<InputRange>>>
 constexpr OutputIt transform_range(InputRange&& input, OutputIt output, UnaryOp op) {
     return std::ranges::transform(input, output, op).out;
 }
@@ -533,7 +533,8 @@ public:
     /** @return const iterator past last component */
     [[nodiscard]] const_iterator end() const noexcept { return data_.end(); }
 
-    /** @brief Component-wise addition. @param other same-sized vector @return *this @throws std::invalid_argument */
+    /** @brief Component-wise addition. @param other same-sized vector @return *this @throws
+     * std::invalid_argument */
     MathVector& operator+=(const MathVector& other) {
         require_same_size(other, "addition");
         for (size_type i = 0; i < size(); ++i) {
@@ -542,7 +543,8 @@ public:
         return *this;
     }
 
-    /** @brief Component-wise subtraction. @param other same-sized vector @return *this @throws std::invalid_argument */
+    /** @brief Component-wise subtraction. @param other same-sized vector @return *this @throws
+     * std::invalid_argument */
     MathVector& operator-=(const MathVector& other) {
         require_same_size(other, "subtraction");
         for (size_type i = 0; i < size(); ++i) {

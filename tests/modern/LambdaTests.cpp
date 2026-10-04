@@ -1,3 +1,5 @@
+#include "modern/LambdaExpressions.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -8,8 +10,6 @@
 #include <variant>
 #include <vector>
 
-#include "modern/LambdaExpressions.hpp"
-
 using namespace CppVerseHub::Modern::LambdaExpressions;
 using Catch::Approx;
 
@@ -17,12 +17,12 @@ TEST_CASE("compose applies right-to-left, pipeline left-to-right", "[modern][lam
     auto inc = [](int x) { return x + 1; };
     auto dbl = [](int x) { return x * 2; };
     auto sq = [](int x) { return x * x; };
-    CHECK(compose(inc, dbl, sq)(3) == 19);   // inc(dbl(sq(3)))
-    CHECK(pipeline(inc, dbl, sq)(3) == 64);  // sq(dbl(inc(3)))
+    CHECK(compose(inc, dbl, sq)(3) == 19);  // inc(dbl(sq(3)))
+    CHECK(pipeline(inc, dbl, sq)(3) == 64); // sq(dbl(inc(3)))
     CHECK(compose(inc)(0) == 1);
     auto concat = [](const std::string& a, const std::string& b) { return a + b; };
     auto len = [](const std::string& s) { return s.size(); };
-    CHECK(compose(len, concat)("ab", "cde") == 5);  // inner function may take several arguments
+    CHECK(compose(len, concat)("ab", "cde") == 5); // inner function may take several arguments
 }
 
 TEST_CASE("curry supports any argument grouping", "[modern][lambda]") {
@@ -33,7 +33,7 @@ TEST_CASE("curry supports any argument grouping", "[modern][lambda]") {
     CHECK(c(1, 2, 3, 4) == 1234);
     auto partial = c(9);
     CHECK(partial(8, 7, 6) == 9876);
-    CHECK(partial(1)(1)(1) == 9111);  // the partial application is reusable
+    CHECK(partial(1)(1)(1) == 9111); // the partial application is reusable
 }
 
 TEST_CASE("curry stores bound arguments by value", "[modern][lambda]") {
@@ -46,7 +46,8 @@ TEST_CASE("curry stores bound arguments by value", "[modern][lambda]") {
 
 TEST_CASE("Overloaded builds visitors", "[modern][lambda]") {
     std::variant<int, std::string, double> v = std::string("abc");
-    auto visitor = Overloaded{[](int) { return 1; }, [](const std::string&) { return 2; }, [](double) { return 3; }};
+    auto visitor = Overloaded{[](int) { return 1; }, [](const std::string&) { return 2; },
+                              [](double) { return 3; }};
     CHECK(std::visit(visitor, v) == 2);
     v = 2.0;
     CHECK(std::visit(visitor, v) == 3);
@@ -82,7 +83,7 @@ TEST_CASE("makeCounter keeps independent state per closure", "[modern][lambda]")
     CHECK(a() == 10);
     CHECK(a() == 11);
     CHECK(b() == 0);
-    auto copy = a;  // copying a closure copies its state
+    auto copy = a; // copying a closure copies its state
     CHECK(copy() == 12);
     CHECK(a() == 12);
 }

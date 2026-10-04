@@ -3,11 +3,6 @@
  * @brief Smoke test of the module demo and the individual showcases.
  */
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
-#include <sstream>
-
 #include "patterns/Adapter.hpp"
 #include "patterns/Builder.hpp"
 #include "patterns/Command.hpp"
@@ -18,6 +13,11 @@
 #include "patterns/State.hpp"
 #include "patterns/Strategy.hpp"
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <sstream>
+
 using namespace CppVerseHub::Patterns;
 using Catch::Matchers::ContainsSubstring;
 
@@ -26,8 +26,8 @@ TEST_CASE("runDemo runs every showcase without throwing", "[patterns][demo]") {
     REQUIRE_NOTHROW(runDemo(oss));
     const std::string text = oss.str();
     CHECK_FALSE(text.empty());
-    for (const char* header : {"Adapter", "Builder", "Command", "Decorator", "Observer", "Singleton", "State",
-                               "Strategy"}) {
+    for (const char* header :
+         {"Adapter", "Builder", "Command", "Decorator", "Observer", "Singleton", "State", "Strategy"}) {
         CHECK_THAT(text, ContainsSubstring(std::string("=== ") + header + " pattern ==="));
     }
     CHECK_THAT(text, !ContainsSubstring("showcase failed"));

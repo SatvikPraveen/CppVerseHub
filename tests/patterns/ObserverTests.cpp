@@ -3,14 +3,14 @@
  * @brief Tests for the classic Subject/IObserver and the Signal/Connection observer.
  */
 
+#include "patterns/Observer.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-
-#include "patterns/Observer.hpp"
 
 using namespace CppVerseHub::Patterns;
 
@@ -22,7 +22,7 @@ struct IntRecorder final : IObserver<int> {
 struct Thrower final : IObserver<int> {
     void onNotify(const int&) override { throw std::runtime_error("boom"); }
 };
-}  // namespace
+} // namespace
 
 TEST_CASE("Subject delivers events to every attached observer", "[observer][subject]") {
     Subject<int> subject;
@@ -71,7 +71,7 @@ TEST_CASE("Subject does not extend observer lifetime (weak_ptr)", "[observer][su
         CHECK(subject.observerCount() == 2);
         std::weak_ptr<IntRecorder> weak = temp;
         temp.reset();
-        CHECK(weak.expired());  // the subject held no strong reference
+        CHECK(weak.expired()); // the subject held no strong reference
     }
     CHECK(subject.observerCount() == 1);
     CHECK(subject.notify(5) == 1);
@@ -101,7 +101,7 @@ TEST_CASE("Signal invokes connected slots and disconnect stops delivery", "[obse
     CHECK(c1.connected());
     c1.disconnect();
     CHECK_FALSE(c1.connected());
-    c1.disconnect();  // idempotent
+    c1.disconnect(); // idempotent
     CHECK(sig.emit(1, 2) == 1);
     CHECK(sum == 203);
     CHECK(c2.connected());
@@ -131,7 +131,7 @@ TEST_CASE("ScopedConnection move transfers ownership; release keeps the slot", "
     sig.emit();
     CHECK(calls == 1);
     Connection raw = outer.release();
-    outer.reset();  // nothing managed anymore
+    outer.reset(); // nothing managed anymore
     sig.emit();
     CHECK(calls == 2);
     raw.disconnect();
@@ -147,7 +147,7 @@ TEST_CASE("Connection outliving its Signal is safe", "[observer][signal][lifetim
         CHECK(c.connected());
     }
     CHECK_FALSE(c.connected());
-    c.disconnect();  // must not crash
+    c.disconnect(); // must not crash
     ScopedConnection late;
     {
         Signal<int> sig;
@@ -165,8 +165,8 @@ TEST_CASE("Slots may disconnect themselves and others during emission", "[observ
     Connection cb;
     ca = sig.connect([&] {
         ++a;
-        ca.disconnect();  // self
-        cb.disconnect();  // a later slot: must not be called in this emission
+        ca.disconnect(); // self
+        cb.disconnect(); // a later slot: must not be called in this emission
     });
     cb = sig.connect([&] { ++b; });
     CHECK(sig.emit() == 1);
@@ -213,15 +213,16 @@ TEST_CASE("ObservablePlanet publishes only real changes", "[observer][planet]") 
     auto conn = planet.changed().connectScoped([&](const PlanetEvent& e) { kinds.push_back(e.kind); });
 
     planet.setResource("ore", 10.0);
-    planet.setResource("ore", 10.0);  // unchanged -> silent
+    planet.setResource("ore", 10.0); // unchanged -> silent
     planet.setPopulation(5.0);
-    planet.setDefense(-3.0);          // clamped to 0 == current -> silent
+    planet.setDefense(-3.0); // clamped to 0 == current -> silent
     planet.setDefense(50.0);
     CHECK(planet.resource("ore") == 10.0);
     CHECK(planet.resource("unknown") == 0.0);
     REQUIRE(logger->entries().size() == 3);
     CHECK(logger->entries()[0] == "Terra: ResourceChanged ore 0 -> 10");
-    CHECK(kinds == std::vector<PlanetEventKind>{PlanetEventKind::ResourceChanged, PlanetEventKind::PopulationChanged,
+    CHECK(kinds == std::vector<PlanetEventKind>{PlanetEventKind::ResourceChanged,
+                                                PlanetEventKind::PopulationChanged,
                                                 PlanetEventKind::DefenseChanged});
 }
 
@@ -230,10 +231,10 @@ TEST_CASE("ResourceMonitor alerts once when crossing below the threshold", "[obs
     auto monitor = std::make_shared<ResourceMonitor>(50.0);
     planet.subject().attach(monitor);
     planet.setResource("water", 100.0);
-    planet.setResource("water", 40.0);  // crosses -> alert
-    planet.setResource("water", 30.0);  // already below -> no new alert
+    planet.setResource("water", 40.0); // crosses -> alert
+    planet.setResource("water", 30.0); // already below -> no new alert
     planet.setResource("water", 80.0);
-    planet.setResource("water", 10.0);  // crosses again
+    planet.setResource("water", 10.0); // crosses again
     REQUIRE(monitor->alerts().size() == 2);
     CHECK(monitor->alerts()[0] == "LOW water on Mars");
 }
@@ -245,7 +246,7 @@ TEST_CASE("DefenseMonitor accumulates damage and flags critical defence", "[obse
     planet.setDefense(50.0);
     planet.attack(15.0);
     CHECK_FALSE(monitor->critical());
-    planet.attack(100.0);  // clamped to remaining 35
+    planet.attack(100.0); // clamped to remaining 35
     CHECK(planet.defense() == 0.0);
     CHECK(monitor->attacksObserved() == 2);
     CHECK(monitor->totalDamage() == 50.0);

@@ -1,4 +1,6 @@
 // Tests for stl_showcase/Algorithms.hpp
+#include "stl_showcase/Algorithms.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -12,8 +14,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include "stl_showcase/Algorithms.hpp"
 
 using namespace CppVerseHub::STL;
 using Catch::Approx;
@@ -109,8 +109,8 @@ TEST_CASE("partitionByPriority is stable", "[algorithms][modifying]") {
 
 TEST_CASE("sortMissionsByUrgency uses priority, then duration, then id", "[algorithms][sorting]") {
     auto missions = sampleMissions();
-    missions.push_back({"M007", "Combat", 9, 8.0, 0.5, ""});   // ties with M004 on priority+duration
-    missions.push_back({"M000", "Combat", 9, 20.0, 0.5, ""});  // same priority, longer
+    missions.push_back({"M007", "Combat", 9, 8.0, 0.5, ""});  // ties with M004 on priority+duration
+    missions.push_back({"M000", "Combat", 9, 20.0, 0.5, ""}); // same priority, longer
     sortMissionsByUrgency(missions);
     REQUIRE(extractIds(missions) ==
             std::vector<std::string>{"M006", "M004", "M007", "M000", "M002", "M005", "M001", "M003"});
@@ -147,7 +147,7 @@ TEST_CASE("kSmallest bounded heap", "[algorithms][heap]") {
     REQUIRE(kSmallest(data, 3) == std::vector<int>{1, 2, 2});
     REQUIRE(kSmallest(data, 0).empty());
     REQUIRE(kSmallest(data, 50).size() == data.size());
-    const std::forward_list<double> unsized{3.5, -1.0, 2.0};  // not a sized_range
+    const std::forward_list<double> unsized{3.5, -1.0, 2.0}; // not a sized_range
     REQUIRE(kSmallest(unsized, 2) == std::vector<double>{-1.0, 2.0});
 }
 

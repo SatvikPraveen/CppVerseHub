@@ -11,10 +11,14 @@ namespace CppVerseHub::Patterns {
 
 std::string_view toString(PlanetEventKind kind) noexcept {
     switch (kind) {
-        case PlanetEventKind::ResourceChanged: return "ResourceChanged";
-        case PlanetEventKind::PopulationChanged: return "PopulationChanged";
-        case PlanetEventKind::DefenseChanged: return "DefenseChanged";
-        case PlanetEventKind::UnderAttack: return "UnderAttack";
+        case PlanetEventKind::ResourceChanged:
+            return "ResourceChanged";
+        case PlanetEventKind::PopulationChanged:
+            return "PopulationChanged";
+        case PlanetEventKind::DefenseChanged:
+            return "DefenseChanged";
+        case PlanetEventKind::UnderAttack:
+            return "UnderAttack";
     }
     return "Unknown";
 }
@@ -100,7 +104,9 @@ void DefenseMonitor::onNotify(const PlanetEvent& event) {
     }
 }
 
-void EventLogger::onNotify(const PlanetEvent& event) { entries_.push_back(describe(event)); }
+void EventLogger::onNotify(const PlanetEvent& event) {
+    entries_.push_back(describe(event));
+}
 
 void demonstrateObserver(std::ostream& out) {
     out << "=== Observer pattern ===\n";
@@ -116,7 +122,7 @@ void demonstrateObserver(std::ostream& out) {
         terra.subject().attach(logger);
         terra.setResource("minerals", 100.0);
         out << "  logger saw: " << logger->entries().back() << '\n';
-    }  // logger destroyed: the subject prunes it automatically
+    } // logger destroyed: the subject prunes it automatically
     out << "  live classic observers after logger expired: " << terra.subject().observerCount() << '\n';
 
     // Modern: RAII connections unsubscribe when they leave scope.
@@ -126,7 +132,7 @@ void demonstrateObserver(std::ostream& out) {
         terra.setResource("minerals", 40.0);
         terra.setDefense(60.0);
     }
-    terra.attack(45.0);  // no longer counted by the expired scoped connection
+    terra.attack(45.0); // no longer counted by the expired scoped connection
     out << "  signal events seen while connected: " << signalEvents << '\n';
 
     for (const auto& alert : resources->alerts()) {
@@ -136,4 +142,4 @@ void demonstrateObserver(std::ostream& out) {
         << (defense->critical() ? " (CRITICAL)" : "") << '\n';
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

@@ -38,14 +38,14 @@ struct EventBusState {
 
     /// @brief One registered handler.
     struct Entry {
-        std::uint64_t token;                         ///< Unique registration token.
+        std::uint64_t token;                          ///< Unique registration token.
         std::shared_ptr<const ErasedHandler> handler; ///< Shared so snapshots are cheap.
     };
 
-    std::mutex mutex;                                              ///< Guards all members below.
+    std::mutex mutex;                                                 ///< Guards all members below.
     std::unordered_map<std::type_index, std::vector<Entry>> handlers; ///< Handlers per event type.
-    std::uint64_t nextToken{1};                                    ///< Next registration token.
-    std::uint64_t published{0};                                    ///< Total events published.
+    std::uint64_t nextToken{1};                                       ///< Next registration token.
+    std::uint64_t published{0};                                       ///< Total events published.
 
     /// @brief Remove a registration. @param type Event type. @param token Token. @return true if removed.
     bool remove(std::type_index type, std::uint64_t token);
@@ -81,7 +81,8 @@ public:
 
 private:
     friend class EventBus;
-    Subscription(std::weak_ptr<detail::EventBusState> state, std::type_index type, std::uint64_t token) noexcept
+    Subscription(std::weak_ptr<detail::EventBusState> state, std::type_index type,
+                 std::uint64_t token) noexcept
         : state_(std::move(state)), type_(type), token_(token) {}
 
     std::weak_ptr<detail::EventBusState> state_;

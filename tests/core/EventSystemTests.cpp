@@ -1,3 +1,5 @@
+#include "core/EventSystem.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
@@ -5,8 +7,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include "core/EventSystem.hpp"
 
 using namespace CppVerseHub::Core;
 
@@ -101,7 +101,8 @@ TEST_CASE("EventBus handlers may publish and unsubscribe re-entrantly", "[core][
 TEST_CASE("EventBus supports concurrent publishers", "[core][events][threads]") {
     EventBus bus;
     std::atomic<int> received{0};
-    auto s = bus.subscribe<Ping>([&](const Ping& p) { received.fetch_add(p.value, std::memory_order_relaxed); });
+    auto s = bus.subscribe<Ping>(
+        [&](const Ping& p) { received.fetch_add(p.value, std::memory_order_relaxed); });
     std::vector<std::thread> threads;
     for (int t = 0; t < 4; ++t) {
         threads.emplace_back([&bus] {

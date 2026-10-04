@@ -14,4 +14,4 @@ namespace CppVerseHub::Modern {
 /// @param out Destination stream for all output.
 void runDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Modern
+} // namespace CppVerseHub::Modern

@@ -289,7 +289,8 @@ template <typename Range>
  * @param ellipsis Suffix to append.
  * @return Possibly truncated copy.
  */
-[[nodiscard]] std::string truncate(std::string_view text, std::size_t maxLength, std::string_view ellipsis = "...");
+[[nodiscard]] std::string truncate(std::string_view text, std::size_t maxLength,
+                                   std::string_view ellipsis = "...");
 
 // ===================================================================================================
 // Algorithms

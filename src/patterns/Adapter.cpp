@@ -54,7 +54,7 @@ void appendEscaped(std::string& out, std::string_view field) {
         out.push_back(c);
     }
 }
-}  // namespace
+} // namespace
 
 std::string encodeFrame(const Message& message) {
     std::string frame;
@@ -76,13 +76,13 @@ std::optional<Message> decodeFrame(std::string_view frame) {
         const char c = frame[i];
         if (c == '\\') {
             if (i + 1 >= frame.size()) {
-                return std::nullopt;  // dangling escape
+                return std::nullopt; // dangling escape
             }
             fields[field].push_back(frame[++i]);
         } else if (c == '|' && field < 3) {
             ++field;
         } else if (c == '|') {
-            return std::nullopt;  // unescaped separator inside the body
+            return std::nullopt; // unescaped separator inside the body
         } else {
             fields[field].push_back(c);
         }
@@ -112,12 +112,12 @@ std::optional<Message> RadioAdapter::receive() {
     while (true) {
         const int n = radio_->poll(buffer.data(), buffer.size());
         if (n <= 0) {
-            return std::nullopt;  // nothing pending (buffer is always large enough)
+            return std::nullopt; // nothing pending (buffer is always large enough)
         }
         if (auto message = decodeFrame(std::string_view(buffer.data(), static_cast<std::size_t>(n)))) {
             return message;
         }
-        ++malformed_;  // skip garbage frames written by other legacy clients
+        ++malformed_; // skip garbage frames written by other legacy clients
     }
 }
 
@@ -125,7 +125,9 @@ std::optional<Message> RadioAdapter::receive() {
 // ThermalSensorAdapter
 // ---------------------------------------------------------------------------
 
-double ThermalSensorAdapter::celsius() const { return static_cast<double>(readCentiKelvin()) / 100.0 - 273.15; }
+double ThermalSensorAdapter::celsius() const {
+    return static_cast<double>(readCentiKelvin()) / 100.0 - 273.15;
+}
 
 void ThermalSensorAdapter::calibrate(double celsius) noexcept {
     setCentiKelvin(static_cast<std::int32_t>(std::lround((celsius + 273.15) * 100.0)));
@@ -151,7 +153,7 @@ bool LegacyEventPump::unregisterCallback(int id) {
 }
 
 std::size_t LegacyEventPump::fire(int code) {
-    const auto snapshot = entries_;  // callbacks may unregister themselves
+    const auto snapshot = entries_; // callbacks may unregister themselves
     for (const auto& e : snapshot) {
         e.cb(code, e.user);
     }
@@ -166,9 +168,13 @@ CallbackBridge::CallbackBridge(LegacyEventPump& pump, std::function<void(int)> h
     id_ = pump_->registerCallback(&CallbackBridge::trampoline, this);
 }
 
-CallbackBridge::~CallbackBridge() { (void)pump_->unregisterCallback(id_); }
+CallbackBridge::~CallbackBridge() {
+    (void)pump_->unregisterCallback(id_);
+}
 
-void CallbackBridge::trampoline(int code, void* self) { static_cast<CallbackBridge*>(self)->handler_(code); }
+void CallbackBridge::trampoline(int code, void* self) {
+    static_cast<CallbackBridge*>(self)->handler_(code);
+}
 
 // ---------------------------------------------------------------------------
 // Showcase
@@ -186,8 +192,8 @@ void demonstrateAdapter(std::ostream& out) {
     out << "  round-trip intact: " << std::boolalpha << (received && *received == original) << '\n';
 
     ThermalSensorAdapter sensor(37315);
-    out << "  thermal sensor: " << sensor.readCentiKelvin() << " cK = " << sensor.celsius() << " C = "
-        << sensor.fahrenheit() << " F\n";
+    out << "  thermal sensor: " << sensor.readCentiKelvin() << " cK = " << sensor.celsius()
+        << " C = " << sensor.fahrenheit() << " F\n";
 
     LegacyEventPump pump;
     std::vector<int> codes;
@@ -196,9 +202,9 @@ void demonstrateAdapter(std::ostream& out) {
         (void)pump.fire(7);
         (void)pump.fire(42);
     }
-    (void)pump.fire(99);  // bridge gone: not delivered
+    (void)pump.fire(99); // bridge gone: not delivered
     out << "  callback bridge received " << codes.size() << " events; pump registrations now " << pump.size()
         << '\n';
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

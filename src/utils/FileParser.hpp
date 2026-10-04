@@ -94,9 +94,9 @@ public:
     /// @brief Kind of value.
     enum class Type : std::uint8_t { Null, Boolean, Number, String, Array, Object };
 
-    using Array = std::vector<JsonValue>;                          ///< Array storage.
-    using Member = std::pair<std::string, JsonValue>;              ///< Object member.
-    using Object = std::vector<Member>;                            ///< Object storage.
+    using Array = std::vector<JsonValue>;             ///< Array storage.
+    using Member = std::pair<std::string, JsonValue>; ///< Object member.
+    using Object = std::vector<Member>;               ///< Object storage.
 
     /// @brief Null value.
     JsonValue() noexcept = default;
@@ -124,7 +124,9 @@ public:
     /// @brief Creates an array. @param items Elements. @return The array.
     [[nodiscard]] static JsonValue array(std::initializer_list<JsonValue> items = {}) { return Array(items); }
     /// @brief Creates an object. @param members Members. @return The object.
-    [[nodiscard]] static JsonValue object(std::initializer_list<Member> members = {}) { return Object(members); }
+    [[nodiscard]] static JsonValue object(std::initializer_list<Member> members = {}) {
+        return Object(members);
+    }
 
     /// @brief Kind of value. @return Type.
     [[nodiscard]] Type type() const noexcept { return static_cast<Type>(value_.index()); }
@@ -338,12 +340,12 @@ class CsvParser {
 public:
     /// @brief Parser configuration.
     struct Options {
-        char delimiter = ',';        ///< Field separator.
-        char quote = '"';            ///< Quote character.
-        bool hasHeader = true;       ///< Treat the first record as header names.
-        bool trimFields = false;     ///< Trim whitespace around unquoted fields.
-        bool skipEmptyLines = true;  ///< Ignore blank lines.
-        bool strictColumns = false;  ///< Throw if a row's width differs from the header/first row.
+        char delimiter = ',';       ///< Field separator.
+        char quote = '"';           ///< Quote character.
+        bool hasHeader = true;      ///< Treat the first record as header names.
+        bool trimFields = false;    ///< Trim whitespace around unquoted fields.
+        bool skipEmptyLines = true; ///< Ignore blank lines.
+        bool strictColumns = false; ///< Throw if a row's width differs from the header/first row.
     };
 
     /// @brief Parser with default options.

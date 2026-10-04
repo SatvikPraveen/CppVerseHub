@@ -35,8 +35,8 @@ std::optional<bool> parseBool(std::string_view text) noexcept {
 }
 
 std::string unquote(std::string_view text) {
-    if (text.size() >= 2 && ((text.front() == '"' && text.back() == '"') ||
-                             (text.front() == '\'' && text.back() == '\''))) {
+    if (text.size() >= 2 &&
+        ((text.front() == '"' && text.back() == '"') || (text.front() == '\'' && text.back() == '\''))) {
         std::string out;
         const auto inner = text.substr(1, text.size() - 2);
         for (std::size_t i = 0; i < inner.size(); ++i) {
@@ -93,11 +93,16 @@ ConfigValue ConfigValue::parse(std::string_view text) {
 
 std::string_view ConfigValue::typeName() const noexcept {
     switch (type()) {
-    case Type::Bool: return "bool";
-    case Type::Int: return "int";
-    case Type::Double: return "double";
-    case Type::String: return "string";
-    case Type::List: return "list";
+        case Type::Bool:
+            return "bool";
+        case Type::Int:
+            return "int";
+        case Type::Double:
+            return "double";
+        case Type::String:
+            return "string";
+        case Type::List:
+            return "list";
     }
     return "unknown";
 }
@@ -354,7 +359,8 @@ void ConfigManager::loadIni(std::string_view text) {
         }
         const auto eq = line.find('=');
         if (eq == std::string_view::npos) {
-            throw ConfigError("ConfigManager::loadIni: expected 'key = value' on line " + std::to_string(lineNumber));
+            throw ConfigError("ConfigManager::loadIni: expected 'key = value' on line " +
+                              std::to_string(lineNumber));
         }
         const auto key = String::trimView(line.substr(0, eq));
         if (key.empty()) {
@@ -364,13 +370,15 @@ void ConfigManager::loadIni(std::string_view text) {
         // Strip inline comments (" ; ..." or " # ...") outside quotes.
         if (!isQuoted(rawValue)) {
             for (std::size_t i = 1; i < rawValue.size(); ++i) {
-                if ((rawValue[i] == ';' || rawValue[i] == '#') && (rawValue[i - 1] == ' ' || rawValue[i - 1] == '\t')) {
+                if ((rawValue[i] == ';' || rawValue[i] == '#') &&
+                    (rawValue[i - 1] == ' ' || rawValue[i - 1] == '\t')) {
                     rawValue = String::trimView(rawValue.substr(0, i));
                     break;
                 }
             }
         }
-        const std::string fullKey = currentSection.empty() ? std::string{key} : currentSection + "." + std::string{key};
+        const std::string fullKey = currentSection.empty() ? std::string{key}
+                                                           : currentSection + "." + std::string{key};
         try {
             set(fullKey, ConfigValue::parse(rawValue));
         } catch (const ConfigError& e) {
@@ -425,27 +433,34 @@ void flattenJson(ConfigManager& config, const JsonValue& json, const std::string
     for (const auto& [name, child] : json.asObject()) {
         const std::string key = prefix.empty() ? name : prefix + "." + name;
         switch (child.type()) {
-        case JsonValue::Type::Null: break;
-        case JsonValue::Type::Boolean: config.set(key, child.asBool()); break;
-        case JsonValue::Type::Number: {
-            const double d = child.asNumber();
-            if (d == std::trunc(d) && std::abs(d) < 9.007199254740992e15) {
-                config.set(key, static_cast<std::int64_t>(d));
-            } else {
-                config.set(key, d);
+            case JsonValue::Type::Null:
+                break;
+            case JsonValue::Type::Boolean:
+                config.set(key, child.asBool());
+                break;
+            case JsonValue::Type::Number: {
+                const double d = child.asNumber();
+                if (d == std::trunc(d) && std::abs(d) < 9.007199254740992e15) {
+                    config.set(key, static_cast<std::int64_t>(d));
+                } else {
+                    config.set(key, d);
+                }
+                break;
             }
-            break;
-        }
-        case JsonValue::Type::String: config.set(key, child.asString()); break;
-        case JsonValue::Type::Array: {
-            ConfigValue::List items;
-            for (const auto& item : child.asArray()) {
-                items.push_back(item.isString() ? item.asString() : item.dump());
+            case JsonValue::Type::String:
+                config.set(key, child.asString());
+                break;
+            case JsonValue::Type::Array: {
+                ConfigValue::List items;
+                for (const auto& item : child.asArray()) {
+                    items.push_back(item.isString() ? item.asString() : item.dump());
+                }
+                config.set(key, std::move(items));
+                break;
             }
-            config.set(key, std::move(items));
-            break;
-        }
-        case JsonValue::Type::Object: flattenJson(config, child, key); break;
+            case JsonValue::Type::Object:
+                flattenJson(config, child, key);
+                break;
         }
     }
 }
@@ -705,11 +720,12 @@ max_speed = 0.8   ; fraction of c
         return std::nullopt;
     };
     const auto overridden = config.applyEnvironmentOverrides("cvh", fakeEnv);
-    out << "Environment overrides applied: " << overridden << " (graphics.width = "
-        << config.get<int>("graphics.width") << ")\n";
+    out << "Environment overrides applied: " << overridden
+        << " (graphics.width = " << config.get<int>("graphics.width") << ")\n";
 
     ConfigManager fromJson;
-    fromJson.loadJson(JsonParser::parse(R"({"server": {"host": "orbital.local", "port": 8080, "tls": true}})"));
+    fromJson.loadJson(
+        JsonParser::parse(R"({"server": {"host": "orbital.local", "port": 8080, "tls": true}})"));
     out << "From JSON: server.host = " << fromJson.get<std::string>("server.host")
         << ", server.port = " << fromJson.get<int>("server.port") << '\n';
 

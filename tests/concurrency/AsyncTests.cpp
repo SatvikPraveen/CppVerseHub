@@ -1,6 +1,10 @@
 // Behavioural tests for AsyncMissions.hpp, AsyncComms.hpp and the module demo.
 // Catch2 assertions run only on the main thread.
 
+#include "concurrency/AsyncComms.hpp"
+#include "concurrency/AsyncMissions.hpp"
+#include "concurrency/Demo.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -16,10 +20,6 @@
 #include <thread>
 #include <variant>
 #include <vector>
-
-#include "concurrency/AsyncComms.hpp"
-#include "concurrency/AsyncMissions.hpp"
-#include "concurrency/Demo.hpp"
 
 using namespace CppVerseHub::Concurrency;
 
@@ -63,7 +63,8 @@ TEST_CASE("AsyncMission reports success, failure and cancellation", "[concurrenc
         CHECK_THROWS_AS(m.start(), std::logic_error);
     }
     SECTION("failure captures the message") {
-        AsyncMission<int> m("fail", [](const CancellationToken&) -> int { throw std::runtime_error("no fuel"); });
+        AsyncMission<int> m("fail",
+                            [](const CancellationToken&) -> int { throw std::runtime_error("no fuel"); });
         const auto r = m.start().get();
         CHECK(r.status == MissionStatus::Failed);
         CHECK(r.error == "no fuel");
@@ -151,7 +152,8 @@ TEST_CASE("MissionCoordinator cancels transitive dependents of a failure", "[con
     std::atomic<int> executed{0};
     auto ok = [&executed](const CancellationToken&) { executed.fetch_add(1); };
     const auto root = c.add_mission("root", ok);
-    const auto bad = c.add_mission("bad", [](const CancellationToken&) { throw std::runtime_error("jam"); }, {root});
+    const auto bad = c.add_mission("bad", [](const CancellationToken&) { throw std::runtime_error("jam"); },
+                                   {root});
     const auto child = c.add_mission("child", ok, {bad});
     const auto grandchild = c.add_mission("grandchild", ok, {child});
     const auto join = c.add_mission("join", ok, {root, grandchild});
@@ -176,7 +178,7 @@ TEST_CASE("MissionCoordinator detects cycles and invalid ids", "[concurrency][as
     const auto b = c.add_mission("b", noop, {a});
     CHECK_THROWS_AS(c.add_mission("x", noop, {42}), std::out_of_range);
     CHECK_THROWS_AS(c.add_dependency(a, 99), std::out_of_range);
-    c.add_dependency(a, b);  // a -> b -> a
+    c.add_dependency(a, b); // a -> b -> a
     CHECK_FALSE(c.topological_order().has_value());
     ThreadPool pool(1);
     CHECK_THROWS_AS(c.run(pool), std::logic_error);
@@ -191,8 +193,10 @@ TEST_CASE("MissionCoordinator cancel_all stops pending missions", "[concurrency]
         executed.fetch_add(1);
         c.cancel_all();
     });
-    const auto second = c.add_mission("second", [&](const CancellationToken&) { executed.fetch_add(1); }, {first});
-    const auto third = c.add_mission("third", [&](const CancellationToken&) { executed.fetch_add(1); }, {second});
+    const auto second = c.add_mission("second", [&](const CancellationToken&) { executed.fetch_add(1); },
+                                      {first});
+    const auto third = c.add_mission("third", [&](const CancellationToken&) { executed.fetch_add(1); },
+                                     {second});
     c.run(pool);
     CHECK(c.status(first) == MissionStatus::Succeeded);
     CHECK(c.status(second) == MissionStatus::Cancelled);
@@ -251,8 +255,9 @@ TEST_CASE("Pipeline processes items through threaded stages in order", "[concurr
     CHECK(identity.process({3, 1, 2}) == std::vector<int>{3, 1, 2});
 
     Pipeline<std::string> p;
-    p.add_stage("trim", [](std::string s) { return s.substr(1); })
-        .add_stage("tag", [](std::string s) { return "[" + s + "]"; });
+    p.add_stage("trim", [](std::string s) { return s.substr(1); }).add_stage("tag", [](std::string s) {
+        return "[" + s + "]";
+    });
     CHECK(p.stage_count() == 2);
     CHECK(p.stage_names() == std::vector<std::string>{"trim", "tag"});
     std::vector<std::string> in;
@@ -309,23 +314,25 @@ TEST_CASE("MessageBus delivers to topic subscribers in publication order", "[con
     CHECK(b_log.back() == "after");
 }
 
-TEST_CASE("MessageBus handlers may publish, failures are contained, shutdown drains", "[concurrency][comms]") {
+TEST_CASE("MessageBus handlers may publish, failures are contained, shutdown drains",
+          "[concurrency][comms]") {
     std::atomic<int> pongs{0};
     MessageBus bus;
     static_cast<void>(bus.subscribe("ping", [&bus](const Message& m) {
-        static_cast<void>(bus.publish(Message{"pong", m.payload, 2, m.correlation_id}));  // re-entrant publish
+        static_cast<void>(bus.publish(Message{"pong", m.payload, 2, m.correlation_id})); // re-entrant publish
     }));
     static_cast<void>(bus.subscribe("pong", [&pongs](const Message&) { pongs.fetch_add(1); }));
-    static_cast<void>(bus.subscribe("faulty", [](const Message&) { throw std::runtime_error("handler bug"); }));
+    static_cast<void>(
+        bus.subscribe("faulty", [](const Message&) { throw std::runtime_error("handler bug"); }));
     for (int i = 0; i < 10; ++i) {
         static_cast<void>(bus.publish(Message{"ping", std::to_string(i), 1, static_cast<std::uint64_t>(i)}));
     }
     static_cast<void>(bus.publish(Message{"faulty", "x", 1, std::nullopt}));
-    bus.shutdown();  // delivers the backlog; pongs published during shutdown may be rejected
+    bus.shutdown(); // delivers the backlog; pongs published during shutdown may be rejected
     CHECK(bus.handler_failures() == 1);
     CHECK(pongs.load() <= 10);
     CHECK_FALSE(bus.publish(Message{"ping", "late", 1, std::nullopt}));
-    bus.flush();  // returns immediately after shutdown
+    bus.flush(); // returns immediately after shutdown
 }
 
 TEST_CASE("MessageBus flush observes re-entrant publications", "[concurrency][comms]") {
@@ -338,24 +345,24 @@ TEST_CASE("MessageBus flush observes re-entrant publications", "[concurrency][co
     for (int i = 0; i < 10; ++i) {
         static_cast<void>(bus.publish(Message{"ping", std::to_string(i), 1, std::nullopt}));
     }
-    bus.flush();  // waits for quiescence, which includes the pongs published by handlers
+    bus.flush(); // waits for quiescence, which includes the pongs published by handlers
     CHECK(pongs.load() == 10);
     CHECK(bus.deliveries() == 20);
 }
 
 namespace {
-    struct Add {
-        int value;
-    };
-    struct Get {
-        std::promise<std::vector<int>> reply;
-    };
-    struct Fail {};
-    using Command = std::variant<Add, Get, Fail>;
-}  // namespace
+struct Add {
+    int value;
+};
+struct Get {
+    std::promise<std::vector<int>> reply;
+};
+struct Fail {};
+using Command = std::variant<Add, Get, Fail>;
+} // namespace
 
 TEST_CASE("Actor processes messages sequentially and supports ask", "[concurrency][comms]") {
-    std::vector<int> state;  // owned by the actor thread
+    std::vector<int> state; // owned by the actor thread
     Actor<Command> actor(
         [&state](Command& c) {
             if (auto* add = std::get_if<Add>(&c)) {
@@ -377,12 +384,12 @@ TEST_CASE("Actor processes messages sequentially and supports ask", "[concurrenc
     const auto snapshot = reply.get();
     std::vector<int> expected(100);
     std::iota(expected.begin(), expected.end(), 0);
-    CHECK(snapshot == expected);  // mailbox order preserved
+    CHECK(snapshot == expected); // mailbox order preserved
     actor.stop();
     CHECK(actor.processed() == 102);
     CHECK(actor.failures() == 1);
     CHECK_FALSE(actor.tell(Command{Add{1}}));
-    actor.stop();  // idempotent
+    actor.stop(); // idempotent
 }
 
 TEST_CASE("Actor with concurrent senders and drain on destruction", "[concurrency][comms]") {
@@ -400,7 +407,7 @@ TEST_CASE("Actor with concurrent senders and drain on destruction", "[concurrenc
         for (auto& s : senders) {
             s.join();
         }
-    }  // destructor drains the mailbox
+    } // destructor drains the mailbox
     CHECK(sum.load() == 4LL * 250 * 251 / 2);
 }
 
@@ -411,7 +418,8 @@ TEST_CASE("RequestResponseServer answers requests through futures", "[concurrenc
 
     std::vector<RequestResponseServer::Ticket> tickets;
     for (int i = 0; i < 50; ++i) {
-        tickets.push_back(server.request(i % 2 == 0 ? "double" : "len", std::string(static_cast<std::size_t>(i), 'z')));
+        tickets.push_back(
+            server.request(i % 2 == 0 ? "double" : "len", std::string(static_cast<std::size_t>(i), 'z')));
     }
     std::set<std::uint64_t> ids;
     for (std::size_t i = 0; i < tickets.size(); ++i) {
@@ -424,7 +432,7 @@ TEST_CASE("RequestResponseServer answers requests through futures", "[concurrenc
             CHECK(response.payload == std::to_string(i));
         }
     }
-    CHECK(ids.size() == 50);  // correlation ids are unique
+    CHECK(ids.size() == 50); // correlation ids are unique
 
     auto unknown = server.request("teleport", "now");
     CHECK_THROWS_AS(unknown.response.get(), UnknownRequestError);
@@ -432,7 +440,7 @@ TEST_CASE("RequestResponseServer answers requests through futures", "[concurrenc
     CHECK_FALSE(server.unregister_handler("len"));
     auto gone = server.request("len", "abc");
     CHECK_THROWS_AS(gone.response.get(), UnknownRequestError);
-    server.register_handler("double", [](const std::string& s) { return s + "|" + s; });  // replace
+    server.register_handler("double", [](const std::string& s) { return s + "|" + s; }); // replace
     CHECK(server.request("double", "a").response.get().payload == "a|a");
     server.shutdown();
     CHECK_THROWS_AS(server.request("double", "a"), PoolShutdownError);
@@ -445,9 +453,9 @@ TEST_CASE("runDemo runs every showcase and writes to the given stream", "[concur
     CHECK_NOTHROW(runDemo(oss));
     const std::string text = oss.str();
     CHECK_FALSE(text.empty());
-    for (const char* section : {"=== Thread pools ===", "=== Mutexes", "=== Condition variables ===",
-                                "=== Atomics", "=== Async missions", "=== Asynchronous communication ===",
-                                "=== C++20 coroutines ==="}) {
+    for (const char* section :
+         {"=== Thread pools ===", "=== Mutexes", "=== Condition variables ===", "=== Atomics",
+          "=== Async missions", "=== Asynchronous communication ===", "=== C++20 coroutines ==="}) {
         CHECK(text.find(section) != std::string::npos);
     }
     CHECK(text.find("aborted") == std::string::npos);

@@ -3,6 +3,8 @@
  * @brief Tests demonstrating thread-safe, exactly-once construction of Meyers singletons.
  */
 
+#include "patterns/Singleton.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -13,8 +15,6 @@
 #include <thread>
 #include <type_traits>
 #include <vector>
-
-#include "patterns/Singleton.hpp"
 
 using namespace CppVerseHub::Patterns;
 
@@ -33,7 +33,7 @@ class SlowService final : public Singleton<SlowService> {
 public:
     bool ready = false;
 };
-}  // namespace
+} // namespace
 
 TEST_CASE("Singleton is not copyable, movable or publicly constructible", "[singleton]") {
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ConfigManager>);
@@ -56,7 +56,7 @@ TEST_CASE("Concurrent first access constructs exactly once and yields one addres
             }
             auto& inst = SlowService::instance();
             seen[static_cast<std::size_t>(i)] = &inst;
-            readyFlags[static_cast<std::size_t>(i)] = inst.ready ? 1 : 0;  // never observe a half-built object
+            readyFlags[static_cast<std::size_t>(i)] = inst.ready ? 1 : 0; // never observe a half-built object
         });
     }
     go.store(true);
@@ -123,7 +123,7 @@ TEST_CASE("IdGenerator issues unique ids across threads", "[singleton][ids][thre
     std::set<std::uint64_t> unique;
     for (const auto& v : ids) {
         unique.insert(v.begin(), v.end());
-        CHECK(std::is_sorted(v.begin(), v.end()));  // monotonic per thread
+        CHECK(std::is_sorted(v.begin(), v.end())); // monotonic per thread
     }
     CHECK(unique.size() == static_cast<std::size_t>(kThreads * kPerThread));
     CHECK(gen.issued() - before == static_cast<std::uint64_t>(kThreads * kPerThread));

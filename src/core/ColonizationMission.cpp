@@ -4,12 +4,12 @@
  */
 #include "core/ColonizationMission.hpp"
 
-#include <cmath>
+#include "core/Exceptions.hpp"
+#include "core/Galaxy.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include "core/Exceptions.hpp"
-#include "core/Galaxy.hpp"
+#include <cmath>
 
 namespace CppVerseHub::Core {
 
@@ -52,7 +52,8 @@ std::optional<std::string> ColonizationMission::checkStart(const Fleet& fleet, c
     return std::nullopt;
 }
 
-Mission::StepOutcome ColonizationMission::execute(MissionContext& ctx, Fleet& fleet, Planet& target, double dt) {
+Mission::StepOutcome ColonizationMission::execute(MissionContext& ctx, Fleet& fleet, Planet& target,
+                                                  double dt) {
     static_cast<void>(dt);
     if (target.isHostile()) {
         setFailureReason("target is hostile");

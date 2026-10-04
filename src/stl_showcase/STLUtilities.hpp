@@ -102,7 +102,8 @@ using CoordinateStats = std::tuple<NavigationCoordinate, double, std::size_t>;
  * @param points Coordinates.
  * @return Statistics, or std::nullopt when empty.
  */
-[[nodiscard]] std::optional<CoordinateStats> coordinateStatistics(std::span<const NavigationCoordinate> points);
+[[nodiscard]] std::optional<CoordinateStats> coordinateStatistics(
+    std::span<const NavigationCoordinate> points);
 
 /**
  * @brief Format any streamable tuple as "(a, b, c)" using std::apply and a fold expression.
@@ -133,7 +134,8 @@ template <typename... Ts>
  */
 template <typename Tuple, typename F>
 constexpr void forEachElement(Tuple&& tuple, F&& f) {
-    std::apply([&f](auto&&... elements) { (std::invoke(f, std::forward<decltype(elements)>(elements)), ...); },
+    std::apply([&f](
+                   auto&&... elements) { (std::invoke(f, std::forward<decltype(elements)>(elements)), ...); },
                std::forward<Tuple>(tuple));
 }
 
@@ -200,8 +202,8 @@ void sortVesselRecords(std::vector<VesselRecord>& records);
  * @return f(*opt) if engaged, otherwise an empty optional of f's result type.
  */
 template <typename T, typename F>
-[[nodiscard]] constexpr auto andThen(const std::optional<T>& opt, F&& f)
-    -> std::remove_cvref_t<std::invoke_result_t<F, const T&>> {
+[[nodiscard]] constexpr auto andThen(const std::optional<T>& opt,
+                                     F&& f) -> std::remove_cvref_t<std::invoke_result_t<F, const T&>> {
     if (opt) {
         return std::invoke(std::forward<F>(f), *opt);
     }
@@ -231,8 +233,8 @@ template <typename T, typename F>
  * @param name Vessel name.
  * @return Status, or std::nullopt if unknown.
  */
-[[nodiscard]] std::optional<VesselStatus> findVesselStatus(const std::map<std::string, VesselStatus, std::less<>>& registry,
-                                                           std::string_view name);
+[[nodiscard]] std::optional<VesselStatus> findVesselStatus(
+    const std::map<std::string, VesselStatus, std::less<>>& registry, std::string_view name);
 
 // ------------------------------------------------------------------------------------ variant
 
@@ -296,8 +298,8 @@ Overloaded(Fs...) -> Overloaded<Fs...>;
  * @brief Error produced by parseCommand.
  */
 struct ParseError {
-    std::string message;   ///< What went wrong.
-    std::size_t token{0};  ///< 0-based index of the offending token.
+    std::string message;  ///< What went wrong.
+    std::size_t token{0}; ///< 0-based index of the offending token.
     /// @brief Equality.
     friend bool operator==(const ParseError&, const ParseError&) = default;
 };
@@ -361,7 +363,9 @@ public:
     }
 
     /// @brief Whether a key exists. @param key Key. @return true if present.
-    [[nodiscard]] bool contains(std::string_view key) const { return properties_.find(key) != properties_.end(); }
+    [[nodiscard]] bool contains(std::string_view key) const {
+        return properties_.find(key) != properties_.end();
+    }
 
     /// @brief Remove a key. @param key Key. @return true if removed.
     bool erase(std::string_view key);
@@ -410,4 +414,4 @@ void demonstrateViews(std::ostream& out = std::cout);
 /// @brief Run every utility demonstration. @param out Destination stream.
 void runSTLUtilitiesDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

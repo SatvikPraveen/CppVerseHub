@@ -65,11 +65,11 @@ using CommandPtr = std::unique_ptr<ICommand>;
  * @brief Observable state of a fleet (the receiver's data).
  */
 struct FleetStatus {
-    std::string name;            ///< Fleet name.
-    std::string location;        ///< Current system.
-    double fuel = 100.0;         ///< Fuel units.
-    double health = 100.0;       ///< Hull integrity, 0..100.
-    int ships = 1;               ///< Number of ships.
+    std::string name;      ///< Fleet name.
+    std::string location;  ///< Current system.
+    double fuel = 100.0;   ///< Fuel units.
+    double health = 100.0; ///< Hull integrity, 0..100.
+    int ships = 1;         ///< Number of ships.
 
     /// @brief Member-wise equality. @return true if equal.
     friend bool operator==(const FleetStatus&, const FleetStatus&) = default;
@@ -294,4 +294,4 @@ private:
  */
 void demonstrateCommand(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

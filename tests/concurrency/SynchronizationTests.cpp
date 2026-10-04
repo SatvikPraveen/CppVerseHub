@@ -1,6 +1,9 @@
 // Behavioural tests for MutexExamples.hpp and ConditionalVariables.hpp.
 // Catch2 assertions are only used on the main test thread (they are not thread safe).
 
+#include "concurrency/ConditionalVariables.hpp"
+#include "concurrency/MutexExamples.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -14,9 +17,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include "concurrency/ConditionalVariables.hpp"
-#include "concurrency/MutexExamples.hpp"
 
 using namespace CppVerseHub::Concurrency;
 using namespace std::chrono_literals;
@@ -45,7 +45,7 @@ TEST_CASE("HierarchicalMutex enforces lock ordering", "[concurrency][mutex]") {
         CHECK_THROWS_AS(static_cast<void>(mid.try_lock()), std::logic_error);
         bool acquired_elsewhere = false;
         std::thread other([&] {
-            acquired_elsewhere = high.try_lock();  // was never acquired by the failed attempt
+            acquired_elsewhere = high.try_lock(); // was never acquired by the failed attempt
             if (acquired_elsewhere) {
                 high.unlock();
             }
@@ -230,7 +230,7 @@ TEST_CASE("BoundedQueue single-threaded semantics", "[concurrency][condvar]") {
     CHECK(q.try_push(1));
     CHECK(q.push(2));
     CHECK(q.try_push(3));
-    CHECK_FALSE(q.try_push(4));  // full
+    CHECK_FALSE(q.try_push(4)); // full
     CHECK(q.size() == 3);
     CHECK(q.try_pop() == 1);
     CHECK(q.pop() == 2);
@@ -245,12 +245,12 @@ TEST_CASE("BoundedQueue close semantics", "[concurrency][condvar]") {
     CHECK(q.is_closed());
     auto rejected = std::make_unique<int>(2);
     CHECK_FALSE(q.push(std::move(rejected)));
-    REQUIRE(rejected != nullptr);  // a failed push does not consume its argument
+    REQUIRE(rejected != nullptr); // a failed push does not consume its argument
     CHECK(*rejected == 2);
     auto drained = q.pop();
     REQUIRE(drained.has_value());
     CHECK(**drained == 1);
-    CHECK_FALSE(q.pop().has_value());  // closed and empty: does not block
+    CHECK_FALSE(q.pop().has_value()); // closed and empty: does not block
 }
 
 TEST_CASE("BoundedQueue timed operations time out when they cannot succeed", "[concurrency][condvar]") {
@@ -300,7 +300,7 @@ TEST_CASE("BoundedQueue MPMC delivers every item exactly once", "[concurrency][c
     for (int p = 0; p < producers; ++p) {
         producer_threads.emplace_back([&q, p] {
             for (int i = 0; i < per_producer; ++i) {
-                static_cast<void>(q.push(p * per_producer + i));  // never closed while producing
+                static_cast<void>(q.push(p * per_producer + i)); // never closed while producing
             }
         });
     }
@@ -358,8 +358,7 @@ TEST_CASE("CountingSemaphore bounds concurrency", "[concurrency][condvar]") {
                 sem.acquire();
                 const int now = inside.fetch_add(1) + 1;
                 int p = peak.load();
-                while (now > p && !peak.compare_exchange_weak(p, now)) {
-                }
+                while (now > p && !peak.compare_exchange_weak(p, now)) {}
                 inside.fetch_sub(1);
                 sem.release();
             }
@@ -387,7 +386,7 @@ TEST_CASE("CountDownLatch opens at zero", "[concurrency][condvar]") {
     }
     CHECK(latch.try_wait());
     CHECK(latch.count() == 0);
-    latch.count_down(5);  // saturates
+    latch.count_down(5); // saturates
     CHECK(latch.count() == 0);
 
     CountDownLatch big(2);
@@ -401,7 +400,8 @@ TEST_CASE("CountDownLatch opens at zero", "[concurrency][condvar]") {
     CHECK(rendezvous.try_wait());
 }
 
-TEST_CASE("CyclicBarrier synchronises phases and runs the completion once per phase", "[concurrency][condvar]") {
+TEST_CASE("CyclicBarrier synchronises phases and runs the completion once per phase",
+          "[concurrency][condvar]") {
     CHECK_THROWS_AS(CyclicBarrier(0), std::invalid_argument);
     constexpr std::size_t parties = 4;
     constexpr int phases = 20;
@@ -411,7 +411,8 @@ TEST_CASE("CyclicBarrier synchronises phases and runs the completion once per ph
     CyclicBarrier barrier(parties, [&] {
         ++completions;
         // Every party must have written this phase's value before the completion runs.
-        consistent = consistent && std::all_of(slots.begin(), slots.end(), [&](int s) { return s == completions; });
+        consistent = consistent &&
+                     std::all_of(slots.begin(), slots.end(), [&](int s) { return s == completions; });
     });
     std::vector<std::vector<std::size_t>> generations(parties);
     std::vector<std::thread> threads;
@@ -476,7 +477,7 @@ TEST_CASE("ResourcePool leases resources and blocks when exhausted", "[concurren
         moved.reset();
         CHECK(pool.available() == 1);
         auto again = pool.acquire();
-        CHECK((*again == "alpha-x" || *again == "beta-x"));  // the modified resource came back
+        CHECK((*again == "alpha-x" || *again == "beta-x")); // the modified resource came back
     }
     CHECK(pool.available() == 2);
 
@@ -489,8 +490,7 @@ TEST_CASE("ResourcePool leases resources and blocks when exhausted", "[concurren
                 auto lease = pool.acquire();
                 const int now = inside.fetch_add(1) + 1;
                 int p = peak.load();
-                while (now > p && !peak.compare_exchange_weak(p, now)) {
-                }
+                while (now > p && !peak.compare_exchange_weak(p, now)) {}
                 inside.fetch_sub(1);
             }
         });

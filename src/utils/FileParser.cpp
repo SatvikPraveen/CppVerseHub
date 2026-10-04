@@ -54,23 +54,37 @@ void appendJsonString(std::string& out, std::string_view s) {
     out.push_back('"');
     for (const char c : s) {
         switch (c) {
-        case '"': out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\b': out += "\\b"; break;
-        case '\f': out += "\\f"; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default: {
-            const auto u = static_cast<unsigned char>(c);
-            if (u < 0x20U) {
-                out += "\\u00";
-                out.push_back(kHex[u >> 4U]);
-                out.push_back(kHex[u & 0x0FU]);
-            } else {
-                out.push_back(c);
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\b':
+                out += "\\b";
+                break;
+            case '\f':
+                out += "\\f";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default: {
+                const auto u = static_cast<unsigned char>(c);
+                if (u < 0x20U) {
+                    out += "\\u00";
+                    out.push_back(kHex[u >> 4U]);
+                    out.push_back(kHex[u & 0x0FU]);
+                } else {
+                    out.push_back(c);
+                }
             }
-        }
         }
     }
     out.push_back('"');
@@ -141,7 +155,8 @@ private:
     [[nodiscard]] char peek() const noexcept { return done() ? '\0' : text_[pos_]; }
 
     void skipWhitespace() noexcept {
-        while (!done() && (text_[pos_] == ' ' || text_[pos_] == '\t' || text_[pos_] == '\n' || text_[pos_] == '\r')) {
+        while (!done() &&
+               (text_[pos_] == ' ' || text_[pos_] == '\t' || text_[pos_] == '\n' || text_[pos_] == '\r')) {
             ++pos_;
         }
     }
@@ -158,22 +173,31 @@ private:
             fail("maximum nesting depth exceeded");
         }
         switch (peek()) {
-        case '{': return parseObject(depth);
-        case '[': return parseArray(depth);
-        case '"': return JsonValue{parseString()};
-        case 't': expectLiteral("true"); return JsonValue{true};
-        case 'f': expectLiteral("false"); return JsonValue{false};
-        case 'n': expectLiteral("null"); return JsonValue{nullptr};
-        case '\0':
-            if (done()) {
-                fail("unexpected end of input");
-            }
-            fail("unexpected character");
-        default:
-            if (peek() == '-' || (peek() >= '0' && peek() <= '9')) {
-                return JsonValue{parseNumber()};
-            }
-            fail(std::string{"unexpected character '"} + peek() + "'");
+            case '{':
+                return parseObject(depth);
+            case '[':
+                return parseArray(depth);
+            case '"':
+                return JsonValue{parseString()};
+            case 't':
+                expectLiteral("true");
+                return JsonValue{true};
+            case 'f':
+                expectLiteral("false");
+                return JsonValue{false};
+            case 'n':
+                expectLiteral("null");
+                return JsonValue{nullptr};
+            case '\0':
+                if (done()) {
+                    fail("unexpected end of input");
+                }
+                fail("unexpected character");
+            default:
+                if (peek() == '-' || (peek() >= '0' && peek() <= '9')) {
+                    return JsonValue{parseNumber()};
+                }
+                fail(std::string{"unexpected character '"} + peek() + "'");
         }
     }
 
@@ -199,7 +223,8 @@ private:
             skipWhitespace();
             JsonValue value = parseValue(depth + 1);
             // Duplicate keys: last one wins (RFC 8259 leaves this implementation-defined).
-            const auto it = std::find_if(members.begin(), members.end(), [&key](const auto& m) { return m.first == key; });
+            const auto it = std::find_if(members.begin(), members.end(),
+                                         [&key](const auto& m) { return m.first == key; });
             if (it != members.end()) {
                 it->second = std::move(value);
             } else {
@@ -286,33 +311,50 @@ private:
             }
             const char e = text_[pos_++];
             switch (e) {
-            case '"': out.push_back('"'); break;
-            case '\\': out.push_back('\\'); break;
-            case '/': out.push_back('/'); break;
-            case 'b': out.push_back('\b'); break;
-            case 'f': out.push_back('\f'); break;
-            case 'n': out.push_back('\n'); break;
-            case 'r': out.push_back('\r'); break;
-            case 't': out.push_back('\t'); break;
-            case 'u': {
-                char32_t cp = parseHex4();
-                if (cp >= 0xD800 && cp <= 0xDBFF) {
-                    if (text_.substr(pos_, 2) != "\\u") {
-                        fail("unpaired high surrogate");
+                case '"':
+                    out.push_back('"');
+                    break;
+                case '\\':
+                    out.push_back('\\');
+                    break;
+                case '/':
+                    out.push_back('/');
+                    break;
+                case 'b':
+                    out.push_back('\b');
+                    break;
+                case 'f':
+                    out.push_back('\f');
+                    break;
+                case 'n':
+                    out.push_back('\n');
+                    break;
+                case 'r':
+                    out.push_back('\r');
+                    break;
+                case 't':
+                    out.push_back('\t');
+                    break;
+                case 'u': {
+                    char32_t cp = parseHex4();
+                    if (cp >= 0xD800 && cp <= 0xDBFF) {
+                        if (text_.substr(pos_, 2) != "\\u") {
+                            fail("unpaired high surrogate");
+                        }
+                        pos_ += 2;
+                        const unsigned low = parseHex4();
+                        if (low < 0xDC00 || low > 0xDFFF) {
+                            fail("invalid low surrogate");
+                        }
+                        cp = 0x10000 + ((cp - 0xD800) << 10U) + (low - 0xDC00);
+                    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                        fail("unpaired low surrogate");
                     }
-                    pos_ += 2;
-                    const unsigned low = parseHex4();
-                    if (low < 0xDC00 || low > 0xDFFF) {
-                        fail("invalid low surrogate");
-                    }
-                    cp = 0x10000 + ((cp - 0xD800) << 10U) + (low - 0xDC00);
-                } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-                    fail("unpaired low surrogate");
+                    out += String::Unicode::encodeUtf8(cp);
+                    break;
                 }
-                out += String::Unicode::encodeUtf8(cp);
-                break;
-            }
-            default: failAt("invalid escape sequence", pos_ - 1);
+                default:
+                    failAt("invalid escape sequence", pos_ - 1);
             }
         }
     }
@@ -388,7 +430,9 @@ private:
     }
 
     [[nodiscard]] bool done() const noexcept { return pos_ >= text_.size(); }
-    [[nodiscard]] bool startsWith(std::string_view s) const noexcept { return text_.substr(pos_, s.size()) == s; }
+    [[nodiscard]] bool startsWith(std::string_view s) const noexcept {
+        return text_.substr(pos_, s.size()) == s;
+    }
 
     static bool isSpace(char c) noexcept { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
     static bool isNameStart(char c) noexcept {
@@ -482,7 +526,8 @@ private:
                 std::uint32_t cp = 0;
                 const bool hex = entity[1] == 'x' || entity[1] == 'X';
                 const auto digits = entity.substr(hex ? 2 : 1);
-                const auto [ptr, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), cp, hex ? 16 : 10);
+                const auto [ptr, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), cp,
+                                                       hex ? 16 : 10);
                 if (digits.empty() || ec != std::errc{} || ptr != digits.data() + digits.size()) {
                     fail("invalid character reference");
                 }
@@ -583,7 +628,8 @@ private:
                 node.addChild(parseElement(depth + 1));
             } else {
                 const auto end = text_.find('<', pos_);
-                const auto raw = text_.substr(pos_, end == std::string_view::npos ? std::string_view::npos : end - pos_);
+                const auto raw = text_.substr(pos_, end == std::string_view::npos ? std::string_view::npos
+                                                                                  : end - pos_);
                 text += decodeEntities(raw);
                 pos_ += raw.size();
             }
@@ -692,7 +738,8 @@ const JsonValue* JsonValue::findPath(std::string_view path) const noexcept {
     std::size_t start = 0;
     while (current != nullptr && start <= path.size()) {
         const auto dot = path.find('.', start);
-        const auto segment = path.substr(start, dot == std::string_view::npos ? std::string_view::npos : dot - start);
+        const auto segment = path.substr(start, dot == std::string_view::npos ? std::string_view::npos
+                                                                              : dot - start);
         if (current->isArray()) {
             std::size_t index = 0;
             const auto [ptr, ec] = std::from_chars(segment.data(), segment.data() + segment.size(), index);
@@ -714,44 +761,52 @@ const JsonValue* JsonValue::findPath(std::string_view path) const noexcept {
 
 void JsonValue::dumpTo(std::string& out, int indent, int depth) const {
     switch (type()) {
-    case Type::Null: out += "null"; break;
-    case Type::Boolean: out += std::get<bool>(value_) ? "true" : "false"; break;
-    case Type::Number: appendJsonNumber(out, std::get<double>(value_)); break;
-    case Type::String: appendJsonString(out, std::get<std::string>(value_)); break;
-    case Type::Array: {
-        const auto& a = std::get<Array>(value_);
-        out.push_back('[');
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            if (i > 0) {
-                out.push_back(',');
+        case Type::Null:
+            out += "null";
+            break;
+        case Type::Boolean:
+            out += std::get<bool>(value_) ? "true" : "false";
+            break;
+        case Type::Number:
+            appendJsonNumber(out, std::get<double>(value_));
+            break;
+        case Type::String:
+            appendJsonString(out, std::get<std::string>(value_));
+            break;
+        case Type::Array: {
+            const auto& a = std::get<Array>(value_);
+            out.push_back('[');
+            for (std::size_t i = 0; i < a.size(); ++i) {
+                if (i > 0) {
+                    out.push_back(',');
+                }
+                appendIndent(out, indent, depth + 1);
+                a[i].dumpTo(out, indent, depth + 1);
             }
-            appendIndent(out, indent, depth + 1);
-            a[i].dumpTo(out, indent, depth + 1);
-        }
-        if (!a.empty()) {
-            appendIndent(out, indent, depth);
-        }
-        out.push_back(']');
-        break;
-    }
-    case Type::Object: {
-        const auto& o = std::get<Object>(value_);
-        out.push_back('{');
-        for (std::size_t i = 0; i < o.size(); ++i) {
-            if (i > 0) {
-                out.push_back(',');
+            if (!a.empty()) {
+                appendIndent(out, indent, depth);
             }
-            appendIndent(out, indent, depth + 1);
-            appendJsonString(out, o[i].first);
-            out += indent >= 0 ? ": " : ":";
-            o[i].second.dumpTo(out, indent, depth + 1);
+            out.push_back(']');
+            break;
         }
-        if (!o.empty()) {
-            appendIndent(out, indent, depth);
+        case Type::Object: {
+            const auto& o = std::get<Object>(value_);
+            out.push_back('{');
+            for (std::size_t i = 0; i < o.size(); ++i) {
+                if (i > 0) {
+                    out.push_back(',');
+                }
+                appendIndent(out, indent, depth + 1);
+                appendJsonString(out, o[i].first);
+                out += indent >= 0 ? ": " : ":";
+                o[i].second.dumpTo(out, indent, depth + 1);
+            }
+            if (!o.empty()) {
+                appendIndent(out, indent, depth);
+            }
+            out.push_back('}');
+            break;
         }
-        out.push_back('}');
-        break;
-    }
     }
 }
 
@@ -761,7 +816,9 @@ std::string JsonValue::dump(int indent) const {
     return out;
 }
 
-JsonValue JsonParser::parse(std::string_view text) { return JsonReader{text}.parseDocument(); }
+JsonValue JsonParser::parse(std::string_view text) {
+    return JsonReader{text}.parseDocument();
+}
 
 JsonValue JsonParser::parseFile(const std::filesystem::path& path) {
     return parse(FileParserUtils::readTextFile(path));
@@ -828,7 +885,8 @@ std::string CsvData::toString(char delimiter) const {
 }
 
 std::string CsvParser::escapeField(std::string_view field, char delimiter) {
-    const bool needsQuotes = field.find_first_of(std::string{delimiter} + "\"\r\n") != std::string_view::npos ||
+    const bool needsQuotes = field.find_first_of(std::string{delimiter} + "\"\r\n") !=
+                                 std::string_view::npos ||
                              (!field.empty() && (field.front() == ' ' || field.back() == ' '));
     if (!needsQuotes) {
         return std::string{field};
@@ -921,14 +979,17 @@ CsvData CsvParser::parse(std::string_view text) const {
         headers = std::move(records.front());
         first = 1;
     }
-    std::vector<CsvData::Row> rows(std::make_move_iterator(records.begin() + static_cast<std::ptrdiff_t>(first)),
+    std::vector<CsvData::Row> rows(std::make_move_iterator(records.begin() +
+                                                           static_cast<std::ptrdiff_t>(first)),
                                    std::make_move_iterator(records.end()));
     if (options_.strictColumns) {
-        const std::size_t width = !headers.empty() ? headers.size() : (rows.empty() ? 0 : rows.front().size());
+        const std::size_t width = !headers.empty() ? headers.size()
+                                                   : (rows.empty() ? 0 : rows.front().size());
         for (std::size_t r = 0; r < rows.size(); ++r) {
             if (rows[r].size() != width) {
-                throw CsvParseException("CSV: row " + std::to_string(r + 1) + " has " + std::to_string(rows[r].size()) +
-                                        " fields, expected " + std::to_string(width));
+                throw CsvParseException("CSV: row " + std::to_string(r + 1) + " has " +
+                                        std::to_string(rows[r].size()) + " fields, expected " +
+                                        std::to_string(width));
             }
         }
     }
@@ -1014,21 +1075,36 @@ std::string XmlNode::toString(int indent) const {
     return out;
 }
 
-XmlNode XmlParser::parse(std::string_view text) { return XmlReader{text}.parseDocument(); }
+XmlNode XmlParser::parse(std::string_view text) {
+    return XmlReader{text}.parseDocument();
+}
 
-XmlNode XmlParser::parseFile(const std::filesystem::path& path) { return parse(FileParserUtils::readTextFile(path)); }
+XmlNode XmlParser::parseFile(const std::filesystem::path& path) {
+    return parse(FileParserUtils::readTextFile(path));
+}
 
 std::string XmlParser::escape(std::string_view text) {
     std::string out;
     out.reserve(text.size());
     for (const char c : text) {
         switch (c) {
-        case '&': out += "&amp;"; break;
-        case '<': out += "&lt;"; break;
-        case '>': out += "&gt;"; break;
-        case '"': out += "&quot;"; break;
-        case '\'': out += "&apos;"; break;
-        default: out.push_back(c);
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            case '\'':
+                out += "&apos;";
+                break;
+            default:
+                out.push_back(c);
         }
     }
     return out;
@@ -1040,10 +1116,14 @@ std::string XmlParser::escape(std::string_view text) {
 
 FileParserUtils::FileFormat FileParserUtils::detectFormat(const std::filesystem::path& path) {
     const std::string ext = String::toLower(path.extension().string());
-    if (ext == ".json") return FileFormat::Json;
-    if (ext == ".csv" || ext == ".tsv") return FileFormat::Csv;
-    if (ext == ".xml") return FileFormat::Xml;
-    if (ext == ".ini" || ext == ".cfg" || ext == ".conf") return FileFormat::Ini;
+    if (ext == ".json")
+        return FileFormat::Json;
+    if (ext == ".csv" || ext == ".tsv")
+        return FileFormat::Csv;
+    if (ext == ".xml")
+        return FileFormat::Xml;
+    if (ext == ".ini" || ext == ".cfg" || ext == ".conf")
+        return FileFormat::Ini;
     return FileFormat::Unknown;
 }
 
@@ -1083,11 +1163,16 @@ FileParserUtils::FileFormat FileParserUtils::detectFormatFromContent(std::string
 
 std::string_view FileParserUtils::toString(FileFormat format) noexcept {
     switch (format) {
-    case FileFormat::Json: return "JSON";
-    case FileFormat::Csv: return "CSV";
-    case FileFormat::Xml: return "XML";
-    case FileFormat::Ini: return "INI";
-    case FileFormat::Unknown: break;
+        case FileFormat::Json:
+            return "JSON";
+        case FileFormat::Csv:
+            return "CSV";
+        case FileFormat::Xml:
+            return "XML";
+        case FileFormat::Ini:
+            return "INI";
+        case FileFormat::Unknown:
+            break;
     }
     return "Unknown";
 }
@@ -1152,7 +1237,8 @@ void demonstrateParsing(std::ostream& out) {
         out << "JsonParseException: " << e.what() << '\n';
     }
 
-    const std::string csvText = "planet,mass,notes\nEarth,5.97e24,\"blue, wet\"\nMars,6.42e23,\"the \"\"red\"\" one\"\n";
+    const std::string csvText =
+        "planet,mass,notes\nEarth,5.97e24,\"blue, wet\"\nMars,6.42e23,\"the \"\"red\"\" one\"\n";
     const CsvData table = CsvParser{}.parse(csvText);
     out << "CSV rows=" << table.rowCount() << " cols=" << table.columnCount()
         << " notes[1]=" << table.cell(1, "notes") << '\n';
@@ -1166,12 +1252,14 @@ void demonstrateParsing(std::ostream& out) {
         </system>)";
     const XmlNode root = XmlParser::parse(xmlText);
     out << "XML <" << root.name() << " name=" << root.attribute("name").value_or("?") << "> has "
-        << root.childrenNamed("planet").size() << " planets; Mars text = "
-        << root.children().at(1).text() << '\n';
+        << root.childrenNamed("planet").size() << " planets; Mars text = " << root.children().at(1).text()
+        << '\n';
     out << root.toString(2) << '\n';
 
-    out << "detectFormat(config.ini) = " << FileParserUtils::toString(FileParserUtils::detectFormat("config.ini"))
-        << ", sniff('<a/>') = " << FileParserUtils::toString(FileParserUtils::detectFormatFromContent("<a/>")) << '\n';
+    out << "detectFormat(config.ini) = "
+        << FileParserUtils::toString(FileParserUtils::detectFormat("config.ini"))
+        << ", sniff('<a/>') = " << FileParserUtils::toString(FileParserUtils::detectFormatFromContent("<a/>"))
+        << '\n';
 }
 
 } // namespace CppVerseHub::Utils

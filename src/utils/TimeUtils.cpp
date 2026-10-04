@@ -110,8 +110,8 @@ std::string formatIso8601(SystemClock::time_point tp, bool withMillis, std::chro
 
     std::ostringstream oss;
     oss << std::setfill('0') << std::setw(4) << static_cast<int>(ymd.year()) << '-' << std::setw(2)
-        << static_cast<unsigned>(ymd.month()) << '-' << std::setw(2) << static_cast<unsigned>(ymd.day()) << 'T'
-        << std::setw(2) << hms.hours().count() << ':' << std::setw(2) << hms.minutes().count() << ':'
+        << static_cast<unsigned>(ymd.month()) << '-' << std::setw(2) << static_cast<unsigned>(ymd.day())
+        << 'T' << std::setw(2) << hms.hours().count() << ':' << std::setw(2) << hms.minutes().count() << ':'
         << std::setw(2) << hms.seconds().count();
     if (withMillis) {
         oss << '.' << std::setw(3) << hms.subseconds().count();
@@ -121,7 +121,8 @@ std::string formatIso8601(SystemClock::time_point tp, bool withMillis, std::chro
     } else {
         const auto total = utcOffset.count();
         const auto magnitude = total < 0 ? -total : total;
-        oss << (total < 0 ? '-' : '+') << std::setw(2) << magnitude / 60 << ':' << std::setw(2) << magnitude % 60;
+        oss << (total < 0 ? '-' : '+') << std::setw(2) << magnitude / 60 << ':' << std::setw(2)
+            << magnitude % 60;
     }
     return oss.str();
 }
@@ -387,7 +388,8 @@ TaskScheduler::TaskId TaskScheduler::scheduleOnce(Duration delay, Task task) {
     return id;
 }
 
-TaskScheduler::TaskId TaskScheduler::scheduleRepeating(Duration interval, Task task, std::size_t repetitions) {
+TaskScheduler::TaskId TaskScheduler::scheduleRepeating(Duration interval, Task task,
+                                                       std::size_t repetitions) {
     if (interval <= Duration{0}) {
         throw std::invalid_argument("TaskScheduler: repeating interval must be positive");
     }
@@ -466,7 +468,8 @@ std::size_t TaskScheduler::pending() const {
 // RateLimiter
 // ===================================================================================================
 
-RateLimiter::RateLimiter(double ratePerSecond, double burst) : rate_(ratePerSecond), burst_(burst), tokens_(burst) {
+RateLimiter::RateLimiter(double ratePerSecond, double burst)
+    : rate_(ratePerSecond), burst_(burst), tokens_(burst) {
     if (!(ratePerSecond > 0.0) || !(burst >= 1.0)) {
         throw std::invalid_argument("RateLimiter: rate must be > 0 and burst >= 1");
     }
@@ -623,8 +626,9 @@ void demonstrateTime(std::ostream& out) {
     profiler.record("render", 4ms);
     profiler.report(out);
 
-    out << "Light delay Earth->Sun: " << formatDuration(duration_cast<Nanoseconds>(
-                                             SpaceTime::lightTravelTime(SpaceTime::kAstronomicalUnit)))
+    out << "Light delay Earth->Sun: "
+        << formatDuration(
+               duration_cast<Nanoseconds>(SpaceTime::lightTravelTime(SpaceTime::kAstronomicalUnit)))
         << '\n';
     out << std::defaultfloat;
 }

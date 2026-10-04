@@ -39,10 +39,10 @@ enum class MessagePriority : std::uint8_t { Low = 0, Normal = 1, Urgent = 2 };
  * @brief Modern, typed message.
  */
 struct Message {
-    std::string sender;                               ///< Sender id.
-    std::string recipient;                            ///< Recipient id.
-    std::string body;                                 ///< Payload (any characters).
-    MessagePriority priority = MessagePriority::Normal;  ///< Priority.
+    std::string sender;                                 ///< Sender id.
+    std::string recipient;                              ///< Recipient id.
+    std::string body;                                   ///< Payload (any characters).
+    MessagePriority priority = MessagePriority::Normal; ///< Priority.
 
     /// @brief Member-wise equality. @return true if equal.
     friend bool operator==(const Message&, const Message&) = default;
@@ -77,11 +77,11 @@ protected:
  */
 class LegacyRadio {
 public:
-    static constexpr std::size_t kMaxFrame = 256;  ///< Maximum frame size in bytes.
-    static constexpr int kOk = 0;                  ///< Success.
-    static constexpr int kErrNull = -1;            ///< Null frame pointer.
-    static constexpr int kErrTooLong = -2;         ///< Frame exceeds kMaxFrame.
-    static constexpr int kErrBufferSmall = -3;     ///< Receive buffer too small.
+    static constexpr std::size_t kMaxFrame = 256; ///< Maximum frame size in bytes.
+    static constexpr int kOk = 0;                 ///< Success.
+    static constexpr int kErrNull = -1;           ///< Null frame pointer.
+    static constexpr int kErrTooLong = -2;        ///< Frame exceeds kMaxFrame.
+    static constexpr int kErrBufferSmall = -3;    ///< Receive buffer too small.
 
     /**
      * @brief Queue a frame for (loop-back) delivery.
@@ -186,14 +186,17 @@ private:
 /**
  * @brief Class adapter: public target interface, private adaptee implementation.
  */
-class ThermalSensorAdapter final : public ITemperatureSensor, private LegacyThermalSensor {
+class ThermalSensorAdapter final
+    : public ITemperatureSensor
+    , private LegacyThermalSensor {
 public:
     /// @brief Construct. @param centiKelvin Initial raw reading.
-    explicit ThermalSensorAdapter(std::int32_t centiKelvin = 29315) noexcept : LegacyThermalSensor(centiKelvin) {}
+    explicit ThermalSensorAdapter(std::int32_t centiKelvin = 29315) noexcept
+        : LegacyThermalSensor(centiKelvin) {}
     [[nodiscard]] double celsius() const override;
     /// @brief Calibrate the sensor to a Celsius value (rounded to 0.01 K). @param celsius Value.
     void calibrate(double celsius) noexcept;
-    using LegacyThermalSensor::readCentiKelvin;  // selectively re-expose part of the adaptee
+    using LegacyThermalSensor::readCentiKelvin; // selectively re-expose part of the adaptee
 };
 
 // ============================================================================
@@ -217,7 +220,8 @@ public:
     int registerCallback(Callback cb, void* userData);
     /// @brief Remove a registration. @param id Registration id. @return true if it existed.
     bool unregisterCallback(int id);
-    /// @brief Deliver @p code to every registered callback. @param code Event code. @return Callbacks invoked.
+    /// @brief Deliver @p code to every registered callback. @param code Event code. @return Callbacks
+    /// invoked.
     std::size_t fire(int code);
     /// @brief Registered callbacks. @return Count.
     [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }
@@ -269,4 +273,4 @@ private:
  */
 void demonstrateAdapter(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

@@ -15,11 +15,8 @@ namespace CppVerseHub::STL {
 
 std::vector<StarSystem> sampleStarSystems() {
     return {
-        {"Alpha Centauri", "G2V", 3, 4.37},
-        {"Barnard's Star", "M4V", 1, 5.96},
-        {"Sirius", "A1V", 0, 8.60},
-        {"Epsilon Eridani", "K2V", 2, 10.50},
-        {"Tau Ceti", "G8V", 4, 11.90},
+        {"Alpha Centauri", "G2V", 3, 4.37},   {"Barnard's Star", "M4V", 1, 5.96}, {"Sirius", "A1V", 0, 8.60},
+        {"Epsilon Eridani", "K2V", 2, 10.50}, {"Tau Ceti", "G8V", 4, 11.90},
     };
 }
 
@@ -64,17 +61,21 @@ void printRange(std::ostream& out, std::string_view label, Range&& range) {
     out << '\n';
 }
 
-}  // namespace
+} // namespace
 
 void demonstrateIteratorCategories(std::ostream& out) {
     out << "\n=== Iterator Categories (C++20 concepts) ===\n";
-    out << "std::vector<int>::iterator       -> " << iteratorCategoryName<std::vector<int>::iterator>() << '\n';
-    out << "std::deque<int>::iterator        -> " << iteratorCategoryName<std::deque<int>::iterator>() << '\n';
+    out << "std::vector<int>::iterator       -> " << iteratorCategoryName<std::vector<int>::iterator>()
+        << '\n';
+    out << "std::deque<int>::iterator        -> " << iteratorCategoryName<std::deque<int>::iterator>()
+        << '\n';
     out << "std::list<int>::iterator         -> " << iteratorCategoryName<std::list<int>::iterator>() << '\n';
     out << "std::forward_list<int>::iterator -> " << iteratorCategoryName<std::forward_list<int>::iterator>()
         << '\n';
-    out << "std::istream_iterator<int>       -> " << iteratorCategoryName<std::istream_iterator<int>>() << '\n';
-    out << "std::ostream_iterator<int>       -> " << iteratorCategoryName<std::ostream_iterator<int>>() << '\n';
+    out << "std::istream_iterator<int>       -> " << iteratorCategoryName<std::istream_iterator<int>>()
+        << '\n';
+    out << "std::ostream_iterator<int>       -> " << iteratorCategoryName<std::ostream_iterator<int>>()
+        << '\n';
 
     const auto systems = sampleStarSystems();
     std::list<StarSystem> route(systems.begin(), systems.end());
@@ -84,16 +85,17 @@ void demonstrateIteratorCategories(std::ostream& out) {
     }
     out << '\n';
     const auto mid = systems.begin() + static_cast<std::ptrdiff_t>(systems.size() / 2);
-    out << "random access: middle system is " << mid->name << ", distance from begin " << (mid - systems.begin())
-        << '\n';
+    out << "random access: middle system is " << mid->name << ", distance from begin "
+        << (mid - systems.begin()) << '\n';
 }
 
 void demonstrateIteratorAdapters(std::ostream& out) {
     out << "\n=== Iterator Adapters ===\n";
     const std::vector<int> countdown{1, 2, 3, 4, 5};
     printRange(out, "reverse_iterator", reversedCopy(countdown));
-    const auto rit = countdown.rbegin() + 1;  // refers to 4
-    out << "reverse_iterator::base(): *rit = " << *rit << ", *(rit.base() - 1) = " << *(rit.base() - 1) << '\n';
+    const auto rit = countdown.rbegin() + 1; // refers to 4
+    out << "reverse_iterator::base(): *rit = " << *rit << ", *(rit.base() - 1) = " << *(rit.base() - 1)
+        << '\n';
     const std::array<int, 2> f{1, 2};
     const std::array<int, 2> m{10, 20};
     const std::array<int, 2> b{98, 99};
@@ -113,9 +115,9 @@ void demonstrateCustomIterators(std::ostream& out) {
     out << "\n=== Custom Iterators ===\n";
     SimpleVector<int> fuel{40, 10, 30, 20};
     fuel.push_back(50);
-    std::ranges::sort(fuel);  // requires random access: contiguous iterator delivers
+    std::ranges::sort(fuel); // requires random access: contiguous iterator delivers
     printRange(out, "SimpleVector (contiguous_iterator) after ranges::sort", fuel);
-    const std::span<const int> as_span(fuel.begin(), fuel.end());  // contiguous -> span
+    const std::span<const int> as_span(fuel.begin(), fuel.end()); // contiguous -> span
     out << "viewed as std::span of size " << as_span.size() << ", sum "
         << std::accumulate(as_span.begin(), as_span.end(), 0) << '\n';
 
@@ -138,8 +140,8 @@ void demonstrateIteratorUtilities(std::ostream& out) {
     std::forward_list<int> chain{1, 2, 3, 4, 5, 6};
     auto fit = chain.begin();
     advanceBy(fit, 3);
-    out << "advanceBy on forward_list (O(n)) -> " << *fit << ", distanceBetween = "
-        << distanceBetween(chain.begin(), chain.end()) << '\n';
+    out << "advanceBy on forward_list (O(n)) -> " << *fit
+        << ", distanceBetween = " << distanceBetween(chain.begin(), chain.end()) << '\n';
     const std::vector<int> fixed{10, 20, 30, 40};
     auto vit = fixed.begin();
     advanceBy(vit, 2);
@@ -147,17 +149,18 @@ void demonstrateIteratorUtilities(std::ostream& out) {
         << ", std::prev = " << *std::prev(vit) << '\n';
 
     std::list<int> stable{1, 2, 3, 4, 5};
-    auto keep = std::next(stable.begin(), 4);  // list iterators survive erasure of other nodes
+    auto keep = std::next(stable.begin(), 4); // list iterators survive erasure of other nodes
     const auto removed_list = eraseWhileIterating(stable, [](int x) { return x % 2 == 0; });
     out << "erase-while-iterating removed " << removed_list << " from list; saved iterator still -> " << *keep
         << '\n';
     std::map<std::string, int> docks{{"A", 1}, {"B", 0}, {"C", 3}};
     const auto removed_map = eraseWhileIterating(docks, [](const auto& kv) { return kv.second == 0; });
-    out << "erase-while-iterating removed " << removed_map << " empty dock(s), " << docks.size() << " remain\n";
+    out << "erase-while-iterating removed " << removed_map << " empty dock(s), " << docks.size()
+        << " remain\n";
     std::vector<int> grow{1, 2, 3};
     grow.reserve(grow.size() + 1);
     const auto first_ptr = grow.data();
-    grow.push_back(4);  // within reserved capacity: no reallocation, iterators remain valid
+    grow.push_back(4); // within reserved capacity: no reallocation, iterators remain valid
     out << std::boolalpha << "vector push_back within capacity kept storage: " << (first_ptr == grow.data())
         << '\n';
 }
@@ -169,4 +172,4 @@ void runIteratorsDemo(std::ostream& out) {
     demonstrateIteratorUtilities(out);
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

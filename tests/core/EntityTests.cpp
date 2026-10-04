@@ -1,18 +1,17 @@
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
-#include <cmath>
-#include <limits>
-#include <memory>
-
-#include <nlohmann/json.hpp>
-
 #include "core/Exceptions.hpp"
 #include "core/Fleet.hpp"
 #include "core/Planet.hpp"
 #include "core/Ship.hpp"
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <nlohmann/json.hpp>
+
+#include <cmath>
+#include <limits>
+#include <memory>
 
 using namespace CppVerseHub::Core;
 using Catch::Approx;

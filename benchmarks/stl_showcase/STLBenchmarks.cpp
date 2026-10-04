@@ -1,4 +1,10 @@
 // Micro-benchmarks for the stl_showcase module.
+#include "stl_showcase/Algorithms.hpp"
+#include "stl_showcase/Containers.hpp"
+#include "stl_showcase/Functors.hpp"
+#include "stl_showcase/Iterators.hpp"
+#include "stl_showcase/STLUtilities.hpp"
+
 #include <benchmark/benchmark.h>
 
 #include <algorithm>
@@ -10,12 +16,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include "stl_showcase/Algorithms.hpp"
-#include "stl_showcase/Containers.hpp"
-#include "stl_showcase/Functors.hpp"
-#include "stl_showcase/Iterators.hpp"
-#include "stl_showcase/STLUtilities.hpp"
 
 namespace stl = CppVerseHub::STL;
 
@@ -247,4 +247,4 @@ void BM_ParseCommand(benchmark::State& state) {
 }
 BENCHMARK(BM_ParseCommand);
 
-}  // namespace
+} // namespace

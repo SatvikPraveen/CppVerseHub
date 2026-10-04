@@ -1,9 +1,9 @@
+#include "core/Demo.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <sstream>
-
-#include "core/Demo.hpp"
 
 TEST_CASE("Core runDemo runs end-to-end, deterministically, without throwing", "[core][demo]") {
     std::ostringstream first;

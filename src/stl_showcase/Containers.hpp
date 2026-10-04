@@ -39,12 +39,12 @@ namespace CppVerseHub::STL {
  * @brief A spacecraft record used by the container demonstrations.
  */
 struct Spacecraft {
-    std::string name;        ///< Unique ship name (identity key).
-    std::string class_type;  ///< Ship class, e.g. "Frigate".
-    double mass{0.0};        ///< Mass in tonnes.
-    int crew_size{0};        ///< Number of crew members.
-    double max_speed{0.0};   ///< Maximum sub-light speed.
-    double firepower{0.0};   ///< Abstract firepower rating.
+    std::string name;       ///< Unique ship name (identity key).
+    std::string class_type; ///< Ship class, e.g. "Frigate".
+    double mass{0.0};       ///< Mass in tonnes.
+    int crew_size{0};       ///< Number of crew members.
+    double max_speed{0.0};  ///< Maximum sub-light speed.
+    double firepower{0.0};  ///< Abstract firepower rating.
 
     /**
      * @brief Combined combat rating derived from firepower, crew and speed.
@@ -91,11 +91,11 @@ struct SpacecraftNameEqual {
  * @brief A planet record used by the associative-container demonstrations.
  */
 struct Planet {
-    std::string name;                    ///< Planet name.
-    std::string system;                  ///< Star system the planet belongs to.
-    double population{0.0};              ///< Population in billions.
-    int defense_level{0};                ///< Defense rating 0..10.
-    std::vector<std::string> resources;  ///< Resources available on the planet.
+    std::string name;                   ///< Planet name.
+    std::string system;                 ///< Star system the planet belongs to.
+    double population{0.0};             ///< Population in billions.
+    int defense_level{0};               ///< Defense rating 0..10.
+    std::vector<std::string> resources; ///< Resources available on the planet.
 
     /// @brief Member-wise equality.
     friend bool operator==(const Planet&, const Planet&) = default;
@@ -201,7 +201,8 @@ private:
  * @tparam Hash  Hash functor for Key.
  * @tparam KeyEqual Equality functor for Key.
  */
-template <typename Key, typename Value, typename Hash = std::hash<Key>, typename KeyEqual = std::equal_to<Key>>
+template <typename Key, typename Value, typename Hash = std::hash<Key>,
+          typename KeyEqual = std::equal_to<Key>>
 class LruCache {
 public:
     /**
@@ -501,4 +502,4 @@ void demonstrateContainerAdapters(std::ostream& out = std::cout);
  */
 void runContainersDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

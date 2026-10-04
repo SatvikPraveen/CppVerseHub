@@ -308,7 +308,8 @@ TEST_CASE("ConfigBuilder layers defaults, INI and overrides", "[utils][config][b
     CHECK(config.get<int>("graphics.height") == 768);
     CHECK_THROWS_AS(ConfigBuilder{}.require("must.exist").build(), ConfigError);
     CHECK_THROWS_AS(ConfigBuilder{}
-                        .withValidator("v", [](const ConfigValue& v) { return v.is<bool>(); }, "bool")
+                        .withValidator(
+                            "v", [](const ConfigValue& v) { return v.is<bool>(); }, "bool")
                         .withDefault("v", 3)
                         .build(),
                     ConfigError);

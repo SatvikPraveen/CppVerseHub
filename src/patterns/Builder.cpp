@@ -13,10 +13,14 @@ namespace CppVerseHub::Patterns {
 
 std::string_view toString(HullClass hull) noexcept {
     switch (hull) {
-        case HullClass::Scout: return "Scout";
-        case HullClass::Frigate: return "Frigate";
-        case HullClass::Cruiser: return "Cruiser";
-        case HullClass::Carrier: return "Carrier";
+        case HullClass::Scout:
+            return "Scout";
+        case HullClass::Frigate:
+            return "Frigate";
+        case HullClass::Cruiser:
+            return "Cruiser";
+        case HullClass::Carrier:
+            return "Carrier";
     }
     return "Unknown";
 }
@@ -46,8 +50,8 @@ double Spacecraft::rating(ComponentType type) const noexcept {
 }
 
 std::size_t Spacecraft::count(ComponentType type) const noexcept {
-    return static_cast<std::size_t>(
-        std::count_if(components_.begin(), components_.end(), [type](const Component& c) { return c.type == type; }));
+    return static_cast<std::size_t>(std::count_if(components_.begin(), components_.end(),
+                                                  [type](const Component& c) { return c.type == type; }));
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +66,7 @@ std::string joinProblems(const std::vector<std::string>& problems) {
     }
     return msg;
 }
-}  // namespace
+} // namespace
 
 BuildError::BuildError(std::vector<std::string> problems)
     : std::invalid_argument(joinProblems(problems)), problems_(std::move(problems)) {}
@@ -135,8 +139,8 @@ std::vector<std::string> SpacecraftBuilder::validate() const {
         problems.emplace_back("at least one engine is required");
     }
     if (crew_ < minCrew(hull_)) {
-        problems.push_back(std::string(toString(hull_)) + " needs at least " + std::to_string(minCrew(hull_)) +
-                           " crew");
+        problems.push_back(std::string(toString(hull_)) + " needs at least " +
+                           std::to_string(minCrew(hull_)) + " crew");
     }
     double mass = hullMass(hull_);
     double power = 0.0;
@@ -177,8 +181,14 @@ Spacecraft SpacecraftBuilder::build() const {
 // ---------------------------------------------------------------------------
 
 Spacecraft ShipyardDirector::buildScout(SpacecraftBuilder& builder, std::string name) {
-    return builder.reset().name(std::move(name)).hull(HullClass::Scout).crew(2).engine(60.0).reactor(20.0).sensor(
-        80.0).build();
+    return builder.reset()
+        .name(std::move(name))
+        .hull(HullClass::Scout)
+        .crew(2)
+        .engine(60.0)
+        .reactor(20.0)
+        .sensor(80.0)
+        .build();
 }
 
 Spacecraft ShipyardDirector::buildFrigate(SpacecraftBuilder& builder, std::string name) {
@@ -277,11 +287,18 @@ void demonstrateBuilder(std::ostream& out) {
     const Spacecraft carrier = ShipyardDirector::buildCarrier(builder, "Leviathan");
     for (const Spacecraft* s : {&scout, &frigate, &carrier}) {
         out << "  " << s->name() << " [" << toString(s->hull()) << "] mass " << s->totalMass() << "t, power +"
-            << s->powerBalance() << ", crew " << s->crew() << ", " << s->components().size() << " components\n";
+            << s->powerBalance() << ", crew " << s->crew() << ", " << s->components().size()
+            << " components\n";
     }
 
     try {
-        (void)builder.reset().name("Overloaded").hull(HullClass::Scout).crew(1).engine(10.0).weapon(400.0).build();
+        (void)builder.reset()
+            .name("Overloaded")
+            .hull(HullClass::Scout)
+            .crew(1)
+            .engine(10.0)
+            .weapon(400.0)
+            .build();
     } catch (const BuildError& e) {
         out << "  rejected design with " << e.problems().size() << " problem(s):\n";
         for (const auto& p : e.problems()) {
@@ -289,14 +306,20 @@ void demonstrateBuilder(std::ostream& out) {
         }
     }
 
-    const Fleet fleet =
-        FleetBuilder{}.name("Home Guard").commander("Adm. Reyes").add(carrier).addCopies(frigate, 3).add(scout).build();
+    const Fleet fleet = FleetBuilder{}
+                            .name("Home Guard")
+                            .commander("Adm. Reyes")
+                            .add(carrier)
+                            .addCopies(frigate, 3)
+                            .add(scout)
+                            .build();
     out << "  fleet " << fleet.name << ": " << fleet.ships.size() << " ships, crew " << fleet.totalCrew()
         << ", firepower " << fleet.firepower() << '\n';
 
-    const Blueprint bp = BlueprintBuilder<>{}.withHull(HullClass::Cruiser).withHardpoints(8).withName("Paladin").build();
+    const Blueprint bp =
+        BlueprintBuilder<>{}.withHull(HullClass::Cruiser).withHardpoints(8).withName("Paladin").build();
     out << "  type-state blueprint: " << bp.name << " (" << toString(bp.hull) << ", " << bp.hardpoints
         << " hardpoints)\n";
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

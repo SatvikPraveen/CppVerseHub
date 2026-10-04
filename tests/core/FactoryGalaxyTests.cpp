@@ -1,14 +1,13 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
-#include <memory>
-#include <string>
-
-#include <nlohmann/json.hpp>
-
 #include "core/ExplorationMission.hpp"
 #include "core/Factory.hpp"
 #include "core/Galaxy.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <nlohmann/json.hpp>
+
+#include <memory>
+#include <string>
 
 using namespace CppVerseHub::Core;
 
@@ -122,8 +121,8 @@ TEST_CASE("Galaxy spawns entities and missions through its factories", "[core][g
     Entity& fleet = g.spawn("fleet", {{"name", "F"}, {"ships", {{{"type", "scout"}, {"count", 2}}}}});
     REQUIRE(dynamic_cast<Fleet&>(fleet).shipCount() == 2);
     Entity& planet = g.spawn("planet", {{"name", "P"}, {"position", {1, 2, 3}}});
-    Mission& m = g.spawnMission("exploration",
-                                {{"fleet", fleet.id().value()}, {"target", planet.id().value()}, {"duration", 3.0}});
+    Mission& m = g.spawnMission(
+        "exploration", {{"fleet", fleet.id().value()}, {"target", planet.id().value()}, {"duration", 3.0}});
     REQUIRE(m.type() == MissionType::Exploration);
     REQUIRE(g.findMission(m.id()) == &m);
     REQUIRE_THROWS_AS(g.spawn("planet", {{"position", {0, 0, 0}}}), InvalidArgumentException); // no name

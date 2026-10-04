@@ -10,16 +10,16 @@
  */
 #pragma once
 
+#include "core/Identifiers.hpp"
+#include "core/Resources.hpp"
+#include "core/Vector3D.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
-
-#include <nlohmann/json_fwd.hpp>
-
-#include "core/Identifiers.hpp"
-#include "core/Resources.hpp"
-#include "core/Vector3D.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -52,7 +52,8 @@ public:
     /// @brief Maximum (and initial) health.
     static constexpr double kMaxHealth = 100.0;
 
-    virtual ~Entity() = default; ///< Virtual destructor: entities are owned through `std::unique_ptr<Entity>`.
+    virtual ~Entity() =
+        default; ///< Virtual destructor: entities are owned through `std::unique_ptr<Entity>`.
 
     Entity(const Entity&) = delete;            ///< Entities have identity; not copyable.
     Entity& operator=(const Entity&) = delete; ///< Not copy-assignable.
@@ -72,7 +73,9 @@ public:
     void setPosition(const Vector3D& position);
 
     /// @brief Distance between two entities. @param other Other entity. @return Euclidean distance.
-    [[nodiscard]] double distanceTo(const Entity& other) const noexcept { return position_.distanceTo(other.position_); }
+    [[nodiscard]] double distanceTo(const Entity& other) const noexcept {
+        return position_.distanceTo(other.position_);
+    }
 
     /// @brief Health in [0, kMaxHealth]. @return Health.
     [[nodiscard]] double health() const noexcept { return health_; }
@@ -89,7 +92,8 @@ public:
      */
     virtual void takeDamage(double amount);
 
-    /// @brief Restore health up to kMaxHealth; no effect on destroyed entities. @param amount Non-negative amount.
+    /// @brief Restore health up to kMaxHealth; no effect on destroyed entities. @param amount Non-negative
+    /// amount.
     void heal(double amount);
 
     /// @brief Concrete kind. @return Kind.
@@ -104,7 +108,8 @@ public:
     /// @brief Resource rates this entity wants applied this step (default: none). @return Flows.
     [[nodiscard]] virtual ResourceFlows resourceFlows() const { return {}; }
 
-    /// @brief Notification of unmet consumption after the economy tick. @param shortfall Units lacking per type.
+    /// @brief Notification of unmet consumption after the economy tick. @param shortfall Units lacking per
+    /// type.
     virtual void onResourceTick(const ResourceAmounts& shortfall) { static_cast<void>(shortfall); }
 
     /// @brief One-line human-readable summary. @return Description.

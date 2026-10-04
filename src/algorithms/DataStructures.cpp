@@ -17,7 +17,7 @@ namespace CppVerseHub::Algorithms {
 // --------------------------------------------------------------------------------------------
 
 struct Trie::Node {
-    std::map<unsigned char, std::unique_ptr<Node>> children;  // unsigned: matches std::string order
+    std::map<unsigned char, std::unique_ptr<Node>> children; // unsigned: matches std::string order
     bool terminal = false;
 
     [[nodiscard]] std::unique_ptr<Node> clone() const {
@@ -81,7 +81,7 @@ NodeT* walk(NodeT* n, std::string_view s) {
     return n;
 }
 
-}  // namespace
+} // namespace
 
 bool Trie::contains(std::string_view word) const {
     const Node* n = walk(static_cast<const Node*>(root_.get()), word);
@@ -168,7 +168,7 @@ std::size_t DisjointSet::find(std::size_t x) {
         throw std::out_of_range("DisjointSet::find: element out of range");
     }
     while (parent_[x] != x) {
-        parent_[x] = parent_[parent_[x]];  // path halving
+        parent_[x] = parent_[parent_[x]]; // path halving
         x = parent_[x];
     }
     return x;
@@ -189,9 +189,13 @@ bool DisjointSet::unite(std::size_t a, std::size_t b) {
     return true;
 }
 
-bool DisjointSet::connected(std::size_t a, std::size_t b) { return find(a) == find(b); }
+bool DisjointSet::connected(std::size_t a, std::size_t b) {
+    return find(a) == find(b);
+}
 
-std::size_t DisjointSet::set_size(std::size_t x) { return size_[find(x)]; }
+std::size_t DisjointSet::set_size(std::size_t x) {
+    return size_[find(x)];
+}
 
 // --------------------------------------------------------------------------------------------
 // BloomFilter
@@ -215,7 +219,7 @@ std::uint64_t splitmix(std::uint64_t x) noexcept {
     return x ^ (x >> 31);
 }
 
-}  // namespace
+} // namespace
 
 BloomFilter::BloomFilter(std::size_t expected_elements, double false_positive_rate) {
     if (!(false_positive_rate > 0.0 && false_positive_rate < 1.0)) {
@@ -225,7 +229,8 @@ BloomFilter::BloomFilter(std::size_t expected_elements, double false_positive_ra
     const double ln2 = std::numbers::ln2;
     const double m = std::ceil(-n * std::log(false_positive_rate) / (ln2 * ln2));
     bits_ = std::max<std::size_t>(64, static_cast<std::size_t>(m));
-    hashes_ = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(static_cast<double>(bits_) / n * ln2)));
+    hashes_ =
+        std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(static_cast<double>(bits_) / n * ln2)));
     words_.assign((bits_ + 63) / 64, 0);
 }
 
@@ -274,9 +279,9 @@ void demonstrate_data_structures(std::ostream& out) {
     for (const char* n : {"Sol", "Alpha Centauri", "Sirius", "Vega", "Rigel"}) {
         names.emplace_back(n);
     }
-    names.push_back(names[0]);  // aliasing push_back during growth is safe
-    out << "DynamicArray: size " << names.size() << ", capacity " << names.capacity() << ", last = " << names.back()
-        << '\n';
+    names.push_back(names[0]); // aliasing push_back during growth is safe
+    out << "DynamicArray: size " << names.size() << ", capacity " << names.capacity()
+        << ", last = " << names.back() << '\n';
 
     LinkedList<int> list{1, 2, 3, 4, 5, 6};
     const std::size_t removed = list.remove_if([](int v) { return v % 2 == 0; });
@@ -296,8 +301,8 @@ void demonstrate_data_structures(std::ostream& out) {
     for (int k : bst.in_order()) {
         out << ' ' << k;
     }
-    out << "; height " << bst.height() << "; LCA(20, 40) = " << bst.lowest_common_ancestor(20, 40).value_or(-1)
-        << '\n';
+    out << "; height " << bst.height()
+        << "; LCA(20, 40) = " << bst.lowest_common_ancestor(20, 40).value_or(-1) << '\n';
 
     MinHeap<int> heap(std::vector<int>{9, 4, 7, 1, 8, 2});
     out << "MinHeap pops:";
@@ -310,7 +315,7 @@ void demonstrate_data_structures(std::ostream& out) {
     masses.insert_or_assign("Earth", 1.0);
     masses.insert_or_assign("Jupiter", 317.8);
     masses.insert_or_assign("Mars", 0.107);
-    masses.insert_or_assign("Earth", 1.0);  // overwrite
+    masses.insert_or_assign("Earth", 1.0); // overwrite
     masses.erase("Mars");
     out << "HashTable: size " << masses.size() << ", load " << std::fixed << std::setprecision(3)
         << masses.load_factor() << ", Jupiter = " << masses.at("Jupiter") << " Earth masses\n";
@@ -332,8 +337,8 @@ void demonstrate_data_structures(std::ostream& out) {
     dsu.unite(2, 3);
     dsu.unite(1, 3);
     dsu.unite(5, 6);
-    out << "DisjointSet: " << dsu.set_count() << " sets; 0~3 " << std::boolalpha << dsu.connected(0, 3) << "; 0~5 "
-        << dsu.connected(0, 5) << '\n';
+    out << "DisjointSet: " << dsu.set_count() << " sets; 0~3 " << std::boolalpha << dsu.connected(0, 3)
+        << "; 0~5 " << dsu.connected(0, 5) << '\n';
 
     BloomFilter bloom(1000, 0.01);
     for (int i = 0; i < 1000; ++i) {
@@ -344,8 +349,8 @@ void demonstrate_data_structures(std::ostream& out) {
         false_positives += bloom.might_contain("ship-" + std::to_string(i)) ? 1U : 0U;
     }
     out << "BloomFilter: m = " << bloom.bit_count() << " bits, k = " << bloom.hash_count()
-        << ", measured FP rate = " << static_cast<double>(false_positives) / 10000.0
-        << " (theory " << bloom.estimated_false_positive_rate() << ")\n";
+        << ", measured FP rate = " << static_cast<double>(false_positives) / 10000.0 << " (theory "
+        << bloom.estimated_false_positive_rate() << ")\n";
 
     SkipList<int> skip(7);
     for (int k : {15, 3, 9, 27, 1, 21}) {
@@ -359,4 +364,4 @@ void demonstrate_data_structures(std::ostream& out) {
     out << '\n';
 }
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms

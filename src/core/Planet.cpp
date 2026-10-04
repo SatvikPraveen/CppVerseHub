@@ -4,19 +4,20 @@
  */
 #include "core/Planet.hpp"
 
-#include <array>
-#include <cmath>
-#include <sstream>
+#include "core/Exceptions.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include "core/Exceptions.hpp"
+#include <array>
+#include <cmath>
+#include <sstream>
 
 namespace CppVerseHub::Core {
 
 namespace {
 
-constexpr std::array<std::string_view, 6> kNames{"terrestrial", "desert", "ocean", "gas_giant", "ice", "volcanic"};
+constexpr std::array<std::string_view, 6> kNames{"terrestrial", "desert", "ocean",
+                                                 "gas_giant",   "ice",    "volcanic"};
 
 void requireNonNegativeFinite(double v, const char* what) {
     if (!std::isfinite(v) || v < 0.0) {
@@ -45,7 +46,8 @@ Planet::Planet(EntityId id, std::string name, const Vector3D& position, PlanetTy
     setHabitability(habitability);
 }
 
-Planet::Planet(EntityId id, const nlohmann::json& params) : Entity(id, params), type_(PlanetType::Terrestrial) {
+Planet::Planet(EntityId id, const nlohmann::json& params)
+    : Entity(id, params), type_(PlanetType::Terrestrial) {
     try {
         if (params.contains("planetType")) {
             const auto t = parsePlanetType(params["planetType"].get<std::string>());
@@ -125,8 +127,9 @@ void Planet::onResourceTick(const ResourceAmounts& shortfall) {
 
 std::string Planet::describe() const {
     std::ostringstream os;
-    os << Entity::describe() << " type " << toString(type_) << " habitability " << habitability_ << " population "
-       << static_cast<std::int64_t>(population_) << " defense " << defense_ << (explored_ ? " explored" : "");
+    os << Entity::describe() << " type " << toString(type_) << " habitability " << habitability_
+       << " population " << static_cast<std::int64_t>(population_) << " defense " << defense_
+       << (explored_ ? " explored" : "");
     return os.str();
 }
 

@@ -10,12 +10,12 @@
  */
 #pragma once
 
+#include "core/Entity.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
-
-#include "core/Entity.hpp"
 
 namespace CppVerseHub::Core {
 
@@ -87,7 +87,9 @@ public:
     void setHabitability(double value);
 
     /// @brief Carrying capacity (habitability * kCapacityPerHabitability). @return Capacity.
-    [[nodiscard]] double populationCapacity() const noexcept { return habitability_ * kCapacityPerHabitability; }
+    [[nodiscard]] double populationCapacity() const noexcept {
+        return habitability_ * kCapacityPerHabitability;
+    }
 
     /// @brief Population. @return Inhabitants.
     [[nodiscard]] double population() const noexcept { return population_; }
@@ -108,7 +110,8 @@ public:
 
     /// @brief Base production rate. @param type Resource. @return Units per second.
     [[nodiscard]] double productionRate(ResourceType type) const noexcept { return production_[type]; }
-    /// @brief Set a base production rate. @param type Resource. @param unitsPerSecond Non-negative, finite rate.
+    /// @brief Set a base production rate. @param type Resource. @param unitsPerSecond Non-negative, finite
+    /// rate.
     void setProductionRate(ResourceType type, double unitsPerSecond);
 
 private:

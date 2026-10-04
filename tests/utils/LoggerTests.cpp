@@ -27,8 +27,8 @@ std::shared_ptr<StringSink> plainStringSink() {
 } // namespace
 
 TEST_CASE("LogLevel names round-trip through parseLogLevel", "[utils][logger]") {
-    const auto level = GENERATE(LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn, LogLevel::Error,
-                                LogLevel::Fatal, LogLevel::Off);
+    const auto level = GENERATE(LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn,
+                                LogLevel::Error, LogLevel::Fatal, LogLevel::Off);
     const auto parsed = parseLogLevel(toString(level));
     REQUIRE(parsed.has_value());
     CHECK(*parsed == level);
@@ -166,7 +166,8 @@ TEST_CASE("RingBufferSink keeps only the newest lines", "[utils][logger]") {
 TEST_CASE("CallbackSink forwards records and removeSink/clearSinks detach", "[utils][logger]") {
     Logger logger{"cb", LogLevel::Info};
     std::vector<LogLevel> seen;
-    auto sink = std::make_shared<CallbackSink>([&seen](std::string_view, const LogRecord& r) { seen.push_back(r.level); });
+    auto sink = std::make_shared<CallbackSink>(
+        [&seen](std::string_view, const LogRecord& r) { seen.push_back(r.level); });
     logger.addSink(sink);
     logger.addSink(nullptr); // ignored
     CHECK(logger.sinkCount() == 1);
@@ -184,7 +185,8 @@ TEST_CASE("CallbackSink forwards records and removeSink/clearSinks detach", "[ut
 
 TEST_CASE("Logger swallows and counts sink exceptions", "[utils][logger]") {
     Logger logger{"faulty", LogLevel::Info};
-    auto bad = std::make_shared<CallbackSink>([](std::string_view, const LogRecord&) { throw std::runtime_error("x"); });
+    auto bad = std::make_shared<CallbackSink>(
+        [](std::string_view, const LogRecord&) { throw std::runtime_error("x"); });
     auto good = plainStringSink();
     logger.addSink(bad);
     logger.addSink(good);
@@ -315,9 +317,7 @@ TEST_CASE("ScopedLogTimer reports scope duration", "[utils][logger]") {
     Logger logger{"timer", LogLevel::Debug};
     auto sink = plainStringSink();
     logger.addSink(sink);
-    {
-        const ScopedLogTimer timer{logger, "compute"};
-    }
+    { const ScopedLogTimer timer{logger, "compute"}; }
     REQUIRE(sink->lines().size() == 1);
     CHECK_THAT(sink->lines()[0], StartsWith("[DEBUG] [timer] compute took "));
     CHECK_THAT(sink->lines()[0], ContainsSubstring(" us"));

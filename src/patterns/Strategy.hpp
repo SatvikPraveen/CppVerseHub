@@ -35,9 +35,9 @@ namespace CppVerseHub::Patterns {
  * @brief 3-D point/vector used for navigation.
  */
 struct Coordinate3D {
-    double x = 0.0;  ///< X component.
-    double y = 0.0;  ///< Y component.
-    double z = 0.0;  ///< Z component.
+    double x = 0.0; ///< X component.
+    double y = 0.0; ///< Y component.
+    double z = 0.0; ///< Z component.
 
     /// @brief Vector sum. @return Sum.
     [[nodiscard]] constexpr Coordinate3D operator+(const Coordinate3D& o) const noexcept {
@@ -50,7 +50,9 @@ struct Coordinate3D {
     /// @brief Scale. @param k Factor. @return Scaled vector.
     [[nodiscard]] constexpr Coordinate3D operator*(double k) const noexcept { return {x * k, y * k, z * k}; }
     /// @brief Dot product. @param o Other vector. @return Dot product.
-    [[nodiscard]] constexpr double dot(const Coordinate3D& o) const noexcept { return x * o.x + y * o.y + z * o.z; }
+    [[nodiscard]] constexpr double dot(const Coordinate3D& o) const noexcept {
+        return x * o.x + y * o.y + z * o.z;
+    }
     /// @brief Cross product. @param o Other vector. @return Cross product.
     [[nodiscard]] constexpr Coordinate3D cross(const Coordinate3D& o) const noexcept {
         return {y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x};
@@ -67,39 +69,39 @@ struct Coordinate3D {
  * @brief Spherical region of space that is dangerous to cross.
  */
 struct Hazard {
-    Coordinate3D center;  ///< Centre.
-    double radius = 0.0;  ///< Radius.
-    double risk = 0.0;    ///< Risk added for every route leg crossing it.
+    Coordinate3D center; ///< Centre.
+    double radius = 0.0; ///< Radius.
+    double risk = 0.0;   ///< Risk added for every route leg crossing it.
 };
 
 /**
  * @brief Environment the strategies plan in.
  */
 struct NavigationContext {
-    std::vector<Hazard> hazards;  ///< Known hazards.
-    double cruiseSpeed = 1.0;     ///< Distance per time unit at full throttle.
-    double fuelPerUnit = 1.0;     ///< Fuel per distance at full throttle (scales with throttle^2).
+    std::vector<Hazard> hazards; ///< Known hazards.
+    double cruiseSpeed = 1.0;    ///< Distance per time unit at full throttle.
+    double fuelPerUnit = 1.0;    ///< Fuel per distance at full throttle (scales with throttle^2).
 };
 
 /**
  * @brief A planned route and its metrics.
  */
 struct Route {
-    std::vector<Coordinate3D> waypoints;  ///< Waypoints including start and end.
-    double distance = 0.0;                ///< Total path length.
-    double time = 0.0;                    ///< Travel time.
-    double fuel = 0.0;                    ///< Fuel consumed.
-    double risk = 0.0;                    ///< Accumulated hazard risk.
-    std::string strategy;                 ///< Name of the strategy that produced it.
+    std::vector<Coordinate3D> waypoints; ///< Waypoints including start and end.
+    double distance = 0.0;               ///< Total path length.
+    double time = 0.0;                   ///< Travel time.
+    double fuel = 0.0;                   ///< Fuel consumed.
+    double risk = 0.0;                   ///< Accumulated hazard risk.
+    std::string strategy;                ///< Name of the strategy that produced it.
 };
 
 /**
  * @brief Relative importance of route metrics (lower weighted score is better).
  */
 struct RouteWeights {
-    double time = 1.0;  ///< Weight of travel time.
-    double fuel = 1.0;  ///< Weight of fuel.
-    double risk = 1.0;  ///< Weight of risk.
+    double time = 1.0; ///< Weight of travel time.
+    double fuel = 1.0; ///< Weight of fuel.
+    double risk = 1.0; ///< Weight of risk.
 };
 
 /**
@@ -117,7 +119,8 @@ struct RouteWeights {
  * @param hazard Hazard sphere.
  * @return true if the minimum distance from the centre to the segment is below the radius.
  */
-[[nodiscard]] bool segmentIntersects(const Coordinate3D& a, const Coordinate3D& b, const Hazard& hazard) noexcept;
+[[nodiscard]] bool segmentIntersects(const Coordinate3D& a, const Coordinate3D& b,
+                                     const Hazard& hazard) noexcept;
 
 /**
  * @brief Compute metrics for a polyline flown at a given throttle.
@@ -127,8 +130,8 @@ struct RouteWeights {
  * @param strategy Name recorded in the route.
  * @return Route with all metrics filled in.
  */
-[[nodiscard]] Route evaluateRoute(std::vector<Coordinate3D> waypoints, double throttle, const NavigationContext& ctx,
-                                  std::string strategy);
+[[nodiscard]] Route evaluateRoute(std::vector<Coordinate3D> waypoints, double throttle,
+                                  const NavigationContext& ctx, std::string strategy);
 
 // ----------------------------------------------------------------------------
 // Classic runtime strategies
@@ -286,14 +289,15 @@ private:
  * @brief Candidate planet for an attack.
  */
 struct PlanetTarget {
-    std::string name;       ///< Planet name.
-    Coordinate3D position;  ///< Location.
-    double value = 0.0;     ///< Strategic value.
-    double defense = 0.0;   ///< Defence strength.
+    std::string name;      ///< Planet name.
+    Coordinate3D position; ///< Location.
+    double value = 0.0;    ///< Strategic value.
+    double defense = 0.0;  ///< Defence strength.
 };
 
 /// @brief Strategy that picks the index of a target, or nullopt if none is acceptable.
-using TargetSelector = std::function<std::optional<std::size_t>(std::span<const PlanetTarget>, const Coordinate3D&)>;
+using TargetSelector =
+    std::function<std::optional<std::size_t>(std::span<const PlanetTarget>, const Coordinate3D&)>;
 
 /// @brief Choose the nearest target. @param targets Candidates. @param origin Fleet position. @return Index.
 [[nodiscard]] std::optional<std::size_t> nearestTarget(std::span<const PlanetTarget> targets,
@@ -323,4 +327,4 @@ using TargetSelector = std::function<std::optional<std::size_t>(std::span<const 
  */
 void demonstrateStrategy(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

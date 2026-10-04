@@ -8,7 +8,7 @@ namespace CppVerseHub::Core {
 
 namespace {
 constexpr std::array<std::string_view, kResourceTypeCount> kNames{"minerals", "energy", "food", "water",
-                                                                   "technology"};
+                                                                  "technology"};
 } // namespace
 
 std::string_view toString(ResourceType type) noexcept {

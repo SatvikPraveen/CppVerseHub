@@ -64,22 +64,22 @@ inline constexpr std::size_t kNoVertex = std::numeric_limits<std::size_t>::max()
 template <EdgeWeight W = double>
 class WeightedGraph {
 public:
-    using weight_type = W;  ///< Weight type.
+    using weight_type = W; ///< Weight type.
 
     /// @brief An edge as added by the user.
     struct Edge {
-        std::size_t from;  ///< Source (or one endpoint if undirected).
-        std::size_t to;    ///< Target (or the other endpoint).
-        W weight;          ///< Weight.
+        std::size_t from; ///< Source (or one endpoint if undirected).
+        std::size_t to;   ///< Target (or the other endpoint).
+        W weight;         ///< Weight.
         /// @brief Member-wise equality.
         friend bool operator==(const Edge&, const Edge&) = default;
     };
 
     /// @brief An adjacency entry.
     struct Arc {
-        std::size_t to;       ///< Neighbour.
-        W weight;             ///< Weight of the connecting edge.
-        std::size_t edge_id;  ///< Index into edges().
+        std::size_t to;      ///< Neighbour.
+        W weight;            ///< Weight of the connecting edge.
+        std::size_t edge_id; ///< Index into edges().
     };
 
     /**
@@ -174,7 +174,7 @@ private:
             return path;
         }
         if (path.size() > parent.size()) {
-            break;  // malformed parent array (cycle)
+            break; // malformed parent array (cycle)
         }
     }
     return {};
@@ -186,9 +186,9 @@ private:
 
 /// @brief Result of a breadth-first search.
 struct BfsResult {
-    std::vector<std::size_t> order;   ///< Vertices in visitation order.
-    std::vector<std::size_t> hops;    ///< Edge count from the source (kNoVertex if unreachable).
-    std::vector<std::size_t> parent;  ///< BFS-tree parent (kNoVertex for source/unreached).
+    std::vector<std::size_t> order;  ///< Vertices in visitation order.
+    std::vector<std::size_t> hops;   ///< Edge count from the source (kNoVertex if unreachable).
+    std::vector<std::size_t> parent; ///< BFS-tree parent (kNoVertex for source/unreached).
 };
 
 /**
@@ -225,9 +225,9 @@ template <EdgeWeight W>
 
 /// @brief Result of a depth-first search.
 struct DfsResult {
-    std::vector<std::size_t> preorder;   ///< Discovery order.
-    std::vector<std::size_t> postorder;  ///< Finish order.
-    std::vector<std::size_t> parent;     ///< DFS-tree parent (kNoVertex for source/unreached).
+    std::vector<std::size_t> preorder;  ///< Discovery order.
+    std::vector<std::size_t> postorder; ///< Finish order.
+    std::vector<std::size_t> parent;    ///< DFS-tree parent (kNoVertex for source/unreached).
 };
 
 /**
@@ -303,9 +303,9 @@ template <EdgeWeight W>
 /// @brief Single-source shortest-path tree.
 template <EdgeWeight W>
 struct ShortestPaths {
-    std::size_t source = kNoVertex;          ///< Source vertex.
-    std::vector<std::optional<W>> distance;  ///< Distance per vertex (nullopt = unreachable).
-    std::vector<std::size_t> parent;         ///< Predecessor on a shortest path.
+    std::size_t source = kNoVertex;         ///< Source vertex.
+    std::vector<std::optional<W>> distance; ///< Distance per vertex (nullopt = unreachable).
+    std::vector<std::size_t> parent;        ///< Predecessor on a shortest path.
 
     /**
      * @brief Vertices of a shortest path to `target`.
@@ -350,7 +350,7 @@ template <EdgeWeight W>
         const auto [d, u] = heap.top();
         heap.pop();
         if (done[u]) {
-            continue;  // stale entry
+            continue; // stale entry
         }
         done[u] = true;
         for (const auto& arc : g.neighbors(u)) {
@@ -389,7 +389,8 @@ template <EdgeWeight W>
         throw std::out_of_range("bellman_ford: source out of range");
     }
     BellmanFordResult<W> r;
-    r.paths = ShortestPaths<W>{source, std::vector<std::optional<W>>(n), std::vector<std::size_t>(n, kNoVertex)};
+    r.paths = ShortestPaths<W>{source, std::vector<std::optional<W>>(n),
+                               std::vector<std::size_t>(n, kNoVertex)};
     auto& dist = r.paths.distance;
     dist[source] = W{};
     auto relax_all = [&]() {
@@ -460,9 +461,9 @@ template <EdgeWeight W>
 /// @brief A path with its total cost.
 template <EdgeWeight W>
 struct Path {
-    std::vector<std::size_t> vertices;  ///< source..target.
-    W cost{};                           ///< Sum of edge weights.
-    std::size_t expanded = 0;           ///< Number of vertex expansions performed by the search.
+    std::vector<std::size_t> vertices; ///< source..target.
+    W cost{};                          ///< Sum of edge weights.
+    std::size_t expanded = 0;          ///< Number of vertex expansions performed by the search.
 };
 
 /**
@@ -488,7 +489,7 @@ template <EdgeWeight W, std::invocable<std::size_t> H>
     }
     std::vector<std::optional<W>> best(n);
     std::vector<std::size_t> parent(n, kNoVertex);
-    using Entry = std::tuple<W, W, std::size_t>;  // (f = g + h, g, vertex)
+    using Entry = std::tuple<W, W, std::size_t>; // (f = g + h, g, vertex)
     std::priority_queue<Entry, std::vector<Entry>, std::greater<>> open;
     best[source] = W{};
     open.emplace(static_cast<W>(std::invoke(heuristic, source)), W{}, source);
@@ -497,7 +498,7 @@ template <EdgeWeight W, std::invocable<std::size_t> H>
         const auto [f, gu, u] = open.top();
         open.pop();
         if (best[u] && *best[u] < gu) {
-            continue;  // stale
+            continue; // stale
         }
         ++expanded;
         if (u == target) {
@@ -580,7 +581,7 @@ template <EdgeWeight W>
     std::vector<bool> on_stack(n, false);
     std::vector<std::size_t> scc_stack;
     std::vector<std::vector<std::size_t>> components;
-    std::vector<std::pair<std::size_t, std::size_t>> call;  // (vertex, next arc)
+    std::vector<std::pair<std::size_t, std::size_t>> call; // (vertex, next arc)
     std::size_t counter = 0;
     auto open_vertex = [&](std::size_t v) {
         index[v] = low[v] = counter++;
@@ -657,9 +658,9 @@ template <EdgeWeight W>
 /// @brief A minimum spanning forest.
 template <EdgeWeight W>
 struct MstResult {
-    std::vector<typename WeightedGraph<W>::Edge> edges;  ///< Chosen edges.
-    W total_weight{};                                    ///< Sum of chosen weights.
-    std::size_t components = 0;                          ///< Trees in the forest (1 if connected).
+    std::vector<typename WeightedGraph<W>::Edge> edges; ///< Chosen edges.
+    W total_weight{};                                   ///< Sum of chosen weights.
+    std::size_t components = 0;                         ///< Trees in the forest (1 if connected).
 };
 
 /**
@@ -710,7 +711,7 @@ template <EdgeWeight W>
     const std::size_t n = g.vertex_count();
     std::vector<bool> in_tree(n, false);
     MstResult<W> r;
-    using Entry = std::tuple<W, std::size_t, std::size_t>;  // (weight, edge id, vertex)
+    using Entry = std::tuple<W, std::size_t, std::size_t>; // (weight, edge id, vertex)
     std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap;
     for (std::size_t root = 0; root < n; ++root) {
         if (in_tree[root]) {
@@ -746,8 +747,8 @@ template <EdgeWeight W>
 
 /// @brief Cut structure of an undirected graph.
 struct CutStructure {
-    std::vector<std::size_t> bridges;              ///< Edge ids whose removal disconnects the graph.
-    std::vector<std::size_t> articulation_points;  ///< Vertices whose removal disconnects the graph.
+    std::vector<std::size_t> bridges;             ///< Edge ids whose removal disconnects the graph.
+    std::vector<std::size_t> articulation_points; ///< Vertices whose removal disconnects the graph.
 };
 
 /**
@@ -788,7 +789,7 @@ template <EdgeWeight W>
             if (stack.back().next < arcs.size()) {
                 const auto& arc = arcs[stack.back().next++];
                 if (arc.edge_id == stack.back().parent_edge) {
-                    continue;  // don't reuse the tree edge we arrived by (parallel edges still count)
+                    continue; // don't reuse the tree edge we arrived by (parallel edges still count)
                 }
                 if (tin[arc.to] != kNoVertex) {
                     low[v] = std::min(low[v], tin[arc.to]);
@@ -893,7 +894,7 @@ public:
         while (true) {
             std::fill(via.begin(), via.end(), kNoVertex);
             std::deque<std::size_t> queue{s};
-            via[s] = edges_.size();  // marks visited
+            via[s] = edges_.size(); // marks visited
             while (!queue.empty() && via[t] == kNoVertex) {
                 const std::size_t u = queue.front();
                 queue.pop_front();
@@ -993,8 +994,8 @@ private:
 /// @brief An optimal closed tour.
 template <class W>
 struct TspResult {
-    std::vector<std::size_t> tour;  ///< Visiting order starting at vertex 0 (return to 0 implied).
-    W cost{};                       ///< Total length including the return edge.
+    std::vector<std::size_t> tour; ///< Visiting order starting at vertex 0 (return to 0 implied).
+    W cost{};                      ///< Total length including the return edge.
 };
 
 /**
@@ -1027,7 +1028,7 @@ template <class W>
     std::vector<std::size_t> from(full * n, kNoVertex);
     auto at = [n](std::size_t mask, std::size_t j) { return mask * n + j; };
     dp[at(1, 0)] = W{};
-    for (std::size_t mask = 1; mask < full; mask += 2) {  // masks containing vertex 0
+    for (std::size_t mask = 1; mask < full; mask += 2) { // masks containing vertex 0
         for (std::size_t j = 0; j < n; ++j) {
             const W cur = dp[at(mask, j)];
             if (cur == kInf || (mask & (std::size_t{1} << j)) == 0) {
@@ -1072,6 +1073,6 @@ template <class W>
  */
 void demonstrate_graphs(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms
 
-#endif  // CPPVERSEHUB_ALGORITHMS_GRAPHALGORITHMS_HPP
+#endif // CPPVERSEHUB_ALGORITHMS_GRAPHALGORITHMS_HPP

@@ -5,8 +5,6 @@
 
 #include "patterns/Demo.hpp"
 
-#include <exception>
-
 #include "patterns/Adapter.hpp"
 #include "patterns/Builder.hpp"
 #include "patterns/Command.hpp"
@@ -16,13 +14,15 @@
 #include "patterns/State.hpp"
 #include "patterns/Strategy.hpp"
 
+#include <exception>
+
 namespace CppVerseHub::Patterns {
 
 void runDemo(std::ostream& out) {
     using Showcase = void (*)(std::ostream&);
-    constexpr Showcase showcases[] = {&demonstrateAdapter, &demonstrateBuilder,   &demonstrateCommand,
+    constexpr Showcase showcases[] = {&demonstrateAdapter,   &demonstrateBuilder,  &demonstrateCommand,
                                       &demonstrateDecorator, &demonstrateObserver, &demonstrateSingleton,
-                                      &demonstrateState,   &demonstrateStrategy};
+                                      &demonstrateState,     &demonstrateStrategy};
     for (const Showcase showcase : showcases) {
         try {
             showcase(out);
@@ -35,4 +35,4 @@ void runDemo(std::ostream& out) {
     }
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

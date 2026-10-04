@@ -4,15 +4,15 @@
  */
 #include "core/CombatMission.hpp"
 
-#include <array>
-
-#include <nlohmann/json.hpp>
-
 #include "core/EventSystem.hpp"
 #include "core/Events.hpp"
 #include "core/Exceptions.hpp"
 #include "core/Galaxy.hpp"
 #include "core/Random.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <array>
 
 namespace CppVerseHub::Core {
 
@@ -34,7 +34,8 @@ std::optional<CombatStrategy> parseCombatStrategy(std::string_view name) noexcep
     return std::nullopt;
 }
 
-CombatMission::CombatMission(MissionId id, EntityId fleet, EntityId target, double duration, CombatStrategy strategy)
+CombatMission::CombatMission(MissionId id, EntityId fleet, EntityId target, double duration,
+                             CombatStrategy strategy)
     : Mission(id, fleet, target, duration), strategy_(strategy) {}
 
 CombatMission::CombatMission(MissionId id, const nlohmann::json& params)
@@ -67,7 +68,8 @@ Mission::StepOutcome CombatMission::execute(MissionContext& ctx, Fleet& fleet, P
     const auto [dealtFactor, takenFactor] = modifiers(strategy_);
     // Fixed draw order (fleet volley, then planet volley) keeps the RNG stream reproducible.
     const double volley = fleet.attackPower() * dealtFactor * dt * ctx.rng.uniform(0.5, 1.5);
-    const double response = target.defense() * kDefenseFirepower * takenFactor * dt * ctx.rng.uniform(0.5, 1.5);
+    const double response = target.defense() * kDefenseFirepower * takenFactor * dt *
+                            ctx.rng.uniform(0.5, 1.5);
     const double dealt = volley < target.defense() ? volley : target.defense();
     target.setDefense(target.defense() - dealt);
     const double hullBefore = fleet.totalHull();

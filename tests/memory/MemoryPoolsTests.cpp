@@ -23,24 +23,24 @@
 using namespace CppVerseHub::Memory;
 
 namespace {
-    struct Counted {
-        static inline int live = 0;
-        static inline bool throw_next = false;
-        int value;
-        explicit Counted(int v) : value(v) {
-            if (throw_next) {
-                throw std::runtime_error("construction failed");
-            }
-            ++live;
+struct Counted {
+    static inline int live = 0;
+    static inline bool throw_next = false;
+    int value;
+    explicit Counted(int v) : value(v) {
+        if (throw_next) {
+            throw std::runtime_error("construction failed");
         }
-        Counted(const Counted&) = delete;
-        Counted& operator=(const Counted&) = delete;
-        ~Counted() { --live; }
-    };
+        ++live;
+    }
+    Counted(const Counted&) = delete;
+    Counted& operator=(const Counted&) = delete;
+    ~Counted() { --live; }
+};
 
-    struct alignas(32) Aligned32 {
-        float data[8]{};
-    };
+struct alignas(32) Aligned32 {
+    float data[8]{};
+};
 } // namespace
 
 TEST_CASE("FixedSizePool validates its parameters", "[memory][pools][fixed]") {

@@ -4,17 +4,17 @@
  */
 #include "stl_showcase/Algorithms.hpp"
 
-#include <numeric>
 #include <array>
 #include <cctype>
+#include <numeric>
 #include <random>
 #include <tuple>
 
 namespace CppVerseHub::STL {
 
 std::ostream& operator<<(std::ostream& os, const Mission& mission) {
-    return os << mission.id << " (" << mission.type << ", p" << mission.priority << ", " << mission.duration_hours
-              << "h, " << mission.success_probability * 100.0 << "%)";
+    return os << mission.id << " (" << mission.type << ", p" << mission.priority << ", "
+              << mission.duration_hours << "h, " << mission.success_probability * 100.0 << "%)";
 }
 
 std::vector<Mission> sampleMissions() {
@@ -52,8 +52,8 @@ std::size_t countMissionsOfType(std::span<const Mission> missions, std::string_v
 }
 
 bool allMissionsFeasible(std::span<const Mission> missions, double min_success) {
-    return std::ranges::all_of(missions, [min_success](double p) { return p >= min_success; },
-                               &Mission::success_probability);
+    return std::ranges::all_of(
+        missions, [min_success](double p) { return p >= min_success; }, &Mission::success_probability);
 }
 
 MissionStats computeMissionStats(std::span<const Mission> missions) {
@@ -90,7 +90,8 @@ std::optional<std::size_t> findSubsequence(std::span<const int> haystack, std::s
 }
 
 bool isPalindrome(std::string_view text) noexcept {
-    return std::equal(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(text.size() / 2), text.rbegin());
+    return std::equal(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(text.size() / 2),
+                      text.rbegin());
 }
 
 // ---------------------------------------------------------------------------------- modifying
@@ -119,8 +120,8 @@ std::size_t capValues(std::vector<int>& values, int cap) {
 }
 
 std::size_t partitionByPriority(std::vector<Mission>& missions, int threshold) {
-    const auto tail =
-        std::ranges::stable_partition(missions, [threshold](int p) { return p >= threshold; }, &Mission::priority);
+    const auto tail = std::ranges::stable_partition(
+        missions, [threshold](int p) { return p >= threshold; }, &Mission::priority);
     return static_cast<std::size_t>(tail.begin() - missions.begin());
 }
 
@@ -130,10 +131,11 @@ namespace {
 
 bool moreUrgent(const Mission& lhs, const Mission& rhs) noexcept {
     // Negate-free descending order on priority: swap lhs/rhs for that component only.
-    return std::tie(rhs.priority, lhs.duration_hours, lhs.id) < std::tie(lhs.priority, rhs.duration_hours, rhs.id);
+    return std::tie(rhs.priority, lhs.duration_hours, lhs.id) <
+           std::tie(lhs.priority, rhs.duration_hours, rhs.id);
 }
 
-}  // namespace
+} // namespace
 
 void sortMissionsByUrgency(std::vector<Mission>& missions) {
     std::ranges::sort(missions, moreUrgent);
@@ -230,7 +232,7 @@ void printRange(std::ostream& out, std::string_view label, const Range& range) {
     out << '\n';
 }
 
-}  // namespace
+} // namespace
 
 void demonstrateNonModifyingAlgorithms(std::ostream& out) {
     out << "\n=== Non-modifying Algorithms ===\n";
@@ -242,13 +244,14 @@ void demonstrateNonModifyingAlgorithms(std::ostream& out) {
     out << std::boolalpha << "all missions >= 50% (all_of): " << allMissionsFeasible(missions, 0.5) << '\n';
     const auto stats = computeMissionStats(missions);
     out << "stats: total " << stats.total_hours << "h, mean " << stats.mean_hours << "h, priority range ["
-        << stats.min_priority << ", " << stats.max_priority << "], expected successes " << stats.expected_successes
-        << '\n';
+        << stats.min_priority << ", " << stats.max_priority << "], expected successes "
+        << stats.expected_successes << '\n';
     const std::array<int, 6> telemetry{4, 8, 15, 16, 23, 42};
     const std::array<int, 6> replay{4, 8, 15, 61, 23, 42};
     const std::array<int, 2> pattern{16, 23};
     out << "first mismatch at index " << firstMismatch(telemetry, replay).value_or(0) << '\n';
-    out << "search {16,23} found at " << findSubsequence(telemetry, pattern).value_or(telemetry.size()) << '\n';
+    out << "search {16,23} found at " << findSubsequence(telemetry, pattern).value_or(telemetry.size())
+        << '\n';
     out << "\"radar\" palindrome? " << isPalindrome("radar") << '\n';
 }
 
@@ -293,8 +296,8 @@ void demonstrateSortingAlgorithms(std::ostream& out) {
     printRange(out, "bounded heap k-smallest (k=3)", kSmallest(readings, 3));
 
     const std::vector<int> sorted{1, 3, 3, 3, 7, 9};
-    out << "lower_bound index of 4: " << insertionIndex(sorted, 4) << ", equal_range count of 3: "
-        << countInSorted(sorted, 3) << '\n';
+    out << "lower_bound index of 4: " << insertionIndex(sorted, 4)
+        << ", equal_range count of 3: " << countInSorted(sorted, 3) << '\n';
 }
 
 void demonstrateNumericAlgorithms(std::ostream& out) {
@@ -310,7 +313,8 @@ void demonstrateNumericAlgorithms(std::ostream& out) {
     constexpr std::array<unsigned long long, 3> orbits{4, 6, 10};
     constexpr auto alignment = lcmOf(orbits);
     static_assert(alignment == 60);
-    out << "orbits re-align after lcm = " << alignment << " cycles, gcd(84, 36) = " << std::gcd(84, 36) << '\n';
+    out << "orbits re-align after lcm = " << alignment << " cycles, gcd(84, 36) = " << std::gcd(84, 36)
+        << '\n';
 }
 
 void demonstrateSetAlgorithms(std::ostream& out) {
@@ -328,9 +332,10 @@ void demonstrateSetAlgorithms(std::ostream& out) {
 void demonstratePermutationAlgorithms(std::ostream& out) {
     out << "\n=== Permutation Algorithms ===\n";
     printRange(out, "next_permutation of \"aab\"", allPermutations("aab"));
-    out << std::boolalpha << "is_permutation(\"listen\", \"silent\"): " << isAnagram("listen", "silent") << '\n';
-    out << "lexicographical_compare(\"alpha\", \"Beta\") ignoring case: " << caseInsensitiveLess("alpha", "Beta")
+    out << std::boolalpha << "is_permutation(\"listen\", \"silent\"): " << isAnagram("listen", "silent")
         << '\n';
+    out << "lexicographical_compare(\"alpha\", \"Beta\") ignoring case: "
+        << caseInsensitiveLess("alpha", "Beta") << '\n';
 }
 
 void runAlgorithmsDemo(std::ostream& out) {
@@ -342,4 +347,4 @@ void runAlgorithmsDemo(std::ostream& out) {
     demonstratePermutationAlgorithms(out);
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

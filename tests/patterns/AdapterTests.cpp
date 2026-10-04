@@ -3,13 +3,13 @@
  * @brief Tests for the object, class and callback adapters.
  */
 
+#include "patterns/Adapter.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <type_traits>
-
-#include "patterns/Adapter.hpp"
 
 using namespace CppVerseHub::Patterns;
 using Catch::Approx;
@@ -25,10 +25,10 @@ TEST_CASE("Frame codec round-trips arbitrary text", "[adapter][codec]") {
 
 TEST_CASE("Frame codec rejects malformed frames", "[adapter][codec]") {
     CHECK_FALSE(decodeFrame("").has_value());
-    CHECK_FALSE(decodeFrame("a|b|1").has_value());     // missing body field
-    CHECK_FALSE(decodeFrame("a|b|9|body").has_value());  // bad priority
-    CHECK_FALSE(decodeFrame("a|b|1|x|y").has_value());   // unescaped separator in body
-    CHECK_FALSE(decodeFrame("a|b|1|x\\").has_value());   // dangling escape
+    CHECK_FALSE(decodeFrame("a|b|1").has_value());      // missing body field
+    CHECK_FALSE(decodeFrame("a|b|9|body").has_value()); // bad priority
+    CHECK_FALSE(decodeFrame("a|b|1|x|y").has_value());  // unescaped separator in body
+    CHECK_FALSE(decodeFrame("a|b|1|x\\").has_value());  // dangling escape
     CHECK(encodeFrame({"S", "R", "hi", MessagePriority::Urgent}) == "R|S|2|hi");
 }
 
@@ -64,7 +64,7 @@ TEST_CASE("RadioAdapter rejects oversized messages and skips garbage frames", "[
     LegacyRadio radio;
     RadioAdapter channel(radio, "ch");
     CHECK_FALSE(channel.send({"a", "b", std::string(400, 'z'), MessagePriority::Low}));
-    CHECK(radio.transmit("garbage", 7) == LegacyRadio::kOk);  // another legacy client
+    CHECK(radio.transmit("garbage", 7) == LegacyRadio::kOk); // another legacy client
     channel.send({"a", "b", "ok", MessagePriority::Low});
     const auto m = channel.receive();
     REQUIRE(m.has_value());
@@ -89,7 +89,8 @@ TEST_CASE("Class adapter does not publicly expose the adaptee", "[adapter][class
     STATIC_REQUIRE_FALSE(std::is_convertible_v<ThermalSensorAdapter*, LegacyThermalSensor*>);
 }
 
-TEST_CASE("CallbackBridge forwards C callbacks to std::function and unregisters (RAII)", "[adapter][callback]") {
+TEST_CASE("CallbackBridge forwards C callbacks to std::function and unregisters (RAII)",
+          "[adapter][callback]") {
     LegacyEventPump pump;
     std::vector<int> a;
     std::vector<int> b;

@@ -101,7 +101,8 @@ struct BoundRangeAdaptor {
      */
     template <std::ranges::random_access_range R, class T, class Comp = std::ranges::less,
               class Proj = std::identity>
-        requires std::indirect_strict_weak_order<Comp, const T*, std::projected<std::ranges::iterator_t<R>, Proj>>
+        requires std::indirect_strict_weak_order<Comp, const T*,
+                                                 std::projected<std::ranges::iterator_t<R>, Proj>>
     constexpr auto operator()(R&& r, const T& value, Comp comp = {}, Proj proj = {}) const {
         return static_cast<const Derived&>(*this)(std::ranges::begin(r), std::ranges::end(r), value,
                                                   std::move(comp), std::move(proj));
@@ -140,7 +141,7 @@ constexpr I upper_bound_n(I first, std::iter_difference_t<I> n, const T& value, 
     return first;
 }
 
-}  // namespace detail
+} // namespace detail
 
 /**
  * @brief Iterative binary search for the lower bound (first element not less than `value`).
@@ -386,8 +387,9 @@ struct InterpolationSearchFn {
      * @return Iterator to the first matching element or `end(r)`.
      */
     template <std::ranges::random_access_range R, class T, class Proj = std::identity>
-        requires std::is_arithmetic_v<std::remove_cvref_t<std::indirect_result_t<Proj&, std::ranges::iterator_t<R>>>>
-                 && std::is_arithmetic_v<T>
+        requires std::is_arithmetic_v<
+                     std::remove_cvref_t<std::indirect_result_t<Proj&, std::ranges::iterator_t<R>>>> &&
+                 std::is_arithmetic_v<T>
     constexpr std::ranges::borrowed_iterator_t<R> operator()(R&& r, const T& value, Proj proj = {}) const {
         return (*this)(std::ranges::begin(r), std::ranges::end(r), value, std::move(proj));
     }
@@ -421,7 +423,7 @@ struct TernarySearchPeakFn {
         while (lo < hi) {
             const auto mid = lo + (hi - lo) / 2;
             if (std::invoke(comp, std::invoke(proj, first[mid]), std::invoke(proj, first[mid + 1]))) {
-                lo = mid + 1;  // still ascending
+                lo = mid + 1; // still ascending
             } else {
                 hi = mid;
             }
@@ -566,7 +568,8 @@ template <std::ranges::random_access_range T, std::ranges::random_access_range P
  *
  * Time: O(n / m) best (sublinear), O(n * m) worst. Space: O(256).
  */
-[[nodiscard]] std::vector<std::size_t> boyer_moore_horspool_search(std::string_view text, std::string_view pattern);
+[[nodiscard]] std::vector<std::size_t> boyer_moore_horspool_search(std::string_view text,
+                                                                   std::string_view pattern);
 
 /**
  * @brief Rabin-Karp search with a 64-bit polynomial rolling hash modulo the Mersenne prime 2^61-1.
@@ -609,8 +612,8 @@ class AhoCorasick {
 public:
     /// @brief One match: pattern `pattern_index` occurs at `position` in the text.
     struct Match {
-        std::size_t position;       ///< Start offset in the text.
-        std::size_t pattern_index;  ///< Index into the pattern list given at construction.
+        std::size_t position;      ///< Start offset in the text.
+        std::size_t pattern_index; ///< Index into the pattern list given at construction.
         /// @brief Lexicographic ordering by (position, pattern_index).
         friend constexpr auto operator<=>(const Match&, const Match&) = default;
     };
@@ -638,8 +641,8 @@ private:
     struct Node {
         std::array<std::int32_t, 256> next{};
         std::int32_t fail = 0;
-        std::int32_t dict_link = -1;      ///< nearest proper suffix state that ends a pattern
-        std::vector<std::size_t> output;  ///< patterns ending exactly at this state
+        std::int32_t dict_link = -1;     ///< nearest proper suffix state that ends a pattern
+        std::vector<std::size_t> output; ///< patterns ending exactly at this state
     };
     std::vector<std::string> patterns_;
     std::vector<Node> nodes_;
@@ -713,8 +716,8 @@ private:
 
 /// @brief A dictionary word together with its edit distance to a query.
 struct FuzzyMatch {
-    std::string word;       ///< Dictionary entry.
-    std::size_t distance;   ///< Levenshtein distance to the query.
+    std::string word;     ///< Dictionary entry.
+    std::size_t distance; ///< Levenshtein distance to the query.
     /// @brief Equality on both fields.
     friend bool operator==(const FuzzyMatch&, const FuzzyMatch&) = default;
 };
@@ -791,7 +794,7 @@ public:
      * @return Indices into points(), ordered by (distance, index); fewer than k if size() < k.
      */
     [[nodiscard]] std::vector<std::size_t> nearest(const Point& query, std::size_t k) const {
-        std::priority_queue<std::pair<T, std::size_t>> best;  // max-heap of (dist2, idx)
+        std::priority_queue<std::pair<T, std::size_t>> best; // max-heap of (dist2, idx)
         if (k > 0) {
             knn(0, index_.size(), 0, query, k, best);
         }
@@ -853,8 +856,9 @@ private:
         const std::size_t mid = lo + (hi - lo) / 2;
         auto first = index_.begin();
         std::nth_element(first + static_cast<std::ptrdiff_t>(lo), first + static_cast<std::ptrdiff_t>(mid),
-                         first + static_cast<std::ptrdiff_t>(hi),
-                         [this, axis](std::size_t a, std::size_t b) { return points_[a][axis] < points_[b][axis]; });
+                         first + static_cast<std::ptrdiff_t>(hi), [this, axis](std::size_t a, std::size_t b) {
+                             return points_[a][axis] < points_[b][axis];
+                         });
         const std::size_t next = (axis + 1) % Dim;
         build(lo, mid, next);
         build(mid + 1, hi, next);
@@ -923,6 +927,6 @@ private:
  */
 void demonstrate_searching(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms
 
-#endif  // CPPVERSEHUB_ALGORITHMS_SEARCHALGORITHMS_HPP
+#endif // CPPVERSEHUB_ALGORITHMS_SEARCHALGORITHMS_HPP

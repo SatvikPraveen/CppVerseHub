@@ -19,9 +19,9 @@ TrackedResource::TrackedResource(std::string name, std::size_t payloadSize, Oper
 }
 
 TrackedResource::TrackedResource(const TrackedResource& other)
-    : name_(other.name_),
-      payload_(other.payload_ ? std::make_unique<std::vector<int>>(*other.payload_) : nullptr),
-      counts_(other.counts_) {
+    : name_(other.name_)
+    , payload_(other.payload_ ? std::make_unique<std::vector<int>>(*other.payload_) : nullptr)
+    , counts_(other.counts_) {
     if (counts_ != nullptr) {
         ++counts_->copies;
     }
@@ -79,10 +79,10 @@ Spacecraft::Spacecraft(int id, std::string name)
     : id_(id), name_(std::move(name)), log_(std::make_unique<std::vector<std::string>>()) {}
 
 Spacecraft::Spacecraft(Spacecraft&& other) noexcept
-    : id_(std::exchange(other.id_, -1)),
-      name_(std::move(other.name_)),
-      cargo_(std::move(other.cargo_)),
-      log_(std::move(other.log_)) {}
+    : id_(std::exchange(other.id_, -1))
+    , name_(std::move(other.name_))
+    , cargo_(std::move(other.cargo_))
+    , log_(std::move(other.log_)) {}
 
 Spacecraft& Spacecraft::operator=(Spacecraft&& other) noexcept {
     if (this != &other) {
@@ -117,12 +117,12 @@ void Spacecraft::log(std::string entry) {
 // ===== Elision / sinks =====
 
 TrackedResource makeResource(OperationCounts* counts) {
-    return TrackedResource("factory-made", 16, counts);  // prvalue: constructed directly in the caller
+    return TrackedResource("factory-made", 16, counts); // prvalue: constructed directly in the caller
 }
 
 std::string makeCallSign(std::string name) {
     name += "-01";
-    return name;  // implicitly moved (or NRVO'd)
+    return name; // implicitly moved (or NRVO'd)
 }
 
 // ===== SHOWCASES =====
@@ -145,7 +145,7 @@ struct ThrowingMove {
     OperationCounts* counts;
 };
 
-}  // namespace
+} // namespace
 
 void demonstrateBasicMoveSemantics(std::ostream& out) {
     out << "\n--- Copy vs move ---\n";
@@ -154,10 +154,11 @@ void demonstrateBasicMoveSemantics(std::ostream& out) {
         TrackedResource original("ore", 1000, &counts);
         TrackedResource copy = original;             // deep copy
         TrackedResource moved = std::move(original); // pointer steal
-        out << "  original moved-from: " << std::boolalpha << original.isMovedFrom()  // NOLINT(bugprone-use-after-move)
-            << ", copy checksum " << copy.checksum() << ", moved checksum " << moved.checksum() << std::noboolalpha
-            << '\n';
-        original = copy;  // a moved-from object can be assigned again
+        out << "  original moved-from: " << std::boolalpha
+            << original.isMovedFrom() // NOLINT(bugprone-use-after-move)
+            << ", copy checksum " << copy.checksum() << ", moved checksum " << moved.checksum()
+            << std::noboolalpha << '\n';
+        original = copy; // a moved-from object can be assigned again
         out << "  reassigned moved-from object, size " << original.size() << '\n';
     }
     printCounts(out, "after scope", counts);
@@ -185,12 +186,12 @@ void demonstrateMoveOnlyTypes(std::ostream& out) {
     Spacecraft scout(1, "Scout");
     scout.log("launched");
     TrackedResource fuel("fuel", 64, &counts);
-    scout.loadCargo(fuel);                                         // copy into the sink
-    scout.loadCargo(TrackedResource("water", 32, &counts));        // prvalue: moved, not copied
-    scout.emplaceCargo("medkits", std::size_t{8}, &counts);        // constructed in place
+    scout.loadCargo(fuel);                                  // copy into the sink
+    scout.loadCargo(TrackedResource("water", 32, &counts)); // prvalue: moved, not copied
+    scout.emplaceCargo("medkits", std::size_t{8}, &counts); // constructed in place
     Spacecraft flagship = std::move(scout);
     out << "  after move: flagship '" << flagship.name() << "' has " << flagship.cargoCount() << " cargo, "
-        << flagship.logSize() << " log entries; scout valid=" << std::boolalpha << scout.isValid()  // NOLINT
+        << flagship.logSize() << " log entries; scout valid=" << std::boolalpha << scout.isValid() // NOLINT
         << std::noboolalpha << " id=" << scout.id() << '\n';
     const TrackedResource unloaded = flagship.unloadCargo();
     out << "  unloaded '" << unloaded.name() << "'\n";
@@ -224,7 +225,7 @@ void demonstrateOptimizationPatterns(std::ostream& out) {
     out << "\n--- Copy elision and sink arguments ---\n";
     OperationCounts counts;
     {
-        TrackedResource r = makeResource(&counts);  // guaranteed elision: exactly one construction
+        TrackedResource r = makeResource(&counts); // guaranteed elision: exactly one construction
         out << "  makeResource() -> '" << r.name() << "'\n";
     }
     printCounts(out, "prvalue return", counts);
@@ -242,4 +243,4 @@ void demonstrateAllMoveSemantics(std::ostream& out) {
     demonstrateOptimizationPatterns(out);
 }
 
-}  // namespace CppVerseHub::Modern::MoveSemantics
+} // namespace CppVerseHub::Modern::MoveSemantics

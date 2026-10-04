@@ -38,17 +38,17 @@ namespace CppVerseHub::Utils::Math {
 // ===================================================================================================
 
 namespace Constants {
-inline constexpr double kPi = std::numbers::pi;                  ///< pi.
-inline constexpr double kTau = 2.0 * std::numbers::pi;           ///< 2 pi.
-inline constexpr double kE = std::numbers::e;                    ///< Euler's number.
-inline constexpr double kDegToRad = std::numbers::pi / 180.0;    ///< Degrees -> radians factor.
-inline constexpr double kRadToDeg = 180.0 / std::numbers::pi;    ///< Radians -> degrees factor.
-inline constexpr double kGravitationalConstant = 6.67430e-11;   ///< G in m^3 kg^-1 s^-2.
-inline constexpr double kSpeedOfLight = 299'792'458.0;           ///< c in m/s.
-inline constexpr double kEarthMu = 3.986004418e14;               ///< Earth GM in m^3/s^2.
-inline constexpr double kSunMu = 1.32712440018e20;               ///< Sun GM in m^3/s^2.
-inline constexpr double kEarthRadius = 6.371e6;                  ///< Mean Earth radius in m.
-inline constexpr double kAstronomicalUnit = 149'597'870'700.0;   ///< AU in m.
+inline constexpr double kPi = std::numbers::pi;                ///< pi.
+inline constexpr double kTau = 2.0 * std::numbers::pi;         ///< 2 pi.
+inline constexpr double kE = std::numbers::e;                  ///< Euler's number.
+inline constexpr double kDegToRad = std::numbers::pi / 180.0;  ///< Degrees -> radians factor.
+inline constexpr double kRadToDeg = 180.0 / std::numbers::pi;  ///< Radians -> degrees factor.
+inline constexpr double kGravitationalConstant = 6.67430e-11;  ///< G in m^3 kg^-1 s^-2.
+inline constexpr double kSpeedOfLight = 299'792'458.0;         ///< c in m/s.
+inline constexpr double kEarthMu = 3.986004418e14;             ///< Earth GM in m^3/s^2.
+inline constexpr double kSunMu = 1.32712440018e20;             ///< Sun GM in m^3/s^2.
+inline constexpr double kEarthRadius = 6.371e6;                ///< Mean Earth radius in m.
+inline constexpr double kAstronomicalUnit = 149'597'870'700.0; ///< AU in m.
 } // namespace Constants
 
 /**
@@ -71,14 +71,18 @@ inline constexpr double kAstronomicalUnit = 149'597'870'700.0;   ///< AU in m.
  * @param degrees Angle in degrees.
  * @return Angle in radians.
  */
-[[nodiscard]] constexpr double toRadians(double degrees) noexcept { return degrees * Constants::kDegToRad; }
+[[nodiscard]] constexpr double toRadians(double degrees) noexcept {
+    return degrees * Constants::kDegToRad;
+}
 
 /**
  * @brief Converts radians to degrees.
  * @param radians Angle in radians.
  * @return Angle in degrees.
  */
-[[nodiscard]] constexpr double toDegrees(double radians) noexcept { return radians * Constants::kRadToDeg; }
+[[nodiscard]] constexpr double toDegrees(double radians) noexcept {
+    return radians * Constants::kRadToDeg;
+}
 
 // ===================================================================================================
 // Vector<T, N>
@@ -116,9 +120,17 @@ public:
     /// @brief First component. @return x.
     [[nodiscard]] constexpr T x() const noexcept { return data_[0]; }
     /// @brief Second component. @return y.
-    [[nodiscard]] constexpr T y() const noexcept requires(N >= 2) { return data_[1]; }
+    [[nodiscard]] constexpr T y() const noexcept
+        requires(N >= 2)
+    {
+        return data_[1];
+    }
     /// @brief Third component. @return z.
-    [[nodiscard]] constexpr T z() const noexcept requires(N >= 3) { return data_[2]; }
+    [[nodiscard]] constexpr T z() const noexcept
+        requires(N >= 3)
+    {
+        return data_[2];
+    }
 
     /// @brief Dimension. @return N.
     [[nodiscard]] static constexpr std::size_t size() noexcept { return N; }
@@ -134,22 +146,26 @@ public:
 
     /// @brief Component-wise addition. @param o Other. @return `*this`.
     constexpr Vector& operator+=(const Vector& o) noexcept {
-        for (std::size_t i = 0; i < N; ++i) data_[i] += o.data_[i];
+        for (std::size_t i = 0; i < N; ++i)
+            data_[i] += o.data_[i];
         return *this;
     }
     /// @brief Component-wise subtraction. @param o Other. @return `*this`.
     constexpr Vector& operator-=(const Vector& o) noexcept {
-        for (std::size_t i = 0; i < N; ++i) data_[i] -= o.data_[i];
+        for (std::size_t i = 0; i < N; ++i)
+            data_[i] -= o.data_[i];
         return *this;
     }
     /// @brief Scalar multiplication. @param s Scalar. @return `*this`.
     constexpr Vector& operator*=(T s) noexcept {
-        for (auto& v : data_) v *= s;
+        for (auto& v : data_)
+            v *= s;
         return *this;
     }
     /// @brief Scalar division. @param s Scalar (non-zero). @return `*this`.
     constexpr Vector& operator/=(T s) noexcept {
-        for (auto& v : data_) v /= s;
+        for (auto& v : data_)
+            v /= s;
         return *this;
     }
 
@@ -171,7 +187,8 @@ public:
     /// @brief Dot product. @param o Other. @return Sum of component products.
     [[nodiscard]] constexpr T dot(const Vector& o) const noexcept {
         T sum{};
-        for (std::size_t i = 0; i < N; ++i) sum += data_[i] * o.data_[i];
+        for (std::size_t i = 0; i < N; ++i)
+            sum += data_[i] * o.data_[i];
         return sum;
     }
 
@@ -191,13 +208,18 @@ public:
     [[nodiscard]] T distanceTo(const Vector& o) const noexcept { return (*this - o).length(); }
 
     /// @brief Cross product (3-D only). @param o Other. @return this x o.
-    [[nodiscard]] constexpr Vector cross(const Vector& o) const noexcept requires(N == 3) {
-        return Vector{data_[1] * o.data_[2] - data_[2] * o.data_[1], data_[2] * o.data_[0] - data_[0] * o.data_[2],
+    [[nodiscard]] constexpr Vector cross(const Vector& o) const noexcept
+        requires(N == 3)
+    {
+        return Vector{data_[1] * o.data_[2] - data_[2] * o.data_[1],
+                      data_[2] * o.data_[0] - data_[0] * o.data_[2],
                       data_[0] * o.data_[1] - data_[1] * o.data_[0]};
     }
 
     /// @brief 2-D scalar cross product (z of the 3-D cross). @param o Other. @return x*o.y - y*o.x.
-    [[nodiscard]] constexpr T cross(const Vector& o) const noexcept requires(N == 2) {
+    [[nodiscard]] constexpr T cross(const Vector& o) const noexcept
+        requires(N == 2)
+    {
         return data_[0] * o.data_[1] - data_[1] * o.data_[0];
     }
 
@@ -277,7 +299,9 @@ public:
      */
     [[nodiscard]] double& operator()(std::size_t r, std::size_t c) noexcept { return data_[r * cols_ + c]; }
     /// @copydoc operator()
-    [[nodiscard]] double operator()(std::size_t r, std::size_t c) const noexcept { return data_[r * cols_ + c]; }
+    [[nodiscard]] double operator()(std::size_t r, std::size_t c) const noexcept {
+        return data_[r * cols_ + c];
+    }
 
     /**
      * @brief Bounds-checked element access.
@@ -336,7 +360,8 @@ public:
 
     /// @brief Sum. @param a Lhs. @param b Rhs. @return a + b. @throws std::invalid_argument on mismatch.
     friend Matrix operator+(const Matrix& a, const Matrix& b);
-    /// @brief Difference. @param a Lhs. @param b Rhs. @return a - b. @throws std::invalid_argument on mismatch.
+    /// @brief Difference. @param a Lhs. @param b Rhs. @return a - b. @throws std::invalid_argument on
+    /// mismatch.
     friend Matrix operator-(const Matrix& a, const Matrix& b);
     /// @brief Scaling. @param a Matrix. @param s Scalar. @return a * s.
     friend Matrix operator*(const Matrix& a, double s);
@@ -383,7 +408,9 @@ private:
 
 namespace Interpolation {
 /// @brief Linear interpolation. @param a Start. @param b End. @param t Parameter. @return a + (b-a) t.
-[[nodiscard]] constexpr double lerp(double a, double b, double t) noexcept { return a + (b - a) * t; }
+[[nodiscard]] constexpr double lerp(double a, double b, double t) noexcept {
+    return a + (b - a) * t;
+}
 
 /// @brief Inverse of lerp. @param a Start. @param b End (!= a). @param v Value. @return t such that lerp = v.
 [[nodiscard]] constexpr double inverseLerp(double a, double b, double v) noexcept {
@@ -396,11 +423,13 @@ namespace Interpolation {
  * @param outMax Output end.
  * @return Remapped value.
  */
-[[nodiscard]] constexpr double remap(double v, double inMin, double inMax, double outMin, double outMax) noexcept {
+[[nodiscard]] constexpr double remap(double v, double inMin, double inMax, double outMin,
+                                     double outMax) noexcept {
     return lerp(outMin, outMax, inverseLerp(inMin, inMax, v));
 }
 
-/// @brief Hermite smoothstep. @param e0 Lower edge. @param e1 Upper edge. @param x Input. @return Value in [0,1].
+/// @brief Hermite smoothstep. @param e0 Lower edge. @param e1 Upper edge. @param x Input. @return Value in
+/// [0,1].
 [[nodiscard]] constexpr double smoothstep(double e0, double e1, double x) noexcept {
     const double t = std::clamp(inverseLerp(e0, e1, x), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
@@ -437,11 +466,15 @@ namespace Interpolation {
 namespace NumberTheory {
 /// @brief Deterministic trial-division primality test. @param n Number. @return True if prime.
 [[nodiscard]] constexpr bool isPrime(std::uint64_t n) noexcept {
-    if (n < 2) return false;
-    if (n % 2 == 0) return n == 2;
-    if (n % 3 == 0) return n == 3;
+    if (n < 2)
+        return false;
+    if (n % 2 == 0)
+        return n == 2;
+    if (n % 3 == 0)
+        return n == 3;
     for (std::uint64_t i = 5; i <= n / i; i += 6) {
-        if (n % i == 0 || n % (i + 2) == 0) return false;
+        if (n % i == 0 || n % (i + 2) == 0)
+            return false;
     }
     return true;
 }
@@ -452,15 +485,18 @@ namespace NumberTheory {
  * @return n!, or `std::nullopt` if it does not fit in 64 bits (n > 20).
  */
 [[nodiscard]] constexpr std::optional<std::uint64_t> factorial(unsigned n) noexcept {
-    if (n > 20) return std::nullopt;
+    if (n > 20)
+        return std::nullopt;
     std::uint64_t r = 1;
-    for (unsigned i = 2; i <= n; ++i) r *= i;
+    for (unsigned i = 2; i <= n; ++i)
+        r *= i;
     return r;
 }
 
 /// @brief Binomial coefficient C(n, k) computed multiplicatively. @param n n. @param k k. @return C(n,k).
 [[nodiscard]] constexpr std::uint64_t binomial(unsigned n, unsigned k) noexcept {
-    if (k > n) return 0;
+    if (k > n)
+        return 0;
     k = k < n - k ? k : n - k;
     std::uint64_t r = 1;
     for (unsigned i = 1; i <= k; ++i) {
@@ -488,11 +524,13 @@ namespace NumberTheory {
  */
 [[nodiscard]] constexpr std::uint64_t modPow(std::uint64_t base, std::uint64_t exponent,
                                              std::uint64_t modulus) noexcept {
-    if (modulus == 1) return 0;
+    if (modulus == 1)
+        return 0;
     std::uint64_t result = 1;
     base %= modulus;
     while (exponent > 0) {
-        if ((exponent & 1U) != 0U) result = result * base % modulus;
+        if ((exponent & 1U) != 0U)
+            result = result * base % modulus;
         base = base * base % modulus;
         exponent >>= 1U;
     }
@@ -558,7 +596,8 @@ struct LinearFit {
     double rSquared = 0.0;  ///< Coefficient of determination.
 };
 
-/// @brief Arithmetic mean. @param data Samples (non-empty). @return Mean. @throws std::invalid_argument if empty.
+/// @brief Arithmetic mean. @param data Samples (non-empty). @return Mean. @throws std::invalid_argument if
+/// empty.
 [[nodiscard]] double mean(std::span<const double> data);
 /**
  * @brief Variance (two-pass algorithm for numerical stability).
@@ -664,7 +703,8 @@ public:
      * @param persistence Amplitude multiplier per octave.
      * @return Normalised value in approximately [-1, 1].
      */
-    [[nodiscard]] double fractal(double x, double y, double z, int octaves, double persistence = 0.5) const noexcept;
+    [[nodiscard]] double fractal(double x, double y, double z, int octaves,
+                                 double persistence = 0.5) const noexcept;
 
 private:
     std::array<std::uint8_t, 512> perm_{};
@@ -724,9 +764,9 @@ class NBodySimulator {
 public:
     /// @brief A point mass.
     struct Body {
-        Vec3 position{};  ///< Position (m).
-        Vec3 velocity{};  ///< Velocity (m/s).
-        double mass = 0;  ///< Mass (kg).
+        Vec3 position{}; ///< Position (m).
+        Vec3 velocity{}; ///< Velocity (m/s).
+        double mass = 0; ///< Mass (kg).
     };
 
     /**

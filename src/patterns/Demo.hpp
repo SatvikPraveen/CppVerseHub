@@ -16,4 +16,4 @@ namespace CppVerseHub::Patterns {
  */
 void runDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

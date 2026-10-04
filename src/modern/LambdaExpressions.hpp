@@ -16,13 +16,13 @@
  */
 #pragma once
 
-#include <numeric>
 #include <concepts>
 #include <cstddef>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -34,21 +34,21 @@ namespace CppVerseHub::Modern::LambdaExpressions {
 
 /// @brief A ship used by the lambda examples.
 struct SpaceShip {
-    int id = 0;                 ///< Identifier.
-    std::string name;           ///< Display name.
-    std::string classType;      ///< Ship class.
-    double fuelLevel = 0.0;     ///< Fuel percentage 0..100.
-    int crewSize = 0;           ///< Crew complement.
-    bool isActive = true;       ///< Operational flag.
+    int id = 0;             ///< Identifier.
+    std::string name;       ///< Display name.
+    std::string classType;  ///< Ship class.
+    double fuelLevel = 0.0; ///< Fuel percentage 0..100.
+    int crewSize = 0;       ///< Crew complement.
+    bool isActive = true;   ///< Operational flag.
 };
 
 /// @brief A planet used by the lambda examples.
 struct Planet {
-    int id = 0;                    ///< Identifier.
-    std::string name;              ///< Display name.
-    double distanceAu = 0.0;       ///< Distance from its star in AU.
-    long long population = 0;      ///< Inhabitants.
-    bool habitable = false;        ///< Supports life.
+    int id = 0;               ///< Identifier.
+    std::string name;         ///< Display name.
+    double distanceAu = 0.0;  ///< Distance from its star in AU.
+    long long population = 0; ///< Inhabitants.
+    bool habitable = false;   ///< Supports life.
 };
 
 /// @brief Deterministic sample fleet of five ships. @return The fleet.
@@ -280,8 +280,8 @@ private:
 ///        Not thread-safe; handlers must not subscribe/unsubscribe re-entrantly while emitting.
 class EventBus {
 public:
-    using Handler = std::function<void(const std::string& payload)>;  ///< Callback signature.
-    using SubscriptionId = std::size_t;                               ///< Handle for unsubscribing.
+    using Handler = std::function<void(const std::string& payload)>; ///< Callback signature.
+    using SubscriptionId = std::size_t;                              ///< Handle for unsubscribing.
 
     /// @brief Registers a handler for an event name.
     /// @param event Event name. @param handler Callback. @return Subscription id (never 0).
@@ -316,9 +316,9 @@ private:
 
 /// @brief Operations over a fleet expressed as lambdas over STL algorithms.
 struct FleetSummary {
-    std::vector<std::string> operationalNames;  ///< Active ships with fuel > 50%, by fuel descending.
-    int activeCrew = 0;                         ///< Crew on active ships.
-    double meanFuel = 0.0;                      ///< Mean fuel across all ships.
+    std::vector<std::string> operationalNames; ///< Active ships with fuel > 50%, by fuel descending.
+    int activeCrew = 0;                        ///< Crew on active ships.
+    double meanFuel = 0.0;                     ///< Mean fuel across all ships.
 };
 
 /// @brief Computes a `FleetSummary` with `std::copy_if`, `std::sort`, `std::accumulate` and lambdas.
@@ -346,4 +346,4 @@ void demonstrateAsyncLambdas(std::ostream& out = std::cout);
 /// @brief Runs every lambda showcase. @param out Destination stream.
 void demonstrateAllLambdas(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Modern::LambdaExpressions
+} // namespace CppVerseHub::Modern::LambdaExpressions

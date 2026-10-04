@@ -34,10 +34,14 @@ enum class HullClass { Scout, Frigate, Cruiser, Carrier };
 /// @brief Maximum total mass a hull can carry (tonnes). @param hull Hull. @return Mass limit.
 [[nodiscard]] constexpr double maxMass(HullClass hull) noexcept {
     switch (hull) {
-        case HullClass::Scout: return 200.0;
-        case HullClass::Frigate: return 800.0;
-        case HullClass::Cruiser: return 2500.0;
-        case HullClass::Carrier: return 6000.0;
+        case HullClass::Scout:
+            return 200.0;
+        case HullClass::Frigate:
+            return 800.0;
+        case HullClass::Cruiser:
+            return 2500.0;
+        case HullClass::Carrier:
+            return 6000.0;
     }
     return 0.0;
 }
@@ -45,16 +49,22 @@ enum class HullClass { Scout, Frigate, Cruiser, Carrier };
 /// @brief Minimum crew for a hull. @param hull Hull. @return Crew count.
 [[nodiscard]] constexpr int minCrew(HullClass hull) noexcept {
     switch (hull) {
-        case HullClass::Scout: return 1;
-        case HullClass::Frigate: return 20;
-        case HullClass::Cruiser: return 120;
-        case HullClass::Carrier: return 400;
+        case HullClass::Scout:
+            return 1;
+        case HullClass::Frigate:
+            return 20;
+        case HullClass::Cruiser:
+            return 120;
+        case HullClass::Carrier:
+            return 400;
     }
     return 0;
 }
 
 /// @brief Base mass of a hull (tonnes). @param hull Hull. @return Mass.
-[[nodiscard]] constexpr double hullMass(HullClass hull) noexcept { return maxMass(hull) * 0.4; }
+[[nodiscard]] constexpr double hullMass(HullClass hull) noexcept {
+    return maxMass(hull) * 0.4;
+}
 
 /// @brief Kinds of installable components.
 enum class ComponentType { Engine, Reactor, Weapon, Shield, Sensor, Hangar };
@@ -63,11 +73,11 @@ enum class ComponentType { Engine, Reactor, Weapon, Shield, Sensor, Hangar };
  * @brief An installed component.
  */
 struct Component {
-    ComponentType type{};   ///< Kind.
-    std::string name;       ///< Model name.
-    double mass = 0.0;      ///< Tonnes.
-    double power = 0.0;     ///< Power produced (> 0, reactors) or consumed (< 0).
-    double rating = 0.0;    ///< Thrust / damage / shield strength / range, depending on type.
+    ComponentType type{}; ///< Kind.
+    std::string name;     ///< Model name.
+    double mass = 0.0;    ///< Tonnes.
+    double power = 0.0;   ///< Power produced (> 0, reactors) or consumed (< 0).
+    double rating = 0.0;  ///< Thrust / damage / shield strength / range, depending on type.
 };
 
 /**
@@ -167,11 +177,13 @@ private:
  */
 class ShipyardDirector {
 public:
-    /// @brief Fast, lightly armed scout. @param builder Builder (reset first). @param name Ship name. @return Ship.
+    /// @brief Fast, lightly armed scout. @param builder Builder (reset first). @param name Ship name. @return
+    /// Ship.
     [[nodiscard]] static Spacecraft buildScout(SpacecraftBuilder& builder, std::string name);
     /// @brief Balanced frigate. @param builder Builder (reset first). @param name Ship name. @return Ship.
     [[nodiscard]] static Spacecraft buildFrigate(SpacecraftBuilder& builder, std::string name);
-    /// @brief Carrier with hangars. @param builder Builder (reset first). @param name Ship name. @return Ship.
+    /// @brief Carrier with hangars. @param builder Builder (reset first). @param name Ship name. @return
+    /// Ship.
     [[nodiscard]] static Spacecraft buildCarrier(SpacecraftBuilder& builder, std::string name);
 };
 
@@ -179,9 +191,9 @@ public:
  * @brief Product of FleetBuilder.
  */
 struct Fleet {
-    std::string name;               ///< Fleet name.
-    std::string commander;          ///< Commanding officer.
-    std::vector<Spacecraft> ships;  ///< Ships.
+    std::string name;              ///< Fleet name.
+    std::string commander;         ///< Commanding officer.
+    std::vector<Spacecraft> ships; ///< Ships.
 
     /// @brief Total crew. @return Crew.
     [[nodiscard]] int totalCrew() const noexcept;
@@ -217,9 +229,9 @@ private:
  * @brief Minimal blueprint produced by BlueprintBuilder.
  */
 struct Blueprint {
-    std::string name;            ///< Design name.
-    HullClass hull{};            ///< Hull.
-    std::size_t hardpoints = 0;  ///< Weapon mounts.
+    std::string name;           ///< Design name.
+    HullClass hull{};           ///< Hull.
+    std::size_t hardpoints = 0; ///< Weapon mounts.
 };
 
 /**
@@ -252,15 +264,11 @@ public:
         return std::move(*this);
     }
     /// @brief Finish; only available once name and hull are set. @return Blueprint.
-    [[nodiscard]] Blueprint build() &&
-        requires(HasName && HasHull)
-    {
-        return std::move(bp_);
-    }
+    [[nodiscard]] Blueprint build() && requires(HasName&& HasHull) { return std::move(bp_); }
 
-private:
-    template <bool, bool>
-    friend class BlueprintBuilder;
+        private
+        : template <bool, bool>
+          friend class BlueprintBuilder;
     explicit BlueprintBuilder(Blueprint bp) : bp_(std::move(bp)) {}
 
     Blueprint bp_;
@@ -276,4 +284,4 @@ concept BuildableBlueprint = requires(B b) { std::move(b).build(); };
  */
 void demonstrateBuilder(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

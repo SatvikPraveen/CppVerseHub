@@ -1,17 +1,16 @@
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <memory>
-#include <vector>
-
-#include <nlohmann/json.hpp>
-
 #include "core/ColonizationMission.hpp"
 #include "core/CombatMission.hpp"
 #include "core/Events.hpp"
 #include "core/ExplorationMission.hpp"
 #include "core/SimulationEngine.hpp"
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <nlohmann/json.hpp>
+
+#include <memory>
+#include <vector>
 
 using namespace CppVerseHub::Core;
 using Catch::Approx;
@@ -45,10 +44,14 @@ struct World {
 } // namespace
 
 TEST_CASE("Mission constructor validates parameters", "[core][mission]") {
-    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{}, EntityId{2}, 5.0), InvalidArgumentException);
-    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{1}, EntityId{1}, 5.0), InvalidArgumentException);
-    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{1}, EntityId{2}, 0.0), InvalidArgumentException);
-    REQUIRE_THROWS_AS(ExplorationMission(MissionId{}, EntityId{1}, EntityId{2}, 1.0), InvalidArgumentException);
+    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{}, EntityId{2}, 5.0),
+                      InvalidArgumentException);
+    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{1}, EntityId{1}, 5.0),
+                      InvalidArgumentException);
+    REQUIRE_THROWS_AS(ExplorationMission(MissionId{1}, EntityId{1}, EntityId{2}, 0.0),
+                      InvalidArgumentException);
+    REQUIRE_THROWS_AS(ExplorationMission(MissionId{}, EntityId{1}, EntityId{2}, 1.0),
+                      InvalidArgumentException);
     REQUIRE_THROWS_AS(ColonizationMission(MissionId{1}, EntityId{1}, EntityId{2}, 1.0, -5.0),
                       InvalidArgumentException);
     const CombatMission m(MissionId{3}, EntityId{1}, EntityId{2}, 12.0, CombatStrategy::Defensive);
@@ -133,7 +136,8 @@ TEST_CASE("Combat mission fails when the fleet is destroyed", "[core][mission]")
     const EntityId doomedId = doomed.id();
     auto& m = w.galaxy().addMission<CombatMission>(doomedId, w.target, 1000.0);
     std::vector<EntityId> destroyed;
-    auto sub = w.engine->events().subscribe<EntityDestroyed>([&](const EntityDestroyed& e) { destroyed.push_back(e.id); });
+    auto sub = w.engine->events().subscribe<EntityDestroyed>(
+        [&](const EntityDestroyed& e) { destroyed.push_back(e.id); });
     w.engine->runUntilMissionsFinished(5000);
     REQUIRE(m.status() == MissionStatus::Failed);
     REQUIRE(m.failureReason() == "fleet destroyed");
@@ -193,7 +197,8 @@ TEST_CASE("Colonization preconditions: colonizer required and target not hostile
     w.galaxy().get<Planet>(w.home).setDefense(10.0);
     auto& m2 = w.galaxy().addMission<ColonizationMission>(ark.id(), w.home, 1.0);
     std::vector<std::string> reasons;
-    auto sub = w.engine->events().subscribe<MissionFailed>([&](const MissionFailed& e) { reasons.push_back(e.reason); });
+    auto sub = w.engine->events().subscribe<MissionFailed>(
+        [&](const MissionFailed& e) { reasons.push_back(e.reason); });
     w.engine->step();
     REQUIRE(m1.status() == MissionStatus::Failed);
     REQUIRE(m1.failureReason() == "fleet has no colonizer ship");
@@ -222,7 +227,8 @@ TEST_CASE("Missions fail when their fleet disappears and can be cancelled", "[co
     World w;
     Fleet& scouts = w.fleet("Scouts", ShipType::Scout, 1);
     auto& m = w.galaxy().addMission<ExplorationMission>(scouts.id(), w.target, 50.0);
-    auto& other = w.galaxy().addMission<ExplorationMission>(w.fleet("B", ShipType::Scout, 1).id(), w.target, 50.0);
+    auto& other = w.galaxy().addMission<ExplorationMission>(w.fleet("B", ShipType::Scout, 1).id(), w.target,
+                                                            50.0);
     w.engine->step();
     REQUIRE(w.galaxy().removeEntity(scouts.id()));
     w.engine->step();

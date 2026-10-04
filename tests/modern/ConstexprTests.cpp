@@ -1,11 +1,11 @@
+#include "modern/ConstexprProgramming.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <cmath>
 #include <sstream>
-
-#include "modern/ConstexprProgramming.hpp"
 
 using namespace CppVerseHub::Modern::ConstexprProgramming;
 using Catch::Approx;
@@ -117,7 +117,8 @@ TEST_CASE("constexpr vector computation agrees with the closed form", "[modern][
 
 TEST_CASE("physics helpers", "[modern][constexpr]") {
     CHECK(EARTH_ESCAPE_VELOCITY == Approx(11186.0).epsilon(1e-3));
-    CHECK(escapeVelocity(EARTH_MASS, EARTH_RADIUS) == Approx(std::sqrt(2.0) * orbitalVelocity(EARTH_MASS, EARTH_RADIUS)));
+    CHECK(escapeVelocity(EARTH_MASS, EARTH_RADIUS) ==
+          Approx(std::sqrt(2.0) * orbitalVelocity(EARTH_MASS, EARTH_RADIUS)));
     CHECK(distance3d(1, 2, 3, 4, 6, 3) == Approx(5.0));
     CHECK(sphereVolume(1.0) == Approx(4.0 / 3.0 * PI));
     CHECK(sphereSurfaceArea(2.0) == Approx(16.0 * PI));
@@ -133,8 +134,8 @@ TEST_CASE("solar-system table and fleet validation", "[modern][constexpr]") {
     constexpr ConstexprFleet low{1, 3, 50.0, MissionType::Trade};
     CHECK(low.isOperational());
     CHECK(low.maxRange() == Approx(75.0));
-    CHECK_FALSE(validateFleetConfiguration(std::array{low}));          // too few ships
-    CHECK(validateFleetConfiguration(std::array{low}, 3, 50.0));       // custom thresholds
+    CHECK_FALSE(validateFleetConfiguration(std::array{low}));    // too few ships
+    CHECK(validateFleetConfiguration(std::array{low}, 3, 50.0)); // custom thresholds
     CHECK_FALSE(validateFleetConfiguration(std::array<ConstexprFleet, 0>{}));
     CHECK_FALSE(ConstexprFleet{2, 0, 90.0, MissionType::Rescue}.isOperational());
 }

@@ -89,9 +89,8 @@ public:
             return false;
         }
         std::scoped_lock lock(mutex_);
-        const bool duplicate = std::any_of(observers_.begin(), observers_.end(), [&](const auto& weak) {
-            return weak.lock() == observer;
-        });
+        const bool duplicate = std::any_of(observers_.begin(), observers_.end(),
+                                           [&](const auto& weak) { return weak.lock() == observer; });
         if (duplicate) {
             return false;
         }
@@ -116,7 +115,7 @@ public:
                 found = true;
                 return true;
             }
-            return !strong;  // prune expired entries while we are here
+            return !strong; // prune expired entries while we are here
         });
         return found;
     }
@@ -190,7 +189,7 @@ struct SignalCore {
     SignalCore(SignalCore&&) = delete;
     SignalCore& operator=(SignalCore&&) = delete;
 };
-}  // namespace detail
+} // namespace detail
 
 /**
  * @brief Non-owning handle to a Signal subscription.
@@ -290,7 +289,7 @@ template <typename... Args>
 class Signal {
     struct Slot {
         std::function<void(Args...)> fn;
-        std::atomic<bool> active{true};  // cleared on disconnect so in-flight emissions skip the slot
+        std::atomic<bool> active{true}; // cleared on disconnect so in-flight emissions skip the slot
     };
 
     struct Core final : detail::SignalCore {
@@ -326,7 +325,8 @@ public:
         auto slot = std::make_shared<Slot>();
         slot->fn = std::move(fn);
         // Aliasing constructor: shares ownership of the slot but points at its active flag.
-        std::weak_ptr<const std::atomic<bool>> alive = std::shared_ptr<const std::atomic<bool>>(slot, &slot->active);
+        std::weak_ptr<const std::atomic<bool>> alive =
+            std::shared_ptr<const std::atomic<bool>>(slot, &slot->active);
         const void* id = slot.get();
         {
             std::scoped_lock lock(core_->mutex);
@@ -340,7 +340,9 @@ public:
      * @param fn Callable invoked with the emitted arguments.
      * @return RAII connection that unsubscribes when destroyed.
      */
-    [[nodiscard]] ScopedConnection connectScoped(Slot_t fn) { return ScopedConnection(connect(std::move(fn))); }
+    [[nodiscard]] ScopedConnection connectScoped(Slot_t fn) {
+        return ScopedConnection(connect(std::move(fn)));
+    }
 
     /**
      * @brief Invoke every connected slot.
@@ -399,11 +401,11 @@ enum class PlanetEventKind { ResourceChanged, PopulationChanged, DefenseChanged,
  * @brief Payload published by an ObservablePlanet.
  */
 struct PlanetEvent {
-    std::string planet;       ///< Name of the planet that changed.
-    PlanetEventKind kind{};   ///< What changed.
-    std::string attribute;    ///< Resource name, or empty for population/defence.
-    double oldValue = 0.0;    ///< Value before the change.
-    double newValue = 0.0;    ///< Value after the change.
+    std::string planet;     ///< Name of the planet that changed.
+    PlanetEventKind kind{}; ///< What changed.
+    std::string attribute;  ///< Resource name, or empty for population/defence.
+    double oldValue = 0.0;  ///< Value before the change.
+    double newValue = 0.0;  ///< Value after the change.
 };
 
 /**
@@ -533,4 +535,4 @@ private:
  */
 void demonstrateObserver(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

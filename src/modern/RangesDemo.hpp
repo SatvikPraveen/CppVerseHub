@@ -34,30 +34,30 @@ namespace CppVerseHub::Modern::Ranges {
 
 /// @brief A planet in the sample galaxy.
 struct Planet {
-    int id = 0;                   ///< Identifier.
-    std::string name;             ///< Display name.
-    std::string system;           ///< Star system.
-    double distanceAu = 0.0;      ///< Distance from its star in AU.
-    long long population = 0;     ///< Inhabitants.
-    double resourceValue = 0.0;   ///< Economic value of resources.
-    bool habitable = false;       ///< Supports life.
+    int id = 0;                 ///< Identifier.
+    std::string name;           ///< Display name.
+    std::string system;         ///< Star system.
+    double distanceAu = 0.0;    ///< Distance from its star in AU.
+    long long population = 0;   ///< Inhabitants.
+    double resourceValue = 0.0; ///< Economic value of resources.
+    bool habitable = false;     ///< Supports life.
 };
 
 /// @brief A fleet in the sample galaxy.
 struct Fleet {
-    int id = 0;                ///< Identifier.
-    std::string commander;     ///< Commanding officer.
-    int ships = 0;             ///< Ship count.
-    double fuel = 0.0;         ///< Fuel percentage.
-    bool active = true;        ///< Operational flag.
+    int id = 0;            ///< Identifier.
+    std::string commander; ///< Commanding officer.
+    int ships = 0;         ///< Ship count.
+    double fuel = 0.0;     ///< Fuel percentage.
+    bool active = true;    ///< Operational flag.
 };
 
 /// @brief A mission in the sample galaxy.
 struct Mission {
-    int id = 0;               ///< Identifier.
-    std::string type;         ///< Mission type.
-    int priority = 0;         ///< 1 (low) .. 5 (critical).
-    double progress = 0.0;    ///< Completion percentage.
+    int id = 0;            ///< Identifier.
+    std::string type;      ///< Mission type.
+    int priority = 0;      ///< 1 (low) .. 5 (critical).
+    double progress = 0.0; ///< Completion percentage.
 };
 
 /// @brief Deterministic sample planets. @return Ten planets across three systems.
@@ -91,15 +91,15 @@ template <std::ranges::view V>
     requires std::ranges::forward_range<V>
 class EveryNthView : public std::ranges::view_interface<EveryNthView<V>> {
 public:
-    using difference_type = std::ranges::range_difference_t<V>;  ///< Step type.
+    using difference_type = std::ranges::range_difference_t<V>; ///< Step type.
 
     /// @brief Forward iterator that advances `n` steps at a time, never past the end.
     class Iterator {
     public:
-        using iterator_concept = std::forward_iterator_tag;    ///< Ranges iterator concept.
-        using iterator_category = std::forward_iterator_tag;   ///< Legacy iterator category.
-        using value_type = std::ranges::range_value_t<V>;      ///< Element value type.
-        using difference_type = std::ranges::range_difference_t<V>;  ///< Distance type.
+        using iterator_concept = std::forward_iterator_tag;         ///< Ranges iterator concept.
+        using iterator_category = std::forward_iterator_tag;        ///< Legacy iterator category.
+        using value_type = std::ranges::range_value_t<V>;           ///< Element value type.
+        using difference_type = std::ranges::range_difference_t<V>; ///< Distance type.
 
         Iterator() = default;
         /// @brief Positions the iterator. @param cur Current. @param end End of base. @param step Stride.
@@ -122,7 +122,9 @@ public:
         /// @brief Iterator equality. @return True if at the same position.
         friend bool operator==(const Iterator& a, const Iterator& b) { return a.cur_ == b.cur_; }
         /// @brief Sentinel comparison. @return True if at the end.
-        friend bool operator==(const Iterator& it, std::default_sentinel_t /*unused*/) { return it.cur_ == it.end_; }
+        friend bool operator==(const Iterator& it, std::default_sentinel_t /*unused*/) {
+            return it.cur_ == it.end_;
+        }
 
     private:
         std::ranges::iterator_t<V> cur_{};
@@ -138,7 +140,9 @@ public:
     EveryNthView(V base, difference_type step) : base_(std::move(base)), step_(step < 1 ? 1 : step) {}
 
     /// @brief Start of the view. @return Iterator to the first element.
-    [[nodiscard]] Iterator begin() { return Iterator(std::ranges::begin(base_), std::ranges::end(base_), step_); }
+    [[nodiscard]] Iterator begin() {
+        return Iterator(std::ranges::begin(base_), std::ranges::end(base_), step_);
+    }
     /// @brief End of the view. @return `std::default_sentinel`.
     [[nodiscard]] std::default_sentinel_t end() const noexcept { return std::default_sentinel; }
     /// @brief The stride. @return n.
@@ -155,7 +159,7 @@ EveryNthView(R&&, std::ranges::range_difference_t<R>) -> EveryNthView<std::views
 
 /// @brief Pipeable adaptor object produced by `everyNth(n)`.
 struct EveryNthAdaptor {
-    std::ptrdiff_t step;  ///< Stride.
+    std::ptrdiff_t step; ///< Stride.
 
     /// @brief `range | everyNth(n)`. @param r Viewable range. @param a Adaptor. @return The view.
     template <std::ranges::viewable_range R>
@@ -196,7 +200,8 @@ static_assert(std::ranges::view<EveryNthView<std::views::all_t<std::vector<int>&
 [[nodiscard]] std::vector<int> missionIdsByUrgency(std::vector<Mission> missions);
 
 /// @brief Groups planet names by star system. @param planets Input. @return system -> names.
-[[nodiscard]] std::map<std::string, std::vector<std::string>> planetsBySystem(const std::vector<Planet>& planets);
+[[nodiscard]] std::map<std::string, std::vector<std::string>> planetsBySystem(
+    const std::vector<Planet>& planets);
 
 /// @brief Splits text on a delimiter with `views::split`, dropping empty tokens.
 /// @param text Input. @param delimiter Separator. @return Tokens.
@@ -244,4 +249,4 @@ void demonstrateLaziness(std::ostream& out = std::cout);
 /// @brief Runs every ranges showcase. @param out Destination stream.
 void demonstrateAllRanges(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Modern::Ranges
+} // namespace CppVerseHub::Modern::Ranges

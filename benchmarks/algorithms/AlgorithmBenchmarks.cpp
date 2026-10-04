@@ -56,12 +56,24 @@ struct BucketIntFn {
     }
 };
 
-#define NLOGN_SORT(Fn) \
-    BENCHMARK_TEMPLATE(BM_Sort, Fn)->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->MinTime(0.02)->Complexity(benchmark::oNLogN)
-#define QUADRATIC_SORT(Fn) \
-    BENCHMARK_TEMPLATE(BM_Sort, Fn)->RangeMultiplier(4)->Range(1 << 6, 1 << 10)->MinTime(0.02)->Complexity(benchmark::oNSquared)
-#define LINEAR_SORT(Fn) \
-    BENCHMARK_TEMPLATE(BM_Sort, Fn)->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->MinTime(0.02)->Complexity(benchmark::oN)
+#define NLOGN_SORT(Fn)                                                                                       \
+    BENCHMARK_TEMPLATE(BM_Sort, Fn)                                                                          \
+        ->RangeMultiplier(8)                                                                                 \
+        ->Range(1 << 9, 1 << 15)                                                                             \
+        ->MinTime(0.02)                                                                                      \
+        ->Complexity(benchmark::oNLogN)
+#define QUADRATIC_SORT(Fn)                                                                                   \
+    BENCHMARK_TEMPLATE(BM_Sort, Fn)                                                                          \
+        ->RangeMultiplier(4)                                                                                 \
+        ->Range(1 << 6, 1 << 10)                                                                             \
+        ->MinTime(0.02)                                                                                      \
+        ->Complexity(benchmark::oNSquared)
+#define LINEAR_SORT(Fn)                                                                                      \
+    BENCHMARK_TEMPLATE(BM_Sort, Fn)                                                                          \
+        ->RangeMultiplier(8)                                                                                 \
+        ->Range(1 << 9, 1 << 15)                                                                             \
+        ->MinTime(0.02)                                                                                      \
+        ->Complexity(benchmark::oN)
 
 NLOGN_SORT(StdSortFn);
 NLOGN_SORT(StdStableSortFn);
@@ -80,7 +92,8 @@ LINEAR_SORT(algo::RadixSortFn);
 LINEAR_SORT(BucketIntFn);
 
 void BM_CountingSortFewUnique(benchmark::State& state) {
-    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)), algo::DataPattern::FewUnique);
+    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)),
+                                           algo::DataPattern::FewUnique);
     for (auto _ : state) {
         auto data = input;
         algo::counting_sort(data);
@@ -93,7 +106,8 @@ BENCHMARK(BM_CountingSortFewUnique)->RangeMultiplier(8)->Range(1 << 9, 1 << 15)-
 // Adaptivity: Timsort / merge sort on already sorted input are linear.
 template <class Sorter>
 void BM_SortPresorted(benchmark::State& state) {
-    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)), algo::DataPattern::Sorted);
+    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)),
+                                           algo::DataPattern::Sorted);
     const Sorter sorter{};
     for (auto _ : state) {
         auto data = input;
@@ -102,14 +116,18 @@ void BM_SortPresorted(benchmark::State& state) {
     }
     state.SetComplexityN(state.range(0));
 }
-BENCHMARK_TEMPLATE(BM_SortPresorted, algo::TimSortFn)->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oN);
+BENCHMARK_TEMPLATE(BM_SortPresorted, algo::TimSortFn)
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oN);
 BENCHMARK_TEMPLATE(BM_SortPresorted, algo::IntroSortFn)
     ->RangeMultiplier(8)
     ->Range(1 << 9, 1 << 15)
     ->Complexity(benchmark::oNLogN);
 
 void BM_ParallelMergeSort(benchmark::State& state) {
-    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)), algo::DataPattern::Random);
+    const auto input = algo::generate_data(static_cast<std::size_t>(state.range(0)),
+                                           algo::DataPattern::Random);
     for (auto _ : state) {
         auto data = input;
         algo::parallel_merge_sort(data);
@@ -117,7 +135,11 @@ void BM_ParallelMergeSort(benchmark::State& state) {
     }
     state.SetComplexityN(state.range(0));
 }
-BENCHMARK(BM_ParallelMergeSort)->RangeMultiplier(4)->Range(1 << 14, 1 << 16)->UseRealTime()->Complexity(benchmark::oNLogN);
+BENCHMARK(BM_ParallelMergeSort)
+    ->RangeMultiplier(4)
+    ->Range(1 << 14, 1 << 16)
+    ->UseRealTime()
+    ->Complexity(benchmark::oNLogN);
 
 // ---------------------------------------------------------------------------------------------
 // Searching
@@ -144,13 +166,18 @@ void BM_SortedSearch(benchmark::State& state) {
     state.SetComplexityN(state.range(0));
 }
 
-#define SEARCH_BENCH(Fn, Big) \
-    BENCHMARK_TEMPLATE(BM_SortedSearch, Fn)->RangeMultiplier(16)->Range(1 << 8, 1 << 20)->MinTime(0.02)->Complexity(Big)
+#define SEARCH_BENCH(Fn, Big)                                                                                \
+    BENCHMARK_TEMPLATE(BM_SortedSearch, Fn)                                                                  \
+        ->RangeMultiplier(16)                                                                                \
+        ->Range(1 << 8, 1 << 20)                                                                             \
+        ->MinTime(0.02)                                                                                      \
+        ->Complexity(Big)
 
 SEARCH_BENCH(algo::LowerBoundFn, benchmark::oLogN);
 SEARCH_BENCH(algo::ExponentialSearchFn, benchmark::oLogN);
-SEARCH_BENCH(algo::InterpolationSearchFn, benchmark::oAuto);  // O(log log n) on uniform data
-SEARCH_BENCH(algo::JumpSearchFn, [](benchmark::IterationCount n) { return std::sqrt(static_cast<double>(n)); });
+SEARCH_BENCH(algo::InterpolationSearchFn, benchmark::oAuto); // O(log log n) on uniform data
+SEARCH_BENCH(algo::JumpSearchFn,
+             [](benchmark::IterationCount n) { return std::sqrt(static_cast<double>(n)); });
 BENCHMARK_TEMPLATE(BM_SortedSearch, algo::LinearSearchFn)
     ->RangeMultiplier(16)
     ->Range(1 << 8, 1 << 16)
@@ -171,17 +198,30 @@ void BM_StringSearch(benchmark::State& state, StringMatcher matcher) {
     state.SetComplexityN(state.range(0));
     state.SetBytesProcessed(state.iterations() * state.range(0));
 }
-std::vector<std::size_t> kmp_adapter(std::string_view t, std::string_view p) { return algo::kmp_search(t, p); }
+std::vector<std::size_t> kmp_adapter(std::string_view t, std::string_view p) {
+    return algo::kmp_search(t, p);
+}
 
 BENCHMARK_CAPTURE(BM_StringSearch, naive, &algo::naive_search)
-    ->RangeMultiplier(8)->Range(1 << 12, 1 << 15)->Complexity(benchmark::oN);
-BENCHMARK_CAPTURE(BM_StringSearch, kmp, &kmp_adapter)->RangeMultiplier(8)->Range(1 << 12, 1 << 15)->Complexity(benchmark::oN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 12, 1 << 15)
+    ->Complexity(benchmark::oN);
+BENCHMARK_CAPTURE(BM_StringSearch, kmp, &kmp_adapter)
+    ->RangeMultiplier(8)
+    ->Range(1 << 12, 1 << 15)
+    ->Complexity(benchmark::oN);
 BENCHMARK_CAPTURE(BM_StringSearch, horspool, &algo::boyer_moore_horspool_search)
-    ->RangeMultiplier(8)->Range(1 << 12, 1 << 15)->Complexity(benchmark::oN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 12, 1 << 15)
+    ->Complexity(benchmark::oN);
 BENCHMARK_CAPTURE(BM_StringSearch, rabin_karp, &algo::rabin_karp_search)
-    ->RangeMultiplier(8)->Range(1 << 12, 1 << 15)->Complexity(benchmark::oN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 12, 1 << 15)
+    ->Complexity(benchmark::oN);
 BENCHMARK_CAPTURE(BM_StringSearch, z_algorithm, &algo::z_search)
-    ->RangeMultiplier(8)->Range(1 << 12, 1 << 15)->Complexity(benchmark::oN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 12, 1 << 15)
+    ->Complexity(benchmark::oN);
 
 void BM_AhoCorasick(benchmark::State& state) {
     std::mt19937_64 rng(4);
@@ -224,7 +264,7 @@ algo::WeightedGraph<long long> sparse_graph(std::size_t n, bool directed) {
         g.add_edge(rng() % n, rng() % n, static_cast<long long>(1 + rng() % 100));
     }
     for (std::size_t v = 1; v < n; ++v) {
-        g.add_edge(v - 1, v, 1000);  // keep it connected
+        g.add_edge(v - 1, v, 1000); // keep it connected
     }
     return g;
 }
@@ -302,8 +342,16 @@ void BM_MST(benchmark::State& state) {
     }
     state.SetComplexityN(state.range(0));
 }
-BENCHMARK_TEMPLATE(BM_MST, true)->Name("BM_Kruskal")->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oNLogN);
-BENCHMARK_TEMPLATE(BM_MST, false)->Name("BM_Prim")->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oNLogN);
+BENCHMARK_TEMPLATE(BM_MST, true)
+    ->Name("BM_Kruskal")
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oNLogN);
+BENCHMARK_TEMPLATE(BM_MST, false)
+    ->Name("BM_Prim")
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oNLogN);
 
 void BM_TarjanSCC(benchmark::State& state) {
     const auto g = sparse_graph(static_cast<std::size_t>(state.range(0)), true);
@@ -343,7 +391,7 @@ void BM_HeldKarp(benchmark::State& state) {
     state.SetComplexityN(state.range(0));
 }
 BENCHMARK(BM_HeldKarp)->DenseRange(6, 12, 3)->Complexity([](benchmark::IterationCount n) {
-    return std::ldexp(static_cast<double>(n * n), static_cast<int>(n));  // n^2 2^n
+    return std::ldexp(static_cast<double>(n * n), static_cast<int>(n)); // n^2 2^n
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -391,7 +439,10 @@ void BM_StdUnorderedMapInsertFind(benchmark::State& state) {
     }
     state.SetComplexityN(state.range(0));
 }
-BENCHMARK(BM_StdUnorderedMapInsertFind)->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oN);
+BENCHMARK(BM_StdUnorderedMapInsertFind)
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oN);
 
 template <class Set>
 void BM_OrderedSetInsert(benchmark::State& state) {
@@ -406,9 +457,13 @@ void BM_OrderedSetInsert(benchmark::State& state) {
     state.SetComplexityN(state.range(0));
 }
 BENCHMARK_TEMPLATE(BM_OrderedSetInsert, algo::BinarySearchTree<int>)
-    ->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oNLogN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oNLogN);
 BENCHMARK_TEMPLATE(BM_OrderedSetInsert, algo::SkipList<int>)
-    ->RangeMultiplier(8)->Range(1 << 9, 1 << 15)->Complexity(benchmark::oNLogN);
+    ->RangeMultiplier(8)
+    ->Range(1 << 9, 1 << 15)
+    ->Complexity(benchmark::oNLogN);
 
 void BM_MinHeapPushPop(benchmark::State& state) {
     const auto keys = random_keys(static_cast<std::size_t>(state.range(0)));
@@ -492,4 +547,4 @@ void BM_TrieInsert(benchmark::State& state) {
 }
 BENCHMARK(BM_TrieInsert)->RangeMultiplier(8)->Range(1 << 9, 1 << 13)->Complexity(benchmark::oN);
 
-}  // namespace
+} // namespace

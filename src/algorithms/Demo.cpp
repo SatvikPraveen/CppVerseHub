@@ -30,4 +30,4 @@ void runDemo(std::ostream& out) {
     }
 }
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms

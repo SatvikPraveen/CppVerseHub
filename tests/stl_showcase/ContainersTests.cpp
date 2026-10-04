@@ -1,4 +1,6 @@
 // Tests for stl_showcase/Containers.hpp
+#include "stl_showcase/Containers.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -8,8 +10,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include "stl_showcase/Containers.hpp"
 
 using namespace CppVerseHub::STL;
 
@@ -47,7 +47,7 @@ TEST_CASE("FleetRoster find, remove and removeUndercrewed", "[containers][roster
     REQUIRE_FALSE(roster.remove("Falcon"));
     REQUIRE(roster.find("Falcon") == nullptr);
 
-    REQUIRE(roster.removeUndercrewed(10) == 1);  // Serenity (9)
+    REQUIRE(roster.removeUndercrewed(10) == 1); // Serenity (9)
     REQUIRE(roster.size() == 3);
     REQUIRE(roster.totalCrew() == 400 + 150 + 5000);
 }
@@ -60,7 +60,7 @@ TEST_CASE("FleetRoster sorted copies and class filtering", "[containers][roster]
         REQUIRE(ranked[i - 1].combatRating() >= ranked[i].combatRating());
     }
     REQUIRE(ranked.front().name == "Galactica");
-    REQUIRE(roster.ships().front().name == "Enterprise");  // original order untouched
+    REQUIRE(roster.ships().front().name == "Enterprise"); // original order untouched
     REQUIRE(roster.namesOfClass("Frigate") == std::vector<std::string>{"Normandy"});
     REQUIRE(roster.namesOfClass("Dreadnought").empty());
     REQUIRE(FleetRoster{}.empty());
@@ -72,7 +72,7 @@ TEST_CASE("LruCache evicts the least recently used entry", "[containers][lru]") 
     REQUIRE(cache.empty());
     REQUIRE_FALSE(cache.put("a", 1).has_value());
     REQUIRE_FALSE(cache.put("b", 2).has_value());
-    REQUIRE(cache.get("a") == 1);  // a becomes most recent
+    REQUIRE(cache.get("a") == 1); // a becomes most recent
     const auto evicted = cache.put("c", 3);
     REQUIRE(evicted == "b");
     REQUIRE_FALSE(cache.contains("b"));
@@ -85,7 +85,7 @@ TEST_CASE("LruCache update, erase, misses and invalid capacity", "[containers][l
     LruCache<int, std::string> cache(3);
     cache.put(1, "one");
     cache.put(2, "two");
-    REQUIRE_FALSE(cache.put(1, "uno").has_value());  // update, no eviction
+    REQUIRE_FALSE(cache.put(1, "uno").has_value()); // update, no eviction
     REQUIRE(cache.get(1) == "uno");
     REQUIRE(cache.keysByRecency().front() == 1);
     REQUIRE_FALSE(cache.get(42).has_value());
@@ -101,8 +101,8 @@ TEST_CASE("LruCache copies are independent and moves keep working", "[containers
     original.put(2, 20);
 
     LruCache<int, int> copy(original);
-    REQUIRE(copy.get(1) == 10);  // splices inside copy only
-    copy.put(3, 30);             // evicts 2 from copy
+    REQUIRE(copy.get(1) == 10); // splices inside copy only
+    copy.put(3, 30);            // evicts 2 from copy
     REQUIRE(original.contains(2));
     REQUIRE(original.keysByRecency() == std::vector<int>{2, 1});
     REQUIRE(copy.keysByRecency() == std::vector<int>{3, 1});
@@ -181,7 +181,7 @@ TEST_CASE("wordFrequencies and topWords", "[containers][unordered_map]") {
     REQUIRE(top.size() == 3);
     REQUIRE(top[0] == std::pair<std::string, std::size_t>{"the", 3});
     REQUIRE(top[1].first == "fleet");
-    REQUIRE(top[2].first == "and");  // ties broken alphabetically: and < station
+    REQUIRE(top[2].first == "and"); // ties broken alphabetically: and < station
     REQUIRE(topWords(freq, 100).size() == 4);
     REQUIRE(wordFrequencies("  123 ...").empty());
 }

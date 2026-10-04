@@ -461,9 +461,11 @@ template <std::ranges::input_range R1, std::ranges::input_range R2>
 
 /// @brief Narrate find/count/all_of/mismatch/search/minmax. @param out Destination stream.
 void demonstrateNonModifyingAlgorithms(std::ostream& out = std::cout);
-/// @brief Narrate copy/transform/fill/generate/replace/remove/rotate/partition. @param out Destination stream.
+/// @brief Narrate copy/transform/fill/generate/replace/remove/rotate/partition. @param out Destination
+/// stream.
 void demonstrateModifyingAlgorithms(std::ostream& out = std::cout);
-/// @brief Narrate sort/stable_sort/partial_sort/nth_element/heaps/binary search. @param out Destination stream.
+/// @brief Narrate sort/stable_sort/partial_sort/nth_element/heaps/binary search. @param out Destination
+/// stream.
 void demonstrateSortingAlgorithms(std::ostream& out = std::cout);
 /// @brief Narrate accumulate/reduce/scan/inner_product/iota/gcd/lcm. @param out Destination stream.
 void demonstrateNumericAlgorithms(std::ostream& out = std::cout);
@@ -474,4 +476,4 @@ void demonstratePermutationAlgorithms(std::ostream& out = std::cout);
 /// @brief Run every algorithm demonstration. @param out Destination stream.
 void runAlgorithmsDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

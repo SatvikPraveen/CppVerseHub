@@ -33,39 +33,39 @@ namespace CppVerseHub::Modern::StructuredBindings {
 
 /// @brief A point in 3D space.
 struct SpaceCoordinate {
-    double x = 0.0;  ///< X.
-    double y = 0.0;  ///< Y.
-    double z = 0.0;  ///< Z.
+    double x = 0.0; ///< X.
+    double y = 0.0; ///< Y.
+    double z = 0.0; ///< Z.
 };
 
 /// @brief A planet with a position and mass.
 struct PlanetInfo {
-    std::string name;               ///< Name.
-    double mass = 0.0;              ///< Mass (arbitrary units).
-    SpaceCoordinate position;       ///< Location.
-    bool habitable = false;         ///< Supports life.
+    std::string name;         ///< Name.
+    double mass = 0.0;        ///< Mass (arbitrary units).
+    SpaceCoordinate position; ///< Location.
+    bool habitable = false;   ///< Supports life.
 };
 
 /// @brief Fleet statistics.
 struct FleetStats {
-    std::string commander;          ///< Commanding officer.
-    int shipCount = 0;              ///< Ship count.
-    double fuelPercentage = 0.0;    ///< Fuel 0..100.
-    std::string missionType;        ///< Current mission.
+    std::string commander;       ///< Commanding officer.
+    int shipCount = 0;           ///< Ship count.
+    double fuelPercentage = 0.0; ///< Fuel 0..100.
+    std::string missionType;     ///< Current mission.
 };
 
 /// @brief A mission report.
 struct MissionReport {
-    int missionId = 0;              ///< Identifier.
-    std::string type;               ///< Mission type.
-    double completion = 0.0;        ///< Completion 0..100.
-    int priority = 0;               ///< Priority.
+    int missionId = 0;       ///< Identifier.
+    std::string type;        ///< Mission type.
+    double completion = 0.0; ///< Completion 0..100.
+    int priority = 0;        ///< Priority.
 };
 
 /// @brief Result of a min/max scan: returning a named struct is often clearer than a tuple.
 struct FuelRange {
-    double minimum = 0.0;  ///< Lowest fuel.
-    double maximum = 0.0;  ///< Highest fuel.
+    double minimum = 0.0; ///< Lowest fuel.
+    double maximum = 0.0; ///< Highest fuel.
 };
 
 // ===== USER-DEFINED TUPLE-LIKE TYPE (binding protocol 2) =====
@@ -118,7 +118,7 @@ private:
     int crew_;
 };
 
-}  // namespace CppVerseHub::Modern::StructuredBindings
+} // namespace CppVerseHub::Modern::StructuredBindings
 
 /// @cond
 namespace std {
@@ -136,7 +136,7 @@ template <>
 struct tuple_element<2, CppVerseHub::Modern::StructuredBindings::ShipRecord> {
     using type = int;
 };
-}  // namespace std
+} // namespace std
 /// @endcond
 
 namespace CppVerseHub::Modern::StructuredBindings {
@@ -329,16 +329,16 @@ inline void demonstrateStructuredBindings(std::ostream& out = std::cout) {
 
     std::vector<ShipRecord> records{{1, "Explorer", 150}, {2, "Guardian", 300}};
     auto& [firstId, firstName, firstCrew] = records.front();
-    firstCrew += 10;  // binds to the private member through get<2>() &
+    firstCrew += 10; // binds to the private member through get<2>() &
     out << "tuple-like class: " << firstName << " (#" << firstId << ") crew " << records.front().crew()
         << ", total crew " << totalCrew(records) << '\n';
 
     const auto scaled = makeScaledOffset({1.0, 2.0, 3.0}, 2.0)(0.5);
     out << "lambda-captured bindings: (" << scaled.x << ", " << scaled.y << ", " << scaled.z << ")\n";
 
-    const auto [stats_completed, stats_mean] =
-        missionStats({{1, "Scan", 100.0, 1}, {2, "Mine", 50.0, 2}, {3, "Escort", 100.0, 3}});
+    const auto [stats_completed, stats_mean] = missionStats(
+        {{1, "Scan", 100.0, 1}, {2, "Mine", 50.0, 2}, {3, "Escort", 100.0, 3}});
     out << "missions: " << stats_completed << " complete, mean " << stats_mean << "%\n";
 }
 
-}  // namespace CppVerseHub::Modern::StructuredBindings
+} // namespace CppVerseHub::Modern::StructuredBindings

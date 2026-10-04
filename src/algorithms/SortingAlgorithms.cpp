@@ -5,8 +5,8 @@
 
 #include "algorithms/SortingAlgorithms.hpp"
 
-#include <numeric>
 #include <iomanip>
+#include <numeric>
 #include <random>
 #include <string>
 
@@ -41,7 +41,7 @@ std::size_t run_counted(const Fn& fn, std::span<int> data) {
     return counter.load();
 }
 
-}  // namespace
+} // namespace
 
 const SortAlgorithmInfo& sort_algorithm_info(SortAlgorithm algorithm) noexcept {
     return kSortInfo[static_cast<std::size_t>(algorithm)];
@@ -171,8 +171,8 @@ std::vector<int> generate_data(std::size_t size, DataPattern pattern, std::uint6
 void demonstrate_sorting(std::ostream& out) {
     out << "=== Sorting algorithms (n = 512, comparisons counted) ===\n";
     constexpr std::size_t n = 512;
-    const std::array<DataPattern, 4> patterns{DataPattern::Random, DataPattern::Sorted, DataPattern::ReverseSorted,
-                                              DataPattern::FewUnique};
+    const std::array<DataPattern, 4> patterns{DataPattern::Random, DataPattern::Sorted,
+                                              DataPattern::ReverseSorted, DataPattern::FewUnique};
     out << std::left << std::setw(24) << "algorithm" << std::setw(8) << "stable";
     for (DataPattern p : patterns) {
         out << std::right << std::setw(16) << to_string(p);
@@ -186,7 +186,8 @@ void demonstrate_sorting(std::ostream& out) {
             auto data = generate_data(n, p, 7);
             const std::size_t cmps = sort_ints(a, data);
             all_ok = all_ok && std::ranges::is_sorted(data);
-            out << std::right << std::setw(16) << (info.comparison_based ? std::to_string(cmps) : std::string("-"));
+            out << std::right << std::setw(16)
+                << (info.comparison_based ? std::to_string(cmps) : std::string("-"));
         }
         out << "   " << info.average_time << " / " << info.worst_time << (all_ok ? "" : "  [FAILED]") << '\n';
     }
@@ -216,4 +217,4 @@ void demonstrate_sorting(std::ostream& out) {
     print_records("tim_sort descending:   ", desc);
 }
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms

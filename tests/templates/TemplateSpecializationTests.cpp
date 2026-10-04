@@ -31,8 +31,12 @@ struct Counter {
     [[nodiscard]] int get() const { return count; }
 };
 
-int twice(int v) { return 2 * v; }
-int safe_twice(int v) noexcept { return 2 * v; }
+int twice(int v) {
+    return 2 * v;
+}
+int safe_twice(int v) noexcept {
+    return 2 * v;
+}
 
 constexpr bool str_eq(const char* a, const char* b) {
     return std::string_view(a) == std::string_view(b);
@@ -68,7 +72,8 @@ static_assert(FreeFn::arity == 1 && !FreeFn::is_noexcept && std::is_same_v<FreeF
 static_assert(NoexceptFn::is_noexcept);
 static_assert(std::is_same_v<MemberFn::class_type, Counter> && MemberFn::arity == 1);
 static_assert(ConstMemberFn::arity == 0 && str_eq(ConstMemberFn::type_name, "const_member_function_pointer"));
-static_assert(std::is_same_v<Sp::FunctionWrapper<double (*)(int, char)>::argument_types, std::tuple<int, char>>);
+static_assert(
+    std::is_same_v<Sp::FunctionWrapper<double (*)(int, char)>::argument_types, std::tuple<int, char>>);
 
 // ----- variable templates and element types -----
 static_assert(Sp::is_numeric_v<int> && Sp::is_numeric_v<double> && !Sp::is_numeric_v<bool>);
@@ -93,7 +98,8 @@ static_assert(Sp::TupleProcessor<std::tuple<int, int, int>>::arity == 3);
 static_assert(Sp::TupleProcessor<std::pair<int, int>>::arity == 2);
 static_assert(Sp::TupleProcessor<int>::arity == 1);
 static_assert(!Sp::Serializer<Opaque>::is_specialized && Sp::Serializer<int>::is_specialized);
-static_assert(Sp::Serializer<std::vector<int>>::is_specialized && !Sp::Serializer<std::vector<Opaque>>::is_specialized);
+static_assert(Sp::Serializer<std::vector<int>>::is_specialized &&
+              !Sp::Serializer<std::vector<Opaque>>::is_specialized);
 
 } // namespace
 
@@ -118,7 +124,8 @@ TEST_CASE("Serializer errors on malformed input", "[templates][specialization]")
     CHECK_THROWS_AS(Sp::Serializer<double>::deserialize("abc"), std::invalid_argument);
 }
 
-TEST_CASE("Serializer partial specialisation for vectors composes element serializers", "[templates][specialization]") {
+TEST_CASE("Serializer partial specialisation for vectors composes element serializers",
+          "[templates][specialization]") {
     CHECK(Sp::Serializer<std::vector<int>>::serialize({}) == "[]");
     CHECK(Sp::Serializer<std::vector<bool>>::serialize({true, false}) == "[true,false]");
     CHECK(Sp::Serializer<std::vector<std::vector<int>>>::serialize({{1, 2}, {3}}) == "[[1,2],[3]]");
@@ -198,7 +205,8 @@ TEST_CASE("TupleProcessor and OptionHandler describe their arguments", "[templat
     CHECK(Sp::OptionHandler<V>::describe(V{std::string("s")}) == "variant#1 s");
 }
 
-TEST_CASE("AlgorithmSelector sorts random-access and bidirectional containers", "[templates][specialization]") {
+TEST_CASE("AlgorithmSelector sorts random-access and bidirectional containers",
+          "[templates][specialization]") {
     std::vector<int> vec{3, 1, 2};
     Sp::AlgorithmSelector<std::vector<int>>::sort(vec);
     CHECK(vec == std::vector<int>{1, 2, 3});

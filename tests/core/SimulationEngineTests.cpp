@@ -1,13 +1,13 @@
+#include "core/Events.hpp"
+#include "core/ExplorationMission.hpp"
+#include "core/Scenario.hpp"
+#include "core/SimulationEngine.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <vector>
-
-#include "core/Events.hpp"
-#include "core/ExplorationMission.hpp"
-#include "core/Scenario.hpp"
-#include "core/SimulationEngine.hpp"
 
 using namespace CppVerseHub::Core;
 using Catch::Approx;
@@ -27,10 +27,12 @@ struct Recorder {
     std::vector<std::string> log;
     Subscription a, b, c, d;
     explicit Recorder(SimulationEngine& e) {
-        a = e.events().subscribe<MissionCompleted>(
-            [this, &e](const MissionCompleted& m) { log.push_back("C" + std::to_string(m.id.value()) + "@" + std::to_string(e.tick())); });
-        b = e.events().subscribe<MissionFailed>(
-            [this, &e](const MissionFailed& m) { log.push_back("F" + std::to_string(m.id.value()) + "@" + std::to_string(e.tick())); });
+        a = e.events().subscribe<MissionCompleted>([this, &e](const MissionCompleted& m) {
+            log.push_back("C" + std::to_string(m.id.value()) + "@" + std::to_string(e.tick()));
+        });
+        b = e.events().subscribe<MissionFailed>([this, &e](const MissionFailed& m) {
+            log.push_back("F" + std::to_string(m.id.value()) + "@" + std::to_string(e.tick()));
+        });
         c = e.events().subscribe<CombatExchange>([this](const CombatExchange& x) {
             log.push_back("X" + std::to_string(x.damageToFleet) + "/" + std::to_string(x.damageToPlanet));
         });
@@ -80,7 +82,8 @@ TEST_CASE("Slicing wall-clock time differently yields the same trajectory", "[co
     auto coarse = makeSampleScenario(options(11));
     auto fine = makeSampleScenario(options(11));
     for (int i = 0; i < 20; ++i) {
-        static_cast<void>(coarse->advance(1.0)); // 10 steps per call (power-of-two-free slices still sum to 200)
+        static_cast<void>(
+            coarse->advance(1.0)); // 10 steps per call (power-of-two-free slices still sum to 200)
     }
     for (int i = 0; i < 200; ++i) {
         static_cast<void>(fine->advance(0.1));
@@ -129,7 +132,8 @@ TEST_CASE("Different seeds give different simulations", "[core][engine][determin
     REQUIRE(a->stateDigest() != b->stateDigest());
 }
 
-TEST_CASE("Engine syncs entity resource flows into the ledger and conserves totals", "[core][engine][invariant]") {
+TEST_CASE("Engine syncs entity resource flows into the ledger and conserves totals",
+          "[core][engine][invariant]") {
     auto galaxy = std::make_unique<Galaxy>();
     Planet& farm = galaxy->createPlanet("Farm", {});
     farm.setProductionRate(ResourceType::Food, 10.0);

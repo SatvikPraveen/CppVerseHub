@@ -24,9 +24,11 @@ public:
      * @param duration Settlement time on station, seconds.
      * @param colonists Positive number of colonists delivered.
      */
-    ColonizationMission(MissionId id, EntityId fleet, EntityId target, double duration, double colonists = 1000.0);
+    ColonizationMission(MissionId id, EntityId fleet, EntityId target, double duration,
+                        double colonists = 1000.0);
 
-    /// @brief Construct from JSON (base keys plus "colonists", "delivered"). @param id Id. @param params Params.
+    /// @brief Construct from JSON (base keys plus "colonists", "delivered"). @param id Id. @param params
+    /// Params.
     ColonizationMission(MissionId id, const nlohmann::json& params);
 
     /// @brief Type tag. @return MissionType::Colonization.
@@ -40,8 +42,10 @@ public:
     void toJson(nlohmann::json& out) const override;
 
 protected:
-    /// @brief Require a Colonizer and a non-hostile target. @param fleet Fleet. @param target Planet. @return Reason.
-    [[nodiscard]] std::optional<std::string> checkStart(const Fleet& fleet, const Planet& target) const override;
+    /// @brief Require a Colonizer and a non-hostile target. @param fleet Fleet. @param target Planet. @return
+    /// Reason.
+    [[nodiscard]] std::optional<std::string> checkStart(const Fleet& fleet,
+                                                        const Planet& target) const override;
     /// @brief Settle once the duration has elapsed. @return Outcome.
     StepOutcome execute(MissionContext& ctx, Fleet& fleet, Planet& target, double dt) override;
 

@@ -1,14 +1,14 @@
 // Micro-benchmarks for the core simulation domain.
-#include <benchmark/benchmark.h>
-
-#include <cstdint>
-#include <vector>
-
 #include "core/EventSystem.hpp"
 #include "core/Random.hpp"
 #include "core/ResourceManager.hpp"
 #include "core/Scenario.hpp"
 #include "core/Vector3D.hpp"
+
+#include <benchmark/benchmark.h>
+
+#include <cstdint>
+#include <vector>
 
 using namespace CppVerseHub::Core;
 

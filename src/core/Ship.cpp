@@ -8,7 +8,7 @@ namespace CppVerseHub::Core {
 
 namespace {
 constexpr std::array<std::string_view, kShipTypeCount> kNames{"scout",      "fighter",   "cruiser",
-                                                               "battleship", "transport", "colonizer"};
+                                                              "battleship", "transport", "colonizer"};
 } // namespace
 
 std::string_view toString(ShipType type) noexcept {

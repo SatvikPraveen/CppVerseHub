@@ -41,10 +41,10 @@ namespace CppVerseHub::STL {
  * @brief A star system record used by the iterator demonstrations.
  */
 struct StarSystem {
-    std::string name;       ///< System name.
-    std::string star_type;  ///< Spectral class.
-    int planet_count{0};    ///< Known planets.
-    double distance_ly{0.0};///< Distance from Sol in light years.
+    std::string name;        ///< System name.
+    std::string star_type;   ///< Spectral class.
+    int planet_count{0};     ///< Known planets.
+    double distance_ly{0.0}; ///< Distance from Sol in light years.
 
     /// @brief Member-wise equality.
     friend bool operator==(const StarSystem&, const StarSystem&) = default;
@@ -146,13 +146,13 @@ class SimpleVector {
     class Iterator;
 
 public:
-    using value_type = T;                    ///< Element type.
-    using size_type = std::size_t;           ///< Size type.
-    using difference_type = std::ptrdiff_t;  ///< Difference type.
-    using reference = T&;                    ///< Reference type.
-    using const_reference = const T&;        ///< Const reference type.
-    using iterator = Iterator<false>;        ///< Mutable contiguous iterator.
-    using const_iterator = Iterator<true>;   ///< Const contiguous iterator.
+    using value_type = T;                   ///< Element type.
+    using size_type = std::size_t;          ///< Size type.
+    using difference_type = std::ptrdiff_t; ///< Difference type.
+    using reference = T&;                   ///< Reference type.
+    using const_reference = const T&;       ///< Const reference type.
+    using iterator = Iterator<false>;       ///< Mutable contiguous iterator.
+    using const_iterator = Iterator<true>;  ///< Const contiguous iterator.
 
     SimpleVector() = default;
 
@@ -188,9 +188,9 @@ public:
 
     /// @brief Move constructor; leaves @p other empty. @param other Source.
     SimpleVector(SimpleVector&& other) noexcept
-        : data_(std::move(other.data_)),
-          size_(std::exchange(other.size_, 0)),
-          capacity_(std::exchange(other.capacity_, 0)) {}
+        : data_(std::move(other.data_))
+        , size_(std::exchange(other.size_, 0))
+        , capacity_(std::exchange(other.capacity_, 0)) {}
 
     /// @brief Copy-and-swap assignment. @param other Source. @return *this.
     SimpleVector& operator=(const SimpleVector& other) {
@@ -257,7 +257,7 @@ public:
      */
     template <typename... Args>
     T& emplace_back(Args&&... args) {
-        T element(std::forward<Args>(args)...);  // built before growth so aliasing args stay valid
+        T element(std::forward<Args>(args)...); // built before growth so aliasing args stay valid
         if (size_ == capacity_) {
             reserve(capacity_ == 0 ? 4 : capacity_ * 2);
         }
@@ -277,7 +277,8 @@ public:
     }
 
     /// @brief Remove all elements (capacity is kept).
-    void clear() noexcept(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_move_assignable_v<T>) {
+    void clear() noexcept(std::is_nothrow_default_constructible_v<T> &&
+                          std::is_nothrow_move_assignable_v<T>) {
         while (size_ > 0) {
             data_[--size_] = T{};
         }
@@ -366,7 +367,8 @@ private:
         /// Implicit conversion iterator -> const_iterator.
         template <bool OtherConst>
             requires(Const && !OtherConst)
-        Iterator(const Iterator<OtherConst>& other) noexcept : ptr_(other.ptr_) {}  // NOLINT(google-explicit-constructor)
+        Iterator(const Iterator<OtherConst>& other) noexcept
+            : ptr_(other.ptr_) {} // NOLINT(google-explicit-constructor)
 
         [[nodiscard]] reference operator*() const noexcept { return *ptr_; }
         [[nodiscard]] pointer operator->() const noexcept { return ptr_; }
@@ -542,7 +544,7 @@ public:
     class iterator {
     public:
         using iterator_concept = std::forward_iterator_tag;
-        using iterator_category = std::input_iterator_tag;  // prvalue reference: legacy input only
+        using iterator_category = std::input_iterator_tag; // prvalue reference: legacy input only
         using value_type = std::uint64_t;
         using difference_type = std::ptrdiff_t;
 
@@ -559,7 +561,7 @@ public:
 
         /// @brief Advance one term. @return *this.
         constexpr iterator& operator++() noexcept {
-            const value_type sum = current_ + next_;  // unsigned: wraps harmlessly past the last term
+            const value_type sum = current_ + next_; // unsigned: wraps harmlessly past the last term
             current_ = next_;
             next_ = sum;
             ++index_;
@@ -648,7 +650,8 @@ private:
  */
 template <typename T>
 [[nodiscard]] std::vector<T> moveAll(std::vector<T>& source) {
-    std::vector<T> destination(std::make_move_iterator(source.begin()), std::make_move_iterator(source.end()));
+    std::vector<T> destination(std::make_move_iterator(source.begin()),
+                               std::make_move_iterator(source.end()));
     source.clear();
     return destination;
 }
@@ -692,7 +695,8 @@ std::size_t eraseWhileIterating(Container& container, Pred pred) {
 void demonstrateIteratorCategories(std::ostream& out = std::cout);
 /// @brief Narrate reverse/insert/move/stream iterators. @param out Destination stream.
 void demonstrateIteratorAdapters(std::ostream& out = std::cout);
-/// @brief Narrate SimpleVector, FilterView and FibonacciRange with std::ranges. @param out Destination stream.
+/// @brief Narrate SimpleVector, FilterView and FibonacciRange with std::ranges. @param out Destination
+/// stream.
 void demonstrateCustomIterators(std::ostream& out = std::cout);
 /// @brief Narrate advance/distance/next/prev and invalidation-safe erasure. @param out Destination stream.
 void demonstrateIteratorUtilities(std::ostream& out = std::cout);
@@ -717,10 +721,10 @@ static_assert(std::ranges::view<IntFilterView>);
 static_assert(std::forward_iterator<FibonacciRange::iterator>);
 static_assert(std::sentinel_for<std::default_sentinel_t, FibonacciRange::iterator>);
 static_assert(std::ranges::forward_range<FibonacciRange>);
-static_assert(std::same_as<std::iterator_traits<FibonacciRange::iterator>::iterator_category,
-                           std::input_iterator_tag>);
+static_assert(
+    std::same_as<std::iterator_traits<FibonacciRange::iterator>::iterator_category, std::input_iterator_tag>);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL
 
 /**
  * @brief FibonacciRange iterators carry all their state, so they may outlive the range object:
@@ -730,6 +734,6 @@ static_assert(std::same_as<std::iterator_traits<FibonacciRange::iterator>::itera
 namespace std::ranges {
 template <>
 inline constexpr bool enable_borrowed_range<CppVerseHub::STL::FibonacciRange> = true;
-}  // namespace std::ranges
+} // namespace std::ranges
 
 static_assert(std::ranges::borrowed_range<CppVerseHub::STL::FibonacciRange>);

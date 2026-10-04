@@ -4,23 +4,24 @@
  */
 #include "core/Mission.hpp"
 
-#include <array>
-#include <cmath>
-#include <sstream>
-
-#include <nlohmann/json.hpp>
-
 #include "core/EventSystem.hpp"
 #include "core/Events.hpp"
 #include "core/Exceptions.hpp"
 #include "core/Galaxy.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <array>
+#include <cmath>
+#include <sstream>
 
 namespace CppVerseHub::Core {
 
 namespace {
 
 constexpr std::array<std::string_view, 3> kTypeNames{"exploration", "combat", "colonization"};
-constexpr std::array<std::string_view, 5> kStatusNames{"pending", "active", "completed", "failed", "cancelled"};
+constexpr std::array<std::string_view, 5> kStatusNames{"pending", "active", "completed", "failed",
+                                                       "cancelled"};
 constexpr std::array<std::string_view, 2> kPhaseNames{"travel", "execute"};
 
 template <typename Enum, std::size_t N>
@@ -47,7 +48,9 @@ double validatedDuration(double duration) {
 
 } // namespace
 
-std::string_view toString(MissionType type) noexcept { return nameOf(kTypeNames, static_cast<std::size_t>(type)); }
+std::string_view toString(MissionType type) noexcept {
+    return nameOf(kTypeNames, static_cast<std::size_t>(type));
+}
 
 std::optional<MissionType> parseMissionType(std::string_view name) noexcept {
     return parseName<MissionType>(kTypeNames, name);
@@ -171,14 +174,14 @@ void Mission::update(MissionContext& ctx, double dt) {
     }
     elapsed_ += dt;
     switch (execute(ctx, *fleet, *planet, dt)) {
-    case StepOutcome::Continue:
-        break;
-    case StepOutcome::Success:
-        complete(ctx);
-        break;
-    case StepOutcome::Failure:
-        fail(ctx, failureReason_.empty() ? std::string("mission failed") : failureReason_);
-        break;
+        case StepOutcome::Continue:
+            break;
+        case StepOutcome::Success:
+            complete(ctx);
+            break;
+        case StepOutcome::Failure:
+            fail(ctx, failureReason_.empty() ? std::string("mission failed") : failureReason_);
+            break;
     }
 }
 

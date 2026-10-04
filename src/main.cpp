@@ -64,7 +64,8 @@ constexpr std::array kDemos{
     DemoEntry{"patterns", "GoF design patterns in modern C++", &CppVerseHub::Patterns::runDemo},
     DemoEntry{"stl", "Containers, algorithms, iterators, functors", &CppVerseHub::STL::runDemo},
     DemoEntry{"memory", "Allocators, pools, RAII, smart pointers", &CppVerseHub::Memory::runDemo},
-    DemoEntry{"concurrency", "Thread pools, lock-free queues, coroutines", &CppVerseHub::Concurrency::runDemo},
+    DemoEntry{"concurrency", "Thread pools, lock-free queues, coroutines",
+              &CppVerseHub::Concurrency::runDemo},
     DemoEntry{"modern", "C++20 language features", &CppVerseHub::Modern::runDemo},
     DemoEntry{"algorithms", "Sorting, searching, graphs, data structures", &CppVerseHub::Algorithms::runDemo},
     DemoEntry{"utils", "Logging, configuration, parsing, math", &CppVerseHub::Utils::runDemo},
@@ -154,7 +155,8 @@ int cmdDemo(std::string_view which, std::ostream& out) {
             out << "\n==================== " << d.name << " ====================\n";
             const auto start = std::chrono::steady_clock::now();
             d.run(out);
-            const std::chrono::duration<double, std::milli> elapsed = std::chrono::steady_clock::now() - start;
+            const std::chrono::duration<double, std::milli> elapsed = std::chrono::steady_clock::now() -
+                                                                      start;
             out << "[" << d.name << " finished in " << std::fixed << std::setprecision(1) << elapsed.count()
                 << " ms]\n";
             out.unsetf(std::ios::fixed);
@@ -175,8 +177,8 @@ void reportEngine(const CppVerseHub::Core::SimulationEngine& engine, std::ostrea
         << "Missions failed ..... " << s.missionsFailed << '\n'
         << "Entities destroyed .. " << s.entitiesDestroyed << '\n'
         << "Resource shortages .. " << s.resourceShortages << '\n'
-        << "State digest ........ 0x" << std::hex << std::setw(16) << std::setfill('0') << engine.stateDigest()
-        << std::dec << std::setfill(' ') << '\n';
+        << "State digest ........ 0x" << std::hex << std::setw(16) << std::setfill('0')
+        << engine.stateDigest() << std::dec << std::setfill(' ') << '\n';
 }
 
 int runEngine(CppVerseHub::Core::SimulationEngine& engine, const Options& opts, std::uint64_t steps,
@@ -221,8 +223,8 @@ int cmdSimulate(const Options& opts, std::ostream& out) {
     const auto steps = opts.integer("--steps", 1000);
 
     auto engine = makeSampleScenario(scenario);
-    out << "Simulating seed=" << scenario.seed << " planets=" << scenario.planets << " fleets=" << scenario.fleets
-        << " dt=" << scenario.timeStep << " steps=" << steps << '\n';
+    out << "Simulating seed=" << scenario.seed << " planets=" << scenario.planets
+        << " fleets=" << scenario.fleets << " dt=" << scenario.timeStep << " steps=" << steps << '\n';
     return runEngine(*engine, opts, steps, out);
 }
 

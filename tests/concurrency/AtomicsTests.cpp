@@ -1,5 +1,7 @@
 // Behavioural tests for Atomics.hpp. Catch2 assertions run only on the main thread.
 
+#include "concurrency/Atomics.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -10,8 +12,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include "concurrency/Atomics.hpp"
 
 using namespace CppVerseHub::Concurrency;
 
@@ -73,15 +73,15 @@ TEST_CASE("SpscRingBuffer manages non-trivial element lifetimes", "[concurrency]
         auto popped = ring.try_pop();
         REQUIRE(popped.has_value());
         popped.reset();
-        CHECK(tracker.use_count() == 5);  // the slot was destroyed on pop
+        CHECK(tracker.use_count() == 5); // the slot was destroyed on pop
         auto rejected = tracker;
         for (int i = 0; i < 4; ++i) {
             REQUIRE(ring.try_push(tracker));
         }
         CHECK_FALSE(ring.try_push(std::move(rejected)));
-        CHECK(rejected != nullptr);  // failed push did not consume the argument
+        CHECK(rejected != nullptr); // failed push did not consume the argument
     }
-    CHECK(tracker.use_count() == 1);  // destructor destroyed the remaining elements
+    CHECK(tracker.use_count() == 1); // destructor destroyed the remaining elements
 
     SpscRingBuffer<std::string, 2> strings;
     REQUIRE(strings.try_push(std::string(100, 'x')));
@@ -130,10 +130,11 @@ TEST_CASE("LockFreeStack is LIFO single-threaded", "[concurrency][atomics][stack
         CHECK(**v == i);
     }
     CHECK(stack.empty());
-    CHECK(stack.pending_reclamation() == 0);  // a lone popper frees nodes immediately
+    CHECK(stack.pending_reclamation() == 0); // a lone popper frees nodes immediately
 }
 
-TEST_CASE("LockFreeStack concurrent push/pop delivers every value exactly once", "[concurrency][atomics][stack]") {
+TEST_CASE("LockFreeStack concurrent push/pop delivers every value exactly once",
+          "[concurrency][atomics][stack]") {
     LockFreeStack<int> stack;
     constexpr int threads = 4;
     constexpr int per_thread = 5000;
@@ -143,7 +144,7 @@ TEST_CASE("LockFreeStack concurrent push/pop delivers every value exactly once",
         workers.emplace_back([&, t] {
             for (int i = 0; i < per_thread; ++i) {
                 stack.push(t * per_thread + i);
-                if (i % 2 == 1) {  // interleave pops with pushes to stress reclamation
+                if (i % 2 == 1) { // interleave pops with pushes to stress reclamation
                     if (auto v = stack.pop()) {
                         seen[static_cast<std::size_t>(*v)].fetch_add(1);
                     }
@@ -239,7 +240,7 @@ TEST_CASE("ConcurrentBloomFilter has no false negatives and few false positives"
     CHECK(filter.popcount() > 0);
     CHECK(filter.popcount() <= 5000);
 
-    ConcurrentBloomFilter tiny(1, 0);  // clamped to 64 bits and 1 hash
+    ConcurrentBloomFilter tiny(1, 0); // clamped to 64 bits and 1 hash
     CHECK(tiny.bit_count() == 64);
     tiny.insert("x");
     CHECK(tiny.possibly_contains("x"));
@@ -265,7 +266,7 @@ TEST_CASE("OneShotEvent releases waiters and publishes prior writes", "[concurre
     }
     CHECK(event.is_set());
     CHECK(std::all_of(results.begin(), results.end(), [](int r) { return r == 77; }));
-    event.wait();  // already set: returns immediately
+    event.wait(); // already set: returns immediately
 }
 
 TEST_CASE("Release/acquire message passing and relaxed counters", "[concurrency][atomics]") {

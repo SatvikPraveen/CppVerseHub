@@ -1,4 +1,6 @@
 // Tests for stl_showcase/Iterators.hpp
+#include "stl_showcase/Iterators.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -16,13 +18,13 @@
 #include <string>
 #include <vector>
 
-#include "stl_showcase/Iterators.hpp"
-
 using namespace CppVerseHub::STL;
 
 namespace {
-bool isOdd(int x) { return x % 2 != 0; }
-}  // namespace
+bool isOdd(int x) {
+    return x % 2 != 0;
+}
+} // namespace
 
 TEST_CASE("iteratorCategoryName reports the strongest concept", "[iterators][concepts]") {
     STATIC_REQUIRE(iteratorCategoryName<int*>() == "contiguous");
@@ -63,7 +65,7 @@ TEST_CASE("advanceBy and distanceBetween dispatch on iterator concepts", "[itera
     REQUIRE(distanceBetween(f.begin(), f.end()) == 6);
     REQUIRE(distanceBetween(l.begin(), l.begin()) == 0);
     const FibonacciRange fib(10);
-    REQUIRE(distanceBetween(fib.begin(), fib.end()) == 10);  // iterator/sentinel pair
+    REQUIRE(distanceBetween(fib.begin(), fib.end()) == 10); // iterator/sentinel pair
 }
 
 TEST_CASE("SimpleVector basic operations and growth", "[iterators][simplevector]") {
@@ -90,7 +92,7 @@ TEST_CASE("SimpleVector basic operations and growth", "[iterators][simplevector]
 TEST_CASE("SimpleVector push_back of an aliased element survives reallocation", "[iterators][simplevector]") {
     SimpleVector<std::string> v{"alpha"};
     REQUIRE(v.capacity() == 1);
-    v.push_back(v[0]);  // forces growth while referencing an element
+    v.push_back(v[0]); // forces growth while referencing an element
     REQUIRE(v.size() == 2);
     REQUIRE(v[1] == "alpha");
     v.emplace_back(v[1]);
@@ -110,7 +112,7 @@ TEST_CASE("SimpleVector copy and move semantics", "[iterators][simplevector]") {
 
     SimpleVector<int> d(std::move(c));
     REQUIRE(d == a);
-    REQUIRE(c.empty());  // NOLINT(bugprone-use-after-move): moved-from state is specified
+    REQUIRE(c.empty()); // NOLINT(bugprone-use-after-move): moved-from state is specified
 
     SimpleVector<int> e(5, 7);
     e = std::move(d);
@@ -143,7 +145,7 @@ TEST_CASE("SimpleVector iterators support random-access arithmetic", "[iterators
     REQUIRE(v.end() - v.begin() == 5);
     REQUIRE(v.begin() < v.end());
     REQUIRE((v.begin() <=> v.begin()) == std::strong_ordering::equal);
-    SimpleVector<int>::const_iterator cit = v.begin();  // iterator -> const_iterator
+    SimpleVector<int>::const_iterator cit = v.begin(); // iterator -> const_iterator
     REQUIRE(cit == v.cbegin());
     REQUIRE(std::to_address(v.begin() + 1) == v.data() + 1);
 }
@@ -168,7 +170,7 @@ TEST_CASE("FilterView yields only matching elements, lazily", "[iterators][filte
     std::vector<int> collected(odds.begin(), odds.end());
     REQUIRE(collected == std::vector<int>{1, 3, 5, 7});
 
-    data[1] = 11;  // views see later changes to the underlying range
+    data[1] = 11; // views see later changes to the underlying range
     REQUIRE(std::ranges::count(odds, 11) == 1);
     REQUIRE(std::ranges::distance(odds) == 5);
 }
@@ -181,12 +183,12 @@ TEST_CASE("FilterView models forward_range and works with ranges algorithms", "[
     STATIC_REQUIRE(std::forward_iterator<std::ranges::iterator_t<decltype(big)>>);
 
     REQUIRE(std::ranges::max(big) == 21);
-    REQUIRE(std::ranges::count_if(big, [](int x) { return x % 3 == 0; }) == 4);  // 9, 15, 6, 21
+    REQUIRE(std::ranges::count_if(big, [](int x) { return x % 3 == 0; }) == 4); // 9, 15, 6, 21
     REQUIRE(*std::ranges::find(big, 15) == 15);
     REQUIRE(std::ranges::is_sorted(big) == false);
     auto it = std::ranges::adjacent_find(big, std::ranges::greater{});
-    REQUIRE(*it == 15);  // 15 > 6
-    REQUIRE(std::ranges::find(big, 4) == big.end());  // filtered out
+    REQUIRE(*it == 15);                              // 15 > 6
+    REQUIRE(std::ranges::find(big, 4) == big.end()); // filtered out
 
     // Multi-pass guarantee: two independent traversals see the same sequence.
     auto first = big.begin();
@@ -207,7 +209,8 @@ TEST_CASE("FilterView writes through to the base and composes with views", "[ite
     std::list<std::string> words{"alpha", "be", "gamma", "pi"};
     FilterView long_words(words, [](const std::string& w) { return w.size() > 2; });
     std::vector<std::size_t> lengths;
-    std::ranges::copy(long_words | std::views::transform([](const std::string& w) { return w.size(); }), std::back_inserter(lengths));
+    std::ranges::copy(long_words | std::views::transform([](const std::string& w) { return w.size(); }),
+                      std::back_inserter(lengths));
     REQUIRE(lengths == std::vector<std::size_t>{5, 5});
 
     std::vector<int> none{1, 3, 5};
@@ -226,7 +229,7 @@ TEST_CASE("FibonacciRange generates terms lazily up to its bound", "[iterators][
     for (const auto value : FibonacciRange(FibonacciRange::max_count)) {
         last = value;
     }
-    REQUIRE(last == 12200160415121876738ULL);  // fib(93)
+    REQUIRE(last == 12200160415121876738ULL); // fib(93)
     REQUIRE_THROWS_AS(FibonacciRange(FibonacciRange::max_count + 1), std::out_of_range);
 }
 
@@ -245,7 +248,7 @@ TEST_CASE("FibonacciRange is a borrowed forward range", "[iterators][fibonacci]"
     STATIC_REQUIRE(sum == 88);
     auto copy = it;
     ++copy;
-    REQUIRE(*it == 1597);  // multi-pass: copies advance independently
+    REQUIRE(*it == 1597); // multi-pass: copies advance independently
     REQUIRE(*copy == 2584);
 }
 
@@ -263,7 +266,7 @@ TEST_CASE("Reverse iterators and base()", "[iterators][adapters]") {
     REQUIRE(reversedCopy(v) == std::vector<int>{4, 3, 2, 1});
     const auto rit = std::ranges::find(v.rbegin(), v.rend(), 3);
     REQUIRE(*rit == 3);
-    REQUIRE(*(rit.base() - 1) == 3);  // base() points one past the referenced element
+    REQUIRE(*(rit.base() - 1) == 3); // base() points one past the referenced element
     REQUIRE(rit.base() - v.begin() == 3);
 }
 
@@ -288,9 +291,9 @@ TEST_CASE("eraseWhileIterating works across container types", "[iterators][inval
     REQUIRE(v == std::vector<int>{1, 3, 5});
 
     std::list<int> l{1, 2, 3, 4};
-    const auto survivor = std::next(l.begin(), 2);  // 3
+    const auto survivor = std::next(l.begin(), 2); // 3
     REQUIRE(eraseWhileIterating(l, [](int x) { return x != 3; }) == 3);
-    REQUIRE(*survivor == 3);  // list iterators to remaining nodes stay valid
+    REQUIRE(*survivor == 3); // list iterators to remaining nodes stay valid
     REQUIRE(l.size() == 1);
 
     std::map<int, char> m{{1, 'a'}, {2, 'b'}, {3, 'c'}};

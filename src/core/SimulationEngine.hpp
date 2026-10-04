@@ -19,36 +19,36 @@
  */
 #pragma once
 
+#include "core/EventSystem.hpp"
+#include "core/Galaxy.hpp"
+#include "core/Random.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 
-#include <nlohmann/json_fwd.hpp>
-
-#include "core/EventSystem.hpp"
-#include "core/Galaxy.hpp"
-#include "core/Random.hpp"
-
 namespace CppVerseHub::Core {
 
 /// @brief Engine configuration.
 struct SimulationConfig {
-    double timeStep{0.1};                          ///< Fixed step length in seconds (> 0).
+    double timeStep{0.1};                               ///< Fixed step length in seconds (> 0).
     std::uint64_t seed{DeterministicRng::kDefaultSeed}; ///< RNG seed.
-    std::size_t maxStepsPerAdvance{1000};          ///< Cap per advance() call (prevents a "spiral of death").
-    bool pruneFinishedMissions{false};             ///< Delete finished missions at the end of each step.
+    std::size_t maxStepsPerAdvance{1000}; ///< Cap per advance() call (prevents a "spiral of death").
+    bool pruneFinishedMissions{false};    ///< Delete finished missions at the end of each step.
 };
 
 /// @brief Counters accumulated by the engine.
 struct SimulationStats {
-    std::uint64_t ticks{0};               ///< Steps executed.
-    std::uint64_t missionsStarted{0};     ///< Missions activated.
-    std::uint64_t missionsCompleted{0};   ///< Missions completed successfully.
-    std::uint64_t missionsFailed{0};      ///< Missions failed.
-    std::uint64_t entitiesDestroyed{0};   ///< Entities removed after destruction.
-    std::uint64_t resourceShortages{0};   ///< Shortfall events.
+    std::uint64_t ticks{0};             ///< Steps executed.
+    std::uint64_t missionsStarted{0};   ///< Missions activated.
+    std::uint64_t missionsCompleted{0}; ///< Missions completed successfully.
+    std::uint64_t missionsFailed{0};    ///< Missions failed.
+    std::uint64_t entitiesDestroyed{0}; ///< Entities removed after destruction.
+    std::uint64_t resourceShortages{0}; ///< Shortfall events.
 
     /// @brief Equality. @return true if every counter matches.
     friend bool operator==(const SimulationStats&, const SimulationStats&) = default;
@@ -66,9 +66,9 @@ public:
 
     SimulationEngine(const SimulationEngine&) = delete;            ///< Not copyable.
     SimulationEngine& operator=(const SimulationEngine&) = delete; ///< Not copy-assignable.
-    SimulationEngine(SimulationEngine&&) = delete;                 ///< Not movable (subscriptions refer to the bus).
-    SimulationEngine& operator=(SimulationEngine&&) = delete;      ///< Not move-assignable.
-    ~SimulationEngine();                                           ///< Destructor.
+    SimulationEngine(SimulationEngine&&) = delete; ///< Not movable (subscriptions refer to the bus).
+    SimulationEngine& operator=(SimulationEngine&&) = delete; ///< Not move-assignable.
+    ~SimulationEngine();                                      ///< Destructor.
 
     /// @brief Execute exactly one fixed step.
     void step();
@@ -109,11 +109,14 @@ public:
     /// @brief Steps executed. @return Tick count.
     [[nodiscard]] std::uint64_t tick() const noexcept { return stats_.ticks; }
     /// @brief Simulated time, computed as tick * timeStep (no accumulated rounding drift). @return Seconds.
-    [[nodiscard]] double time() const noexcept { return static_cast<double>(stats_.ticks) * config_.timeStep; }
+    [[nodiscard]] double time() const noexcept {
+        return static_cast<double>(stats_.ticks) * config_.timeStep;
+    }
     /// @brief Unconsumed time in the advance() accumulator. @return Seconds in [0, timeStep).
     [[nodiscard]] double accumulator() const noexcept { return accumulator_; }
 
-    /// @brief Serialise the complete engine state (config, counters, RNG state, galaxy). @param out Destination.
+    /// @brief Serialise the complete engine state (config, counters, RNG state, galaxy). @param out
+    /// Destination.
     void toJson(nlohmann::json& out) const;
 
     /**

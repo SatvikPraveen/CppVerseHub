@@ -136,22 +136,22 @@ struct Serializer<std::vector<T>> {
  */
 template <typename T>
 struct TypeInfo {
-    static constexpr bool is_pointer = false;               ///< T is U*
-    static constexpr bool is_reference = false;             ///< T is U& or U&&
-    static constexpr bool is_array = false;                 ///< T is U[N] or U[]
-    static constexpr bool is_const = std::is_const_v<T>;    ///< top-level const
+    static constexpr bool is_pointer = false;                  ///< T is U*
+    static constexpr bool is_reference = false;                ///< T is U& or U&&
+    static constexpr bool is_array = false;                    ///< T is U[N] or U[]
+    static constexpr bool is_const = std::is_const_v<T>;       ///< top-level const
     static constexpr bool is_volatile = std::is_volatile_v<T>; ///< top-level volatile
-    static constexpr const char* name = "value";            ///< shape name
+    static constexpr const char* name = "value";               ///< shape name
 };
 
 /** @brief Pointers (cv-unqualified pointer object). */
 template <typename T>
 struct TypeInfo<T*> : TypeInfo<void> {
-    static constexpr bool is_pointer = true;          ///< T is U*
-    static constexpr bool is_const = false;           ///< top-level const
-    static constexpr bool is_volatile = false;        ///< top-level volatile
-    static constexpr const char* name = "pointer";    ///< shape name
-    using pointed_type = T;                           ///< U
+    static constexpr bool is_pointer = true;       ///< T is U*
+    static constexpr bool is_const = false;        ///< top-level const
+    static constexpr bool is_volatile = false;     ///< top-level volatile
+    static constexpr const char* name = "pointer"; ///< shape name
+    using pointed_type = T;                        ///< U
 };
 
 /** @brief Const pointers (`U* const`) — more specialised than both `T*` and the primary. */
@@ -163,35 +163,35 @@ struct TypeInfo<T* const> : TypeInfo<T*> {
 /** @brief Lvalue references. */
 template <typename T>
 struct TypeInfo<T&> : TypeInfo<void> {
-    static constexpr bool is_reference = true;                ///< reference
-    static constexpr const char* name = "lvalue_reference";   ///< shape name
-    using referenced_type = T;                                ///< U
+    static constexpr bool is_reference = true;              ///< reference
+    static constexpr const char* name = "lvalue_reference"; ///< shape name
+    using referenced_type = T;                              ///< U
 };
 
 /** @brief Rvalue references. */
 template <typename T>
 struct TypeInfo<T&&> : TypeInfo<void> {
-    static constexpr bool is_reference = true;                ///< reference
-    static constexpr const char* name = "rvalue_reference";   ///< shape name
-    using referenced_type = T;                                ///< U
+    static constexpr bool is_reference = true;              ///< reference
+    static constexpr const char* name = "rvalue_reference"; ///< shape name
+    using referenced_type = T;                              ///< U
 };
 
 /** @brief Arrays of known bound. */
 template <typename T, std::size_t N>
 struct TypeInfo<T[N]> : TypeInfo<void> {
-    static constexpr bool is_array = true;              ///< array
+    static constexpr bool is_array = true;               ///< array
     static constexpr bool is_const = std::is_const_v<T>; ///< element constness (arrays inherit it)
-    static constexpr const char* name = "array";        ///< shape name
-    static constexpr std::size_t size = N;              ///< extent
-    using element_type = T;                             ///< element type
+    static constexpr const char* name = "array";         ///< shape name
+    static constexpr std::size_t size = N;               ///< extent
+    using element_type = T;                              ///< element type
 };
 
 /** @brief Arrays of unknown bound. */
 template <typename T>
 struct TypeInfo<T[]> : TypeInfo<void> {
-    static constexpr bool is_array = true;                    ///< array
-    static constexpr const char* name = "unbounded_array";    ///< shape name
-    using element_type = T;                                   ///< element type
+    static constexpr bool is_array = true;                 ///< array
+    static constexpr const char* name = "unbounded_array"; ///< shape name
+    using element_type = T;                                ///< element type
 };
 
 /**
@@ -329,7 +329,8 @@ struct IteratorHelper<Iterator, std::input_iterator_tag> {
 
 /** @brief Forward iterators reuse the input implementation (inheritance between specialisations). */
 template <typename Iterator>
-struct IteratorHelper<Iterator, std::forward_iterator_tag> : IteratorHelper<Iterator, std::input_iterator_tag> {
+struct IteratorHelper<Iterator, std::forward_iterator_tag>
+    : IteratorHelper<Iterator, std::input_iterator_tag> {
     static constexpr const char* category_name = "forward_iterator"; ///< category
 };
 
@@ -352,7 +353,9 @@ struct IteratorHelper<Iterator, std::random_access_iterator_tag> {
     using difference_type = typename std::iterator_traits<Iterator>::difference_type; ///< distance type
     static constexpr const char* category_name = "random_access_iterator";            ///< category
     /** @param first begin @param last end @return last - first */
-    static std::size_t distance(Iterator first, Iterator last) { return static_cast<std::size_t>(last - first); }
+    static std::size_t distance(Iterator first, Iterator last) {
+        return static_cast<std::size_t>(last - first);
+    }
     /** @param it iterator @param n steps forward */
     static void advance(Iterator& it, std::size_t n) { it += static_cast<difference_type>(n); }
     /** @param it iterator @param n steps backward */
@@ -368,11 +371,11 @@ struct FunctionWrapper;
 /** @brief Free function pointers. */
 template <typename R, typename... Args>
 struct FunctionWrapper<R (*)(Args...)> {
-    using function_type = R (*)(Args...);                      ///< wrapped type
-    using return_type = R;                                     ///< result
-    using argument_types = std::tuple<Args...>;                ///< parameters
-    static constexpr std::size_t arity = sizeof...(Args);      ///< parameter count
-    static constexpr bool is_noexcept = false;                 ///< noexcept-qualified
+    using function_type = R (*)(Args...);                        ///< wrapped type
+    using return_type = R;                                       ///< result
+    using argument_types = std::tuple<Args...>;                  ///< parameters
+    static constexpr std::size_t arity = sizeof...(Args);        ///< parameter count
+    static constexpr bool is_noexcept = false;                   ///< noexcept-qualified
     static constexpr const char* type_name = "function_pointer"; ///< description
 
     /** @param f function pointer */
@@ -386,11 +389,11 @@ struct FunctionWrapper<R (*)(Args...)> {
 /** @brief noexcept free function pointers: noexcept is part of the type since C++17. */
 template <typename R, typename... Args>
 struct FunctionWrapper<R (*)(Args...) noexcept> {
-    using function_type = R (*)(Args...) noexcept;                      ///< wrapped type
-    using return_type = R;                                              ///< result
-    using argument_types = std::tuple<Args...>;                         ///< parameters
-    static constexpr std::size_t arity = sizeof...(Args);               ///< parameter count
-    static constexpr bool is_noexcept = true;                           ///< noexcept-qualified
+    using function_type = R (*)(Args...) noexcept;                        ///< wrapped type
+    using return_type = R;                                                ///< result
+    using argument_types = std::tuple<Args...>;                           ///< parameters
+    static constexpr std::size_t arity = sizeof...(Args);                 ///< parameter count
+    static constexpr bool is_noexcept = true;                             ///< noexcept-qualified
     static constexpr const char* type_name = "noexcept_function_pointer"; ///< description
 
     /** @param f function pointer */
@@ -404,12 +407,12 @@ struct FunctionWrapper<R (*)(Args...) noexcept> {
 /** @brief Non-const member function pointers. */
 template <typename R, typename C, typename... Args>
 struct FunctionWrapper<R (C::*)(Args...)> {
-    using function_type = R (C::*)(Args...);                          ///< wrapped type
-    using return_type = R;                                            ///< result
-    using class_type = C;                                             ///< owning class
-    using argument_types = std::tuple<Args...>;                       ///< parameters
-    static constexpr std::size_t arity = sizeof...(Args);             ///< parameter count
-    static constexpr bool is_noexcept = false;                        ///< noexcept-qualified
+    using function_type = R (C::*)(Args...);                            ///< wrapped type
+    using return_type = R;                                              ///< result
+    using class_type = C;                                               ///< owning class
+    using argument_types = std::tuple<Args...>;                         ///< parameters
+    static constexpr std::size_t arity = sizeof...(Args);               ///< parameter count
+    static constexpr bool is_noexcept = false;                          ///< noexcept-qualified
     static constexpr const char* type_name = "member_function_pointer"; ///< description
 
     /** @param f member pointer */
@@ -423,12 +426,12 @@ struct FunctionWrapper<R (C::*)(Args...)> {
 /** @brief Const member function pointers. */
 template <typename R, typename C, typename... Args>
 struct FunctionWrapper<R (C::*)(Args...) const> {
-    using function_type = R (C::*)(Args...) const;                          ///< wrapped type
-    using return_type = R;                                                  ///< result
-    using class_type = C;                                                   ///< owning class
-    using argument_types = std::tuple<Args...>;                             ///< parameters
-    static constexpr std::size_t arity = sizeof...(Args);                   ///< parameter count
-    static constexpr bool is_noexcept = false;                              ///< noexcept-qualified
+    using function_type = R (C::*)(Args...) const;                            ///< wrapped type
+    using return_type = R;                                                    ///< result
+    using class_type = C;                                                     ///< owning class
+    using argument_types = std::tuple<Args...>;                               ///< parameters
+    static constexpr std::size_t arity = sizeof...(Args);                     ///< parameter count
+    static constexpr bool is_noexcept = false;                                ///< noexcept-qualified
     static constexpr const char* type_name = "const_member_function_pointer"; ///< description
 
     /** @param f member pointer */
@@ -535,7 +538,8 @@ struct AlgorithmSelector {
 /** @brief Random-access containers: std::sort in place. */
 template <typename T>
 struct AlgorithmSelector<
-    T, std::enable_if_t<std::is_base_of_v<std::random_access_iterator_tag, detail::iterator_category_of_t<T>>>> {
+    T,
+    std::enable_if_t<std::is_base_of_v<std::random_access_iterator_tag, detail::iterator_category_of_t<T>>>> {
     static constexpr const char* strategy = "introsort"; ///< chosen strategy
     /** @param container container sorted in place */
     static void sort(T& container) { std::sort(container.begin(), container.end()); }
@@ -543,8 +547,8 @@ struct AlgorithmSelector<
 
 /** @brief Bidirectional-only containers: copy to a vector, sort, copy back. */
 template <typename T>
-struct AlgorithmSelector<T, std::enable_if_t<std::is_same_v<detail::iterator_category_of_t<T>,
-                                                            std::bidirectional_iterator_tag>>> {
+struct AlgorithmSelector<
+    T, std::enable_if_t<std::is_same_v<detail::iterator_category_of_t<T>, std::bidirectional_iterator_tag>>> {
     static constexpr const char* strategy = "copy-sort-copy"; ///< chosen strategy
     /** @param container container sorted in place */
     static void sort(T& container) {

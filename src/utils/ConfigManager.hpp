@@ -194,13 +194,13 @@ class ConfigManager {
 public:
     /// @brief Description of one change delivered to listeners.
     struct Change {
-        std::string key;                    ///< Affected key.
-        std::optional<ConfigValue> before;  ///< Previous value (nullopt if the key was new).
-        std::optional<ConfigValue> after;   ///< New value (nullopt if the key was removed).
+        std::string key;                   ///< Affected key.
+        std::optional<ConfigValue> before; ///< Previous value (nullopt if the key was new).
+        std::optional<ConfigValue> after;  ///< New value (nullopt if the key was removed).
     };
-    using Listener = std::function<void(const Change&)>;            ///< Observer callback.
-    using ListenerId = std::uint64_t;                               ///< Handle for unsubscribing.
-    using Validator = std::function<bool(const ConfigValue&)>;      ///< Validation predicate.
+    using Listener = std::function<void(const Change&)>;       ///< Observer callback.
+    using ListenerId = std::uint64_t;                          ///< Handle for unsubscribing.
+    using Validator = std::function<bool(const ConfigValue&)>; ///< Validation predicate.
     using EnvLookup = std::function<std::optional<std::string>(const std::string&)>; ///< Env lookup.
 
     ConfigManager() = default;
@@ -370,7 +370,8 @@ public:
      * @param lookup Environment lookup; defaults to the process environment.
      * @return Number of overridden keys.
      */
-    std::size_t applyEnvironmentOverrides(std::string_view prefix, const EnvLookup& lookup = systemEnvironment);
+    std::size_t applyEnvironmentOverrides(std::string_view prefix,
+                                          const EnvLookup& lookup = systemEnvironment);
 
     /**
      * @brief Default lookup using the process environment.
@@ -455,7 +456,8 @@ public:
     ConfigBuilder& withOverride(std::string key, ConfigValue value);
     /// @brief Adds a validator. @param key Key. @param validator Predicate. @param description Message.
     /// @return `*this`.
-    ConfigBuilder& withValidator(std::string key, ConfigManager::Validator validator, std::string description);
+    ConfigBuilder& withValidator(std::string key, ConfigManager::Validator validator,
+                                 std::string description);
     /// @brief Marks a key as required. @param key Key. @return `*this`.
     ConfigBuilder& require(std::string key);
 

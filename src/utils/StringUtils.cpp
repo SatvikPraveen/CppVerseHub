@@ -20,13 +20,27 @@ namespace {
 constexpr bool isSpace(char c) noexcept {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
-constexpr bool isUpper(char c) noexcept { return c >= 'A' && c <= 'Z'; }
-constexpr bool isLower(char c) noexcept { return c >= 'a' && c <= 'z'; }
-constexpr bool isDigit(char c) noexcept { return c >= '0' && c <= '9'; }
-constexpr bool isAlpha(char c) noexcept { return isUpper(c) || isLower(c); }
-constexpr bool isAlnum(char c) noexcept { return isAlpha(c) || isDigit(c); }
-constexpr char upper(char c) noexcept { return isLower(c) ? static_cast<char>(c - 'a' + 'A') : c; }
-constexpr char lower(char c) noexcept { return isUpper(c) ? static_cast<char>(c - 'A' + 'a') : c; }
+constexpr bool isUpper(char c) noexcept {
+    return c >= 'A' && c <= 'Z';
+}
+constexpr bool isLower(char c) noexcept {
+    return c >= 'a' && c <= 'z';
+}
+constexpr bool isDigit(char c) noexcept {
+    return c >= '0' && c <= '9';
+}
+constexpr bool isAlpha(char c) noexcept {
+    return isUpper(c) || isLower(c);
+}
+constexpr bool isAlnum(char c) noexcept {
+    return isAlpha(c) || isDigit(c);
+}
+constexpr char upper(char c) noexcept {
+    return isLower(c) ? static_cast<char>(c - 'a' + 'A') : c;
+}
+constexpr char lower(char c) noexcept {
+    return isUpper(c) ? static_cast<char>(c - 'A' + 'a') : c;
+}
 
 /// Splits identifiers into lower-cased words at separators and lower->upper transitions.
 std::vector<std::string> identifierWords(std::string_view text) {
@@ -58,21 +72,30 @@ std::vector<std::string> identifierWords(std::string_view text) {
     return words;
 }
 
-constexpr std::string_view kBase64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+constexpr std::string_view kBase64Alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 constexpr int base64Value(char c) noexcept {
-    if (isUpper(c)) return c - 'A';
-    if (isLower(c)) return c - 'a' + 26;
-    if (isDigit(c)) return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
+    if (isUpper(c))
+        return c - 'A';
+    if (isLower(c))
+        return c - 'a' + 26;
+    if (isDigit(c))
+        return c - '0' + 52;
+    if (c == '+')
+        return 62;
+    if (c == '/')
+        return 63;
     return -1;
 }
 
 constexpr int hexValue(char c) noexcept {
-    if (isDigit(c)) return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (isDigit(c))
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
     return -1;
 }
 
@@ -126,14 +149,17 @@ std::optional<char32_t> decodeOne(std::string_view text, std::size_t& i) noexcep
 // Trimming, splitting, joining
 // ===================================================================================================
 
-std::string trim(std::string_view text) { return std::string{trimView(text)}; }
+std::string trim(std::string_view text) {
+    return std::string{trimView(text)};
+}
 
 std::vector<std::string> split(std::string_view text, char delimiter, bool skipEmpty) {
     std::vector<std::string> parts;
     std::size_t start = 0;
     while (true) {
         const auto pos = text.find(delimiter, start);
-        const auto field = text.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start);
+        const auto field = text.substr(start,
+                                       pos == std::string_view::npos ? std::string_view::npos : pos - start);
         if (!skipEmpty || !field.empty()) {
             parts.emplace_back(field);
         }
@@ -153,7 +179,8 @@ std::vector<std::string> split(std::string_view text, std::string_view delimiter
     std::size_t start = 0;
     while (true) {
         const auto pos = text.find(delimiter, start);
-        const auto field = text.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start);
+        const auto field = text.substr(start,
+                                       pos == std::string_view::npos ? std::string_view::npos : pos - start);
         if (!skipEmpty || !field.empty()) {
             parts.emplace_back(field);
         }
@@ -267,9 +294,13 @@ std::string toCamelCase(std::string_view text) {
     return out;
 }
 
-std::string toSnakeCase(std::string_view text) { return join(identifierWords(text), "_"); }
+std::string toSnakeCase(std::string_view text) {
+    return join(identifierWords(text), "_");
+}
 
-std::string toKebabCase(std::string_view text) { return join(identifierWords(text), "-"); }
+std::string toKebabCase(std::string_view text) {
+    return join(identifierWords(text), "-");
+}
 
 bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
     return a.size() == b.size() &&
@@ -281,7 +312,8 @@ std::size_t countOccurrences(std::string_view text, std::string_view needle) noe
         return 0;
     }
     std::size_t count = 0;
-    for (auto pos = text.find(needle); pos != std::string_view::npos; pos = text.find(needle, pos + needle.size())) {
+    for (auto pos = text.find(needle); pos != std::string_view::npos;
+         pos = text.find(needle, pos + needle.size())) {
         ++count;
     }
     return count;
@@ -387,7 +419,9 @@ std::string center(std::string_view text, std::size_t width, char fill) {
     return std::string(left, fill) + std::string{text} + std::string(total - left, fill);
 }
 
-std::string reverse(std::string_view text) { return {text.rbegin(), text.rend()}; }
+std::string reverse(std::string_view text) {
+    return {text.rbegin(), text.rend()};
+}
 
 std::vector<std::string> wordWrap(std::string_view text, std::size_t width) {
     std::vector<std::string> lines;
@@ -547,8 +581,8 @@ std::string formatFixed(double value, int precision) {
 std::string withThousandsSeparator(long long value, char separator) {
     const bool negative = value < 0;
     // Work with the unsigned magnitude so LLONG_MIN is handled.
-    const unsigned long long magnitude =
-        negative ? 0ULL - static_cast<unsigned long long>(value) : static_cast<unsigned long long>(value);
+    const unsigned long long magnitude = negative ? 0ULL - static_cast<unsigned long long>(value)
+                                                  : static_cast<unsigned long long>(value);
     const std::string digits = std::to_string(magnitude);
     std::string out;
     out.reserve(digits.size() + digits.size() / 3 + 1);
@@ -700,12 +734,23 @@ std::string escapeHtml(std::string_view text) {
     out.reserve(text.size());
     for (const char c : text) {
         switch (c) {
-        case '&': out += "&amp;"; break;
-        case '<': out += "&lt;"; break;
-        case '>': out += "&gt;"; break;
-        case '"': out += "&quot;"; break;
-        case '\'': out += "&#39;"; break;
-        default: out.push_back(c);
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            case '\'':
+                out += "&#39;";
+                break;
+            default:
+                out.push_back(c);
         }
     }
     return out;
@@ -726,7 +771,9 @@ std::string toHex(std::string_view data) {
 // Unicode
 // ===================================================================================================
 
-bool Unicode::isValidUtf8(std::string_view text) noexcept { return codePointCount(text).has_value(); }
+bool Unicode::isValidUtf8(std::string_view text) noexcept {
+    return codePointCount(text).has_value();
+}
 
 std::optional<std::size_t> Unicode::codePointCount(std::string_view text) noexcept {
     std::size_t count = 0;
@@ -803,7 +850,8 @@ StringTemplate::StringTemplate(std::string_view text) {
     }
 }
 
-std::string StringTemplate::render(const std::unordered_map<std::string, std::string>& values, bool strict) const {
+std::string StringTemplate::render(const std::unordered_map<std::string, std::string>& values,
+                                   bool strict) const {
     std::string out;
     for (const auto& part : parts_) {
         if (!part.isPlaceholder) {
@@ -867,12 +915,16 @@ void demonstrateStrings(std::ostream& out) {
     out << "withThousandsSeparator      = " << withThousandsSeparator(299792458) << '\n';
     out << "formatBytes(5'000'000)      = " << formatBytes(5'000'000) << '\n';
     out << "parseNumber<int>(\" 42 \")    = " << parseNumber<int>(" 42 ").value_or(-1) << '\n';
-    out << "UTF-8 code points in \"h\\u00e9llo\" = "
-        << Unicode::codePointCount("h\xC3\xA9llo").value_or(0) << '\n';
+    out << "UTF-8 code points in \"h\\u00e9llo\" = " << Unicode::codePointCount("h\xC3\xA9llo").value_or(0)
+        << '\n';
 
     switch (fnv1a("launch")) {
-    case fnv1a("launch"): out << "constexpr fnv1a switch dispatched 'launch'\n"; break;
-    default: out << "unexpected\n"; break;
+        case fnv1a("launch"):
+            out << "constexpr fnv1a switch dispatched 'launch'\n";
+            break;
+        default:
+            out << "unexpected\n";
+            break;
     }
 
     const StringTemplate tmpl{"Captain {{name}} commands the {{ship}}."};
@@ -882,7 +934,8 @@ void demonstrateStrings(std::ostream& out) {
     sb << "Fleet size: " << 12 << ", morale: " << 0.75;
     out << sb.view() << '\n';
 
-    for (const auto& line : wordWrap("The quick brown fox jumps over the lazy dog near the orbital station", 24)) {
+    for (const auto& line :
+         wordWrap("The quick brown fox jumps over the lazy dog near the orbital station", 24)) {
         out << "  | " << line << '\n';
     }
 

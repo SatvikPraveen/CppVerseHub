@@ -18,52 +18,52 @@
 using namespace CppVerseHub::Memory;
 
 namespace {
-    std::filesystem::path temp_file(const std::string& name) {
-        return std::filesystem::temp_directory_path() / ("cppversehub_memory_tests_" + name);
+std::filesystem::path temp_file(const std::string& name) {
+    return std::filesystem::temp_directory_path() / ("cppversehub_memory_tests_" + name);
+}
+
+struct RemoveOnExit {
+    std::filesystem::path path;
+    RemoveOnExit(const RemoveOnExit&) = delete;
+    RemoveOnExit& operator=(const RemoveOnExit&) = delete;
+    explicit RemoveOnExit(std::filesystem::path p) : path(std::move(p)) {}
+    ~RemoveOnExit() {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
     }
+};
 
-    struct RemoveOnExit {
-        std::filesystem::path path;
-        RemoveOnExit(const RemoveOnExit&) = delete;
-        RemoveOnExit& operator=(const RemoveOnExit&) = delete;
-        explicit RemoveOnExit(std::filesystem::path p) : path(std::move(p)) {}
-        ~RemoveOnExit() {
-            std::error_code ec;
-            std::filesystem::remove(path, ec);
+struct CountingMutex {
+    int locks = 0;
+    int unlocks = 0;
+    void lock() { ++locks; }
+    void unlock() { ++unlocks; }
+};
+
+struct Tracked {
+    static inline int live = 0;
+    static inline int copies_until_throw = -1;
+    int value = 0;
+    Tracked() { ++live; }
+    explicit Tracked(int v) : value(v) { ++live; }
+    Tracked(const Tracked& other) : value(other.value) {
+        if (copies_until_throw == 0) {
+            throw std::runtime_error("copy failed");
         }
-    };
-
-    struct CountingMutex {
-        int locks = 0;
-        int unlocks = 0;
-        void lock() { ++locks; }
-        void unlock() { ++unlocks; }
-    };
-
-    struct Tracked {
-        static inline int live = 0;
-        static inline int copies_until_throw = -1;
-        int value = 0;
-        Tracked() { ++live; }
-        explicit Tracked(int v) : value(v) { ++live; }
-        Tracked(const Tracked& other) : value(other.value) {
-            if (copies_until_throw == 0) {
-                throw std::runtime_error("copy failed");
-            }
-            if (copies_until_throw > 0) {
-                --copies_until_throw;
-            }
-            ++live;
+        if (copies_until_throw > 0) {
+            --copies_until_throw;
         }
-        Tracked& operator=(const Tracked&) = default;
-        ~Tracked() { --live; }
-    };
+        ++live;
+    }
+    Tracked& operator=(const Tracked&) = default;
+    ~Tracked() { --live; }
+};
 
-    struct Widget {
-        static inline int created = 0;
-        int uses = 0;
-        Widget() { ++created; }
-    };
+struct Widget {
+    static inline int created = 0;
+    int uses = 0;
+    Widget() { ++created; }
+};
 } // namespace
 
 TEST_CASE("UniqueHandle owns, moves, releases and resets", "[memory][raii][handle]") {
@@ -144,7 +144,8 @@ TEST_CASE("TimerRAII reports elapsed time through its callback", "[memory][raii]
     CHECK(reported >= std::chrono::milliseconds(2));
 
     // A throwing callback must not escape the destructor.
-    CHECK_NOTHROW([] { const TimerRAII t([](std::chrono::nanoseconds) { throw std::runtime_error("x"); }); }());
+    CHECK_NOTHROW(
+        [] { const TimerRAII t([](std::chrono::nanoseconds) { throw std::runtime_error("x"); }); }());
     { const TimerRAII silent; }
 
     std::chrono::nanoseconds measured{};
@@ -174,8 +175,7 @@ TEST_CASE("ScopedLock releases on exception and serialises threads", "[memory][r
     try {
         const ScopedLock lock(m);
         throw std::runtime_error("boom");
-    } catch (const std::runtime_error&) {
-    }
+    } catch (const std::runtime_error&) {}
     CHECK(m.try_lock());
     m.unlock();
 
@@ -197,7 +197,9 @@ TEST_CASE("ScopedLock releases on exception and serialises threads", "[memory][r
 
 TEST_CASE("ScopeGuard runs always, unless dismissed or moved from", "[memory][raii][guard]") {
     int runs = 0;
-    { const auto g = make_scope_guard([&runs]() noexcept { ++runs; }); }
+    {
+        const auto g = make_scope_guard([&runs]() noexcept { ++runs; });
+    }
     CHECK(runs == 1);
     {
         auto g = make_scope_guard([&runs]() noexcept { ++runs; });
@@ -216,8 +218,7 @@ TEST_CASE("ScopeGuard runs always, unless dismissed or moved from", "[memory][ra
     try {
         const auto g = make_scope_guard([&runs]() noexcept { ++runs; });
         throw std::logic_error("x");
-    } catch (const std::logic_error&) {
-    }
+    } catch (const std::logic_error&) {}
     CHECK(runs == 3);
 }
 
@@ -233,12 +234,12 @@ TEST_CASE("ScopeFail and ScopeSuccess distinguish normal exit from unwinding", "
         const auto fail = make_scope_fail([&log]() noexcept { log.emplace_back("rollback"); });
         const auto ok = make_scope_success([&log]() noexcept { log.emplace_back("commit"); });
         throw std::runtime_error("failure");
-    } catch (const std::runtime_error&) {
-    }
+    } catch (const std::runtime_error&) {}
     CHECK(log == std::vector<std::string>{"rollback"});
 }
 
-TEST_CASE("ScopeSuccess inside a destructor during unwinding still detects normal exit", "[memory][raii][guard]") {
+TEST_CASE("ScopeSuccess inside a destructor during unwinding still detects normal exit",
+          "[memory][raii][guard]") {
     // uncaught_exceptions() is compared against the count at construction, so a guard
     // created and destroyed entirely within a destructor running during unwinding fires
     // as "success".
@@ -255,8 +256,7 @@ TEST_CASE("ScopeSuccess inside a destructor during unwinding still detects norma
     try {
         const Inner inner(&log);
         throw std::runtime_error("outer");
-    } catch (const std::runtime_error&) {
-    }
+    } catch (const std::runtime_error&) {}
     CHECK(log == std::vector<std::string>{"inner-commit"});
 }
 
@@ -337,7 +337,8 @@ TEST_CASE("NetworkConnection lifetime and move semantics", "[memory][raii][conne
     CHECK(NetworkConnection::active_connections() == before);
 }
 
-TEST_CASE("NetworkConnection constructor failure acquires nothing", "[memory][raii][connection][exceptions]") {
+TEST_CASE("NetworkConnection constructor failure acquires nothing",
+          "[memory][raii][connection][exceptions]") {
     const int before = NetworkConnection::active_connections();
     CHECK_THROWS_AS(NetworkConnection("missing-port"), std::invalid_argument);
     CHECK(NetworkConnection::active_connections() == before);
@@ -408,5 +409,6 @@ TEST_CASE("demonstrateRAII leaves no resources behind", "[memory][raii][demo]") 
     CHECK(text.find("FileRAII read back: RAII closes files") != std::string::npos);
     CHECK(MockOsHandleTraits::open_count() == handles);
     CHECK(NetworkConnection::active_connections() == connections);
-    CHECK_FALSE(std::filesystem::exists(std::filesystem::temp_directory_path() / "cppversehub_memory_demo.txt"));
+    CHECK_FALSE(
+        std::filesystem::exists(std::filesystem::temp_directory_path() / "cppversehub_memory_demo.txt"));
 }

@@ -26,9 +26,9 @@
 
 namespace CppVerseHub::Utils::Time {
 
-using SystemClock = std::chrono::system_clock;   ///< Wall clock.
-using SteadyClock = std::chrono::steady_clock;   ///< Monotonic clock for intervals.
-using Nanoseconds = std::chrono::nanoseconds;    ///< Default duration resolution.
+using SystemClock = std::chrono::system_clock; ///< Wall clock.
+using SteadyClock = std::chrono::steady_clock; ///< Monotonic clock for intervals.
+using Nanoseconds = std::chrono::nanoseconds;  ///< Default duration resolution.
 
 // ===================================================================================================
 // Formatting and parsing
@@ -369,10 +369,10 @@ class PerformanceProfiler {
 public:
     /// @brief Aggregated statistics for one section.
     struct Stats {
-        std::size_t count = 0;    ///< Number of samples.
-        Nanoseconds total{0};     ///< Sum of samples.
-        Nanoseconds min{0};       ///< Shortest sample.
-        Nanoseconds max{0};       ///< Longest sample.
+        std::size_t count = 0; ///< Number of samples.
+        Nanoseconds total{0};  ///< Sum of samples.
+        Nanoseconds min{0};    ///< Shortest sample.
+        Nanoseconds max{0};    ///< Longest sample.
         /// @brief Mean sample duration.
         /// @return Mean (0 if no samples).
         [[nodiscard]] Nanoseconds mean() const noexcept {

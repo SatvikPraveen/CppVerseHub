@@ -4,13 +4,13 @@
  */
 #include "core/Factory.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include "core/ColonizationMission.hpp"
 #include "core/CombatMission.hpp"
 #include "core/ExplorationMission.hpp"
 #include "core/Fleet.hpp"
 #include "core/Planet.hpp"
+
+#include <nlohmann/json.hpp>
 
 namespace CppVerseHub::Core {
 

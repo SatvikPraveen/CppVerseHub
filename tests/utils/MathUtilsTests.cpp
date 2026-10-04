@@ -160,12 +160,16 @@ TEST_CASE("Number theory functions", "[utils][math]") {
 
 TEST_CASE("Numerical integration and root finding", "[utils][math]") {
     using namespace Numerical;
-    CHECK(integrateSimpson([](double x) { return std::sin(x); }, 0.0, Constants::kPi) == Approx(2.0).epsilon(1e-10));
-    CHECK(integrateSimpson([](double x) { return x * x * x; }, 0.0, 2.0, 3) == Approx(4.0)); // exact for cubics
-    const auto sqrt2 = newtonRaphson([](double x) { return x * x - 2.0; }, [](double x) { return 2.0 * x; }, 1.0);
+    CHECK(integrateSimpson([](double x) { return std::sin(x); }, 0.0, Constants::kPi) ==
+          Approx(2.0).epsilon(1e-10));
+    CHECK(integrateSimpson([](double x) { return x * x * x; }, 0.0, 2.0, 3) ==
+          Approx(4.0)); // exact for cubics
+    const auto sqrt2 = newtonRaphson([](double x) { return x * x - 2.0; }, [](double x) { return 2.0 * x; },
+                                     1.0);
     REQUIRE(sqrt2.has_value());
     CHECK(*sqrt2 == Approx(std::sqrt(2.0)).epsilon(1e-14));
-    CHECK_FALSE(newtonRaphson([](double x) { return x * x + 1.0; }, [](double) { return 0.0; }, 1.0).has_value());
+    CHECK_FALSE(
+        newtonRaphson([](double x) { return x * x + 1.0; }, [](double) { return 0.0; }, 1.0).has_value());
     const auto root = bisection([](double x) { return std::cos(x) - x; }, 0.0, 1.0);
     REQUIRE(root.has_value());
     CHECK(*root == Approx(0.7390851332).epsilon(1e-9));
@@ -273,7 +277,8 @@ TEST_CASE("Polygon area and point containment", "[utils][math][geometry]") {
 }
 
 TEST_CASE("Convex hull via monotone chain", "[utils][math][geometry]") {
-    std::vector<Vec2> points{{0.0, 0.0}, {2.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {0.0, 2.0}, {1.0, 0.0}, {0.0, 0.0}};
+    std::vector<Vec2> points{{0.0, 0.0}, {2.0, 0.0}, {1.0, 1.0}, {2.0, 2.0},
+                             {0.0, 2.0}, {1.0, 0.0}, {0.0, 0.0}};
     const auto hull = Geometry::convexHull(points);
     CHECK(hull == std::vector<Vec2>{{0.0, 0.0}, {2.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}});
     CHECK(Geometry::polygonArea(hull) == Approx(4.0));
@@ -284,8 +289,9 @@ TEST_CASE("Segment intersection and point-segment distance", "[utils][math][geom
     using namespace Geometry;
     CHECK(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{2.0, 2.0}, Vec2{0.0, 2.0}, Vec2{2.0, 0.0}));
     CHECK_FALSE(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}, Vec2{1.0, 1.0}));
-    CHECK(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{2.0, 0.0}, Vec2{1.0, 0.0}, Vec2{3.0, 0.0})); // collinear overlap
-    CHECK(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{1.0, 0.0}, Vec2{1.0, 0.0}, Vec2{1.0, 5.0}));  // touching
+    CHECK(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{2.0, 0.0}, Vec2{1.0, 0.0},
+                            Vec2{3.0, 0.0})); // collinear overlap
+    CHECK(segmentsIntersect(Vec2{0.0, 0.0}, Vec2{1.0, 0.0}, Vec2{1.0, 0.0}, Vec2{1.0, 5.0})); // touching
     CHECK(pointSegmentDistance(Vec2{1.0, 1.0}, Vec2{0.0, 0.0}, Vec2{2.0, 0.0}) == Approx(1.0));
     CHECK(pointSegmentDistance(Vec2{3.0, 4.0}, Vec2{0.0, 0.0}, Vec2{0.0, 0.0}) == Approx(5.0));
     CHECK(pointSegmentDistance(Vec2{-3.0, 4.0}, Vec2{0.0, 0.0}, Vec2{1.0, 0.0}) == Approx(5.0));

@@ -12,6 +12,11 @@
  */
 #pragma once
 
+#include "core/Exceptions.hpp"
+#include "core/Identifiers.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
 #include <concepts>
 #include <cstddef>
 #include <functional>
@@ -21,11 +26,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <nlohmann/json_fwd.hpp>
-
-#include "core/Exceptions.hpp"
-#include "core/Identifiers.hpp"
 
 namespace CppVerseHub::Core {
 

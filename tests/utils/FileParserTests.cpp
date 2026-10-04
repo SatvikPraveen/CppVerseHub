@@ -24,7 +24,8 @@ TEST_CASE("JsonParser parses scalars", "[utils][json]") {
 }
 
 TEST_CASE("JsonParser parses nested documents", "[utils][json]") {
-    const auto doc = JsonParser::parse(R"({"name": "Vega", "crew": [1, 2, {"x": null}], "ok": true, "e": {}})");
+    const auto doc = JsonParser::parse(
+        R"({"name": "Vega", "crew": [1, 2, {"x": null}], "ok": true, "e": {}})");
     REQUIRE(doc.isObject());
     CHECK(doc.size() == 4);
     CHECK(doc.at("name").asString() == "Vega");
@@ -48,8 +49,9 @@ TEST_CASE("JsonParser decodes string escapes including surrogate pairs", "[utils
 }
 
 TEST_CASE("JsonParser rejects malformed input with positions", "[utils][json]") {
-    const auto bad = GENERATE(as<std::string>{}, "", "{", "[1,]", "{\"a\" 1}", "01", "1.", "-", "tru", "\"abc",
-                              "\"\\x\"", "[1 2]", "{\"a\":1,}", "\"\\ud800\"", "nul", "1 2", "\"tab\tin\"", "1e");
+    const auto bad = GENERATE(as<std::string>{}, "", "{", "[1,]", "{\"a\" 1}", "01", "1.", "-", "tru",
+                              "\"abc", "\"\\x\"", "[1 2]", "{\"a\":1,}", "\"\\ud800\"", "nul", "1 2",
+                              "\"tab\tin\"", "1e");
     CHECK_THROWS_AS(JsonParser::parse(bad), JsonParseException);
 }
 
@@ -65,7 +67,8 @@ TEST_CASE("JsonParseException reports line and column", "[utils][json]") {
 }
 
 TEST_CASE("JsonParser enforces a nesting limit", "[utils][json]") {
-    const std::string deep = std::string(JsonParser::kMaxDepth + 10, '[') + std::string(JsonParser::kMaxDepth + 10, ']');
+    const std::string deep = std::string(JsonParser::kMaxDepth + 10, '[') +
+                             std::string(JsonParser::kMaxDepth + 10, ']');
     CHECK_THROWS_AS(JsonParser::parse(deep), JsonParseException);
     const std::string ok = std::string(100, '[') + std::string(100, ']');
     CHECK_NOTHROW(JsonParser::parse(ok));
@@ -143,7 +146,8 @@ TEST_CASE("CsvParser errors", "[utils][csv]") {
 }
 
 TEST_CASE("CsvData serialisation round-trips", "[utils][csv]") {
-    CsvData data{{"id", "text"}, {{"1", "plain"}, {"2", "has,comma"}, {"3", "has \"quote\""}, {"4", "two\nlines"}}};
+    CsvData data{{"id", "text"},
+                 {{"1", "plain"}, {"2", "has,comma"}, {"3", "has \"quote\""}, {"4", "two\nlines"}}};
     data.addRow({"5", " padded "});
     const std::string csv = data.toString();
     const auto parsed = CsvParser{}.parse(csv);
@@ -179,9 +183,9 @@ TEST_CASE("XmlParser parses elements, attributes, entities and CDATA", "[utils][
 }
 
 TEST_CASE("XmlParser rejects malformed documents", "[utils][xml]") {
-    const auto bad = GENERATE(as<std::string>{}, "", "text", "<a>", "<a></b>", "<a x=1/>", "<a x=\"1\" x=\"2\"/>",
-                              "<a>&bogus;</a>", "<a/><b/>", "<a><!-- unterminated </a>", "<a x=\"<\"/>", "<1a/>",
-                              "<a>&#xZZ;</a>");
+    const auto bad = GENERATE(as<std::string>{}, "", "text", "<a>", "<a></b>", "<a x=1/>",
+                              "<a x=\"1\" x=\"2\"/>", "<a>&bogus;</a>", "<a/><b/>",
+                              "<a><!-- unterminated </a>", "<a x=\"<\"/>", "<1a/>", "<a>&#xZZ;</a>");
     CHECK_THROWS_AS(XmlParser::parse(bad), XmlParseException);
 }
 
@@ -196,8 +200,9 @@ TEST_CASE("XmlNode serialisation round-trips", "[utils][xml]") {
     root.setAttribute("name", "A & B \"quoted\""); // replace
     CHECK(root.attributes().size() == 1);
     const std::string compact = root.toString(-1);
-    CHECK(compact ==
-          R"(<fleet name="A &amp; B &quot;quoted&quot;"><ship id="1">Vega &lt;flagship&gt;</ship><ship id="2"/></fleet>)");
+    CHECK(
+        compact ==
+        R"(<fleet name="A &amp; B &quot;quoted&quot;"><ship id="1">Vega &lt;flagship&gt;</ship><ship id="2"/></fleet>)");
     CHECK(XmlParser::parse(compact) == root);
     CHECK(XmlParser::parse(root.toString(2)) == root);
     CHECK(XmlParser::escape("<'&'>") == "&lt;&apos;&amp;&apos;&gt;");

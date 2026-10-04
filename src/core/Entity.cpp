@@ -4,13 +4,13 @@
  */
 #include "core/Entity.hpp"
 
-#include <array>
-#include <cmath>
-#include <sstream>
+#include "core/Exceptions.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include "core/Exceptions.hpp"
+#include <array>
+#include <cmath>
+#include <sstream>
 
 namespace CppVerseHub::Core {
 
@@ -19,7 +19,9 @@ namespace {
 constexpr std::array<std::string_view, 2> kKindNames{"planet", "fleet"};
 constexpr std::array<std::string_view, 3> kStatusNames{"active", "inactive", "destroyed"};
 
-bool isFinite(const Vector3D& v) noexcept { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+bool isFinite(const Vector3D& v) noexcept {
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
 
 std::string validatedName(std::string name) {
     if (name.empty()) {
@@ -58,7 +60,9 @@ std::optional<EntityStatus> parseEntityStatus(std::string_view name) noexcept {
     return std::nullopt;
 }
 
-void vectorToJson(const Vector3D& v, nlohmann::json& out) { out = nlohmann::json::array({v.x, v.y, v.z}); }
+void vectorToJson(const Vector3D& v, nlohmann::json& out) {
+    out = nlohmann::json::array({v.x, v.y, v.z});
+}
 
 Vector3D vectorFromJson(const nlohmann::json& in) {
     if (!in.is_array() || in.size() != 3) {
@@ -82,7 +86,8 @@ Entity::Entity(EntityId id, std::string name, const Vector3D& position)
 }
 
 Entity::Entity(EntityId id, const nlohmann::json& params)
-    : Entity(id, params.contains("name") && params["name"].is_string() ? params["name"].get<std::string>() : "",
+    : Entity(id,
+             params.contains("name") && params["name"].is_string() ? params["name"].get<std::string>() : "",
              params.contains("position") ? vectorFromJson(params["position"]) : Vector3D{}) {
     if (params.contains("health")) {
         const double h = params["health"].get<double>();
@@ -100,7 +105,9 @@ Entity::Entity(EntityId id, const nlohmann::json& params)
     }
 }
 
-void Entity::setName(std::string name) { name_ = validatedName(std::move(name)); }
+void Entity::setName(std::string name) {
+    name_ = validatedName(std::move(name));
+}
 
 void Entity::setPosition(const Vector3D& position) {
     if (!isFinite(position)) {
@@ -147,20 +154,17 @@ void Entity::setHealthInternal(double health) noexcept {
 
 std::string Entity::describe() const {
     std::ostringstream os;
-    os << toString(kind()) << ' ' << id_ << " '" << name_ << "' at " << position_ << " health " << health_ << " ["
-       << toString(status_) << ']';
+    os << toString(kind()) << ' ' << id_ << " '" << name_ << "' at " << position_ << " health " << health_
+       << " [" << toString(status_) << ']';
     return os.str();
 }
 
 void Entity::toJson(nlohmann::json& out) const {
     nlohmann::json pos;
     vectorToJson(position_, pos);
-    out = {{"id", id_.value()},
-           {"kind", std::string(toString(kind()))},
-           {"name", name_},
-           {"position", std::move(pos)},
-           {"health", health_},
-           {"status", std::string(toString(status_))}};
+    out = {{"id", id_.value()}, {"kind", std::string(toString(kind()))},
+           {"name", name_},     {"position", std::move(pos)},
+           {"health", health_}, {"status", std::string(toString(status_))}};
 }
 
 } // namespace CppVerseHub::Core

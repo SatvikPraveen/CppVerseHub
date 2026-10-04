@@ -9,16 +9,16 @@
 #ifndef CPPVERSEHUB_TEMPLATES_DEMO_HPP
 #define CPPVERSEHUB_TEMPLATES_DEMO_HPP
 
-#include <exception>
-#include <iostream>
-#include <ostream>
-
 #include "templates/ConceptsDemo.hpp"
 #include "templates/GenericContainers.hpp"
 #include "templates/MetaProgramming.hpp"
 #include "templates/SFINAE_Examples.hpp"
 #include "templates/TemplateSpecialization.hpp"
 #include "templates/VariadicTemplates.hpp"
+
+#include <exception>
+#include <iostream>
+#include <ostream>
 
 namespace CppVerseHub::Templates {
 

@@ -1,5 +1,7 @@
 // Behavioural tests for CoroutinesDemo.hpp (Generator, Task, sync_wait, schedulers).
 
+#include "concurrency/CoroutinesDemo.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
@@ -10,113 +12,117 @@
 #include <thread>
 #include <vector>
 
-#include "concurrency/CoroutinesDemo.hpp"
-
 using namespace CppVerseHub::Concurrency;
 
 namespace {
 
-    struct LifetimeProbe {
-        explicit LifetimeProbe(int& counter) : counter_(&counter) { ++*counter_; }
-        LifetimeProbe(const LifetimeProbe&) = delete;
-        LifetimeProbe& operator=(const LifetimeProbe&) = delete;
-        LifetimeProbe(LifetimeProbe&&) = delete;
-        LifetimeProbe& operator=(LifetimeProbe&&) = delete;
-        ~LifetimeProbe() { --*counter_; }
-        int* counter_;
-    };
+struct LifetimeProbe {
+    explicit LifetimeProbe(int& counter) : counter_(&counter) { ++*counter_; }
+    LifetimeProbe(const LifetimeProbe&) = delete;
+    LifetimeProbe& operator=(const LifetimeProbe&) = delete;
+    LifetimeProbe(LifetimeProbe&&) = delete;
+    LifetimeProbe& operator=(LifetimeProbe&&) = delete;
+    ~LifetimeProbe() { --*counter_; }
+    int* counter_;
+};
 
-    Generator<int> counting_with_probe(int& alive, bool& started) {
-        started = true;
-        LifetimeProbe probe(alive);
-        for (int i = 0;; ++i) {
-            co_yield i;
-        }
+Generator<int> counting_with_probe(int& alive, bool& started) {
+    started = true;
+    LifetimeProbe probe(alive);
+    for (int i = 0;; ++i) {
+        co_yield i;
     }
+}
 
-    Generator<int> throws_after(int n) {
-        for (int i = 0; i < n; ++i) {
-            co_yield i;
-        }
-        throw std::runtime_error("generator failure");
+Generator<int> throws_after(int n) {
+    for (int i = 0; i < n; ++i) {
+        co_yield i;
     }
+    throw std::runtime_error("generator failure");
+}
 
-    Generator<std::string> words() {
-        co_yield "alpha";
-        std::string beta = "beta";
-        co_yield beta;
-        co_yield std::string("gamma");
+Generator<std::string> words() {
+    co_yield "alpha";
+    std::string beta = "beta";
+    co_yield beta;
+    co_yield std::string("gamma");
+}
+
+Generator<int> empty_generator() {
+    co_return;
+}
+
+Task<int> constant(int v) {
+    co_return v;
+}
+
+Task<int> add_async(int a, int b) {
+    const int x = co_await constant(a);
+    const int y = co_await constant(b);
+    co_return x + y;
+}
+
+Task<void> set_flag(bool& flag) {
+    flag = true;
+    co_return;
+}
+
+Task<int> thrower() {
+    throw std::logic_error("task failure");
+    co_return 0;
+}
+
+Task<int> catches_inner() {
+    try {
+        co_return co_await thrower();
+    } catch (const std::logic_error&) {
+        co_return -1;
     }
+}
 
-    Generator<int> empty_generator() { co_return; }
+Task<std::unique_ptr<int>> move_only_result() {
+    co_return std::make_unique<int>(9);
+}
 
-    Task<int> constant(int v) { co_return v; }
-
-    Task<int> add_async(int a, int b) {
-        const int x = co_await constant(a);
-        const int y = co_await constant(b);
-        co_return x + y;
-    }
-
-    Task<void> set_flag(bool& flag) {
-        flag = true;
-        co_return;
-    }
-
-    Task<int> thrower() {
-        throw std::logic_error("task failure");
+Task<long long> deep_chain(int depth) {
+    if (depth == 0) {
         co_return 0;
     }
+    co_return 1 + co_await deep_chain(depth - 1);
+}
 
-    Task<int> catches_inner() {
-        try {
-            co_return co_await thrower();
-        } catch (const std::logic_error&) {
-            co_return -1;
-        }
+Task<std::thread::id> resume_on(ThreadPool& pool) {
+    co_await schedule_on(pool);
+    co_return std::this_thread::get_id();
+}
+
+Task<int> pool_sum(ThreadPool& pool, int n) {
+    int total = 0;
+    for (int i = 1; i <= n; ++i) {
+        co_await schedule_on(pool); // each iteration may continue on another worker
+        total += i;
     }
+    co_return total;
+}
 
-    Task<std::unique_ptr<int>> move_only_result() { co_return std::make_unique<int>(9); }
-
-    Task<long long> deep_chain(int depth) {
-        if (depth == 0) {
-            co_return 0;
-        }
-        co_return 1 + co_await deep_chain(depth - 1);
-    }
-
-    Task<std::thread::id> resume_on(ThreadPool& pool) {
-        co_await schedule_on(pool);
-        co_return std::this_thread::get_id();
-    }
-
-    Task<int> pool_sum(ThreadPool& pool, int n) {
-        int total = 0;
-        for (int i = 1; i <= n; ++i) {
-            co_await schedule_on(pool);  // each iteration may continue on another worker
-            total += i;
-        }
-        co_return total;
-    }
-
-    Task<void> logger(RoundRobinScheduler& s, char id, int steps, std::string& log) {
-        for (int i = 0; i < steps; ++i) {
-            log.push_back(id);
-            co_await s.yield();
-        }
-    }
-
-    Task<void> failing_task(RoundRobinScheduler& s) {
-        co_await s.yield();
-        throw std::runtime_error("boom");
-    }
-
-    Task<void> probe_task(RoundRobinScheduler& s, int& alive) {
-        LifetimeProbe probe(alive);
+Task<void> logger(RoundRobinScheduler& s, char id, int steps, std::string& log) {
+    for (int i = 0; i < steps; ++i) {
+        log.push_back(id);
         co_await s.yield();
     }
+}
 
-}  // namespace
+Task<void> failing_task(RoundRobinScheduler& s) {
+    co_await s.yield();
+    throw std::runtime_error("boom");
+}
+
+Task<void> probe_task(RoundRobinScheduler& s, int& alive) {
+    LifetimeProbe probe(alive);
+    co_await s.yield();
+}
+
+} // namespace
 
 TEST_CASE("Generator models std::ranges::input_range", "[concurrency][coroutines]") {
     STATIC_REQUIRE(std::ranges::input_range<Generator<int>>);
@@ -155,7 +161,7 @@ TEST_CASE("Generator is lazy and destroys its frame early", "[concurrency][corou
     bool started = false;
     {
         auto gen = counting_with_probe(alive, started);
-        CHECK_FALSE(started);  // nothing runs until begin()
+        CHECK_FALSE(started); // nothing runs until begin()
         int sum = 0;
         for (int v : gen) {
             if (v == 5) {
@@ -165,9 +171,9 @@ TEST_CASE("Generator is lazy and destroys its frame early", "[concurrency][corou
         }
         CHECK(started);
         CHECK(sum == 10);
-        CHECK(alive == 1);  // suspended mid-body: the local is still alive
+        CHECK(alive == 1); // suspended mid-body: the local is still alive
     }
-    CHECK(alive == 0);  // destroying the generator ran the local's destructor
+    CHECK(alive == 0); // destroying the generator ran the local's destructor
 }
 
 TEST_CASE("Generator re-throws exceptions from its body", "[concurrency][coroutines]") {
@@ -192,7 +198,7 @@ TEST_CASE("Generator move semantics", "[concurrency][coroutines]") {
         got.push_back(v);
     }
     CHECK(got == std::vector<int>{0, 1, 2});
-    a = iota_range(10, 12);  // moved-from object can be re-assigned
+    a = iota_range(10, 12); // moved-from object can be re-assigned
     got.clear();
     for (int v : a) {
         got.push_back(v);
@@ -213,7 +219,7 @@ TEST_CASE("Generator combinators and sequences", "[concurrency][coroutines]") {
         last = v;
         ++n;
     }
-    CHECK(n == 94);  // F(0)..F(93) fit in 64 bits
+    CHECK(n == 94); // F(0)..F(93) fit in 64 bits
     CHECK(last == 12200160415121876738ULL);
 
     std::vector<std::uint64_t> c;
@@ -305,7 +311,7 @@ TEST_CASE("RoundRobinScheduler interleaves tasks deterministically", "[concurren
     scheduler.spawn(logger(scheduler, 'a', 3, log));
     scheduler.spawn(logger(scheduler, 'b', 2, log));
     scheduler.spawn(logger(scheduler, 'c', 1, log));
-    CHECK(log.empty());  // nothing runs before run()
+    CHECK(log.empty()); // nothing runs before run()
     CHECK(scheduler.live_tasks() == 3);
     const std::size_t resumptions = scheduler.run();
     CHECK(log == "abcaba");
@@ -328,7 +334,7 @@ TEST_CASE("RoundRobinScheduler counts failures and cleans up unfinished tasks", 
     {
         RoundRobinScheduler scheduler;
         scheduler.spawn(probe_task(scheduler, alive));
-        CHECK(alive == 0);  // not started
+        CHECK(alive == 0); // not started
     }
     CHECK(alive == 0);
     {

@@ -16,7 +16,7 @@ double improve(double p, double fraction) noexcept {
     p = std::clamp(p, 0.0, 1.0);
     return p + (1.0 - p) * std::clamp(fraction, 0.0, 1.0);
 }
-}  // namespace
+} // namespace
 
 BasicMission::BasicMission(MissionKind kind, std::string target) : kind_(kind), target_(std::move(target)) {
     switch (kind_) {
@@ -41,9 +41,12 @@ BasicMission::BasicMission(MissionKind kind, std::string target) : kind_(kind), 
 
 std::string BasicMission::description() const {
     switch (kind_) {
-        case MissionKind::Exploration: return "Exploration of " + target_;
-        case MissionKind::Combat: return "Combat operation at " + target_;
-        case MissionKind::Colonization: return "Colonization of " + target_;
+        case MissionKind::Exploration:
+            return "Exploration of " + target_;
+        case MissionKind::Combat:
+            return "Combat operation at " + target_;
+        case MissionKind::Colonization:
+            return "Colonization of " + target_;
     }
     return "Mission to " + target_;
 }
@@ -60,26 +63,39 @@ std::vector<std::string> MissionDecorator::enhancementsPlus(const std::string& n
     return names;
 }
 
-std::string StealthEnhancement::description() const { return inner().description() + " + stealth"; }
-double StealthEnhancement::successProbability() const { return improve(inner().successProbability(), 0.15); }
+std::string StealthEnhancement::description() const {
+    return inner().description() + " + stealth";
+}
+double StealthEnhancement::successProbability() const {
+    return improve(inner().successProbability(), 0.15);
+}
 
-std::string SpeedBoost::description() const { return inner().description() + " + speed boost"; }
+std::string SpeedBoost::description() const {
+    return inner().description() + " + speed boost";
+}
 
-HeavyArmament::HeavyArmament(MissionPtr inner, bool combat) : MissionDecorator(std::move(inner)), combat_(combat) {}
-std::string HeavyArmament::description() const { return inner().description() + " + heavy armament"; }
+HeavyArmament::HeavyArmament(MissionPtr inner, bool combat)
+    : MissionDecorator(std::move(inner)), combat_(combat) {}
+std::string HeavyArmament::description() const {
+    return inner().description() + " + heavy armament";
+}
 double HeavyArmament::successProbability() const {
     return improve(inner().successProbability(), combat_ ? 0.40 : 0.05);
 }
 
-std::string MedicalSupport::description() const { return inner().description() + " + medical support"; }
-double MedicalSupport::successProbability() const { return improve(inner().successProbability(), 0.05); }
+std::string MedicalSupport::description() const {
+    return inner().description() + " + medical support";
+}
+double MedicalSupport::successProbability() const {
+    return improve(inner().successProbability(), 0.05);
+}
 
 void demonstrateDecorator(std::ostream& out) {
     out << "=== Decorator pattern ===\n";
     MissionPtr mission = std::make_unique<BasicMission>(MissionKind::Combat, "Rigel IV");
     auto report = [&out](const IMission& m) {
-        out << "  " << m.description() << "\n    cost " << m.cost() << ", " << m.durationHours() << " h, success "
-            << m.successProbability() * 100.0 << "%\n";
+        out << "  " << m.description() << "\n    cost " << m.cost() << ", " << m.durationHours()
+            << " h, success " << m.successProbability() * 100.0 << "%\n";
     };
     report(*mission);
     mission = decorate<HeavyArmament>(std::move(mission), true);
@@ -106,7 +122,9 @@ void demonstrateDecorator(std::ostream& out) {
     auto calls = std::make_shared<std::size_t>(0);
     std::function<std::uint64_t(int)> slowFib;
     slowFib = withCallCounter(
-        [&slowFib](int n) -> std::uint64_t { return n < 2 ? static_cast<std::uint64_t>(n) : slowFib(n - 1) + slowFib(n - 2); },
+        [&slowFib](int n) -> std::uint64_t {
+            return n < 2 ? static_cast<std::uint64_t>(n) : slowFib(n - 1) + slowFib(n - 2);
+        },
         calls);
     const auto plain = slowFib(20);
     const std::size_t plainCalls = *calls;
@@ -114,11 +132,13 @@ void demonstrateDecorator(std::ostream& out) {
     *calls = 0;
     std::function<std::uint64_t(int)> fastFib;
     fastFib = memoize<std::uint64_t, int>(withCallCounter(
-        [&fastFib](int n) -> std::uint64_t { return n < 2 ? static_cast<std::uint64_t>(n) : fastFib(n - 1) + fastFib(n - 2); },
+        [&fastFib](int n) -> std::uint64_t {
+            return n < 2 ? static_cast<std::uint64_t>(n) : fastFib(n - 1) + fastFib(n - 2);
+        },
         calls));
     const auto memo = fastFib(20);
     out << "  fib(20) = " << plain << " in " << plainCalls << " calls; memoized " << memo << " in " << *calls
         << " calls\n";
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

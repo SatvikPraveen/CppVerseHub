@@ -3,15 +3,17 @@
  * @brief Tests for commands, macro transactions and the bounded undo/redo history.
  */
 
+#include "patterns/Command.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-
-#include "patterns/Command.hpp"
 
 using namespace CppVerseHub::Patterns;
 
 namespace {
-FleetStatus defaultFleet() { return FleetStatus{"Alpha", "Sol", 100.0, 100.0, 5}; }
+FleetStatus defaultFleet() {
+    return FleetStatus{"Alpha", "Sol", 100.0, 100.0, 5};
+}
 
 /// Command that appends to a log and can be told to fail.
 class LogCommand final : public ICommand {
@@ -32,7 +34,7 @@ private:
     std::string tag_;
     bool fail_;
 };
-}  // namespace
+} // namespace
 
 TEST_CASE("MoveFleetCommand moves, burns fuel, and undo restores both", "[command]") {
     FleetReceiver fleet(defaultFleet());
@@ -166,9 +168,8 @@ TEST_CASE("CommandHistory is bounded and evicts the oldest entries", "[command][
     CHECK(fleet.status().ships == 10);
     CHECK(history.undoDepth() == 3);
     CHECK(history.evicted() == 2);
-    while (history.undo()) {
-    }
-    CHECK(fleet.status().ships == 7);  // the two evicted commands cannot be undone
+    while (history.undo()) {}
+    CHECK(fleet.status().ships == 7); // the two evicted commands cannot be undone
     CHECK(history.redoDepth() == 3);
     CHECK_THROWS_AS(CommandHistory(0), std::invalid_argument);
 }

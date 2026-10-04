@@ -4,8 +4,6 @@
  */
 #include "modern/Demo.hpp"
 
-#include <exception>
-
 #include "modern/ConceptsAdvanced.hpp"
 #include "modern/ConstexprProgramming.hpp"
 #include "modern/LambdaExpressions.hpp"
@@ -13,6 +11,8 @@
 #include "modern/MoveSemantics.hpp"
 #include "modern/RangesDemo.hpp"
 #include "modern/StructuredBindings.hpp"
+
+#include <exception>
 
 namespace CppVerseHub::Modern {
 
@@ -34,4 +34,4 @@ void runDemo(std::ostream& out) {
     }
 }
 
-}  // namespace CppVerseHub::Modern
+} // namespace CppVerseHub::Modern

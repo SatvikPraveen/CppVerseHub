@@ -15,7 +15,8 @@ bool detail::EventBusState::remove(std::type_index type, std::uint64_t token) {
         return false;
     }
     auto& list = it->second;
-    const auto pos = std::find_if(list.begin(), list.end(), [token](const Entry& e) { return e.token == token; });
+    const auto pos = std::find_if(list.begin(), list.end(),
+                                  [token](const Entry& e) { return e.token == token; });
     if (pos == list.end()) {
         return false;
     }
@@ -26,7 +27,9 @@ bool detail::EventBusState::remove(std::type_index type, std::uint64_t token) {
     return true;
 }
 
-Subscription::~Subscription() { reset(); }
+Subscription::~Subscription() {
+    reset();
+}
 
 Subscription::Subscription(Subscription&& other) noexcept
     : state_(std::move(other.state_)), type_(other.type_), token_(std::exchange(other.token_, 0)) {}

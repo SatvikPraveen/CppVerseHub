@@ -21,13 +21,20 @@ std::optional<LogLevel> parseLogLevel(std::string_view text) noexcept {
             upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
         }
     }
-    if (upper == "TRACE") return LogLevel::Trace;
-    if (upper == "DEBUG") return LogLevel::Debug;
-    if (upper == "INFO") return LogLevel::Info;
-    if (upper == "WARN" || upper == "WARNING") return LogLevel::Warn;
-    if (upper == "ERROR") return LogLevel::Error;
-    if (upper == "FATAL" || upper == "CRITICAL") return LogLevel::Fatal;
-    if (upper == "OFF" || upper == "NONE") return LogLevel::Off;
+    if (upper == "TRACE")
+        return LogLevel::Trace;
+    if (upper == "DEBUG")
+        return LogLevel::Debug;
+    if (upper == "INFO")
+        return LogLevel::Info;
+    if (upper == "WARN" || upper == "WARNING")
+        return LogLevel::Warn;
+    if (upper == "ERROR")
+        return LogLevel::Error;
+    if (upper == "FATAL" || upper == "CRITICAL")
+        return LogLevel::Fatal;
+    if (upper == "OFF" || upper == "NONE")
+        return LogLevel::Off;
     return std::nullopt;
 }
 
@@ -98,23 +105,37 @@ std::string JsonFormatter::escape(std::string_view text) {
     out.reserve(text.size() + 8);
     for (const char c : text) {
         switch (c) {
-        case '"': out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\b': out += "\\b"; break;
-        case '\f': out += "\\f"; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default: {
-            const auto u = static_cast<unsigned char>(c);
-            if (u < 0x20U) {
-                out += "\\u00";
-                out.push_back(kHex[u >> 4U]);
-                out.push_back(kHex[u & 0x0FU]);
-            } else {
-                out.push_back(c);
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\b':
+                out += "\\b";
+                break;
+            case '\f':
+                out += "\\f";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default: {
+                const auto u = static_cast<unsigned char>(c);
+                if (u < 0x20U) {
+                    out += "\\u00";
+                    out.push_back(kHex[u >> 4U]);
+                    out.push_back(kHex[u & 0x0FU]);
+                } else {
+                    out.push_back(c);
+                }
             }
-        }
         }
     }
     return out;
@@ -180,7 +201,9 @@ void OStreamSink::consume(std::string_view line, const LogRecord& /*record*/) {
     }
 }
 
-void OStreamSink::doFlush() { stream_->flush(); }
+void OStreamSink::doFlush() {
+    stream_->flush();
+}
 
 std::string StringSink::str() const {
     const std::lock_guard lock(mutex_);
@@ -202,7 +225,9 @@ void StringSink::clear() {
     lines_.clear();
 }
 
-void StringSink::consume(std::string_view line, const LogRecord& /*record*/) { lines_.emplace_back(line); }
+void StringSink::consume(std::string_view line, const LogRecord& /*record*/) {
+    lines_.emplace_back(line);
+}
 
 RingBufferSink::RingBufferSink(std::size_t capacity) : capacity_(std::max<std::size_t>(capacity, 1)) {}
 
@@ -489,8 +514,8 @@ ScopedLogTimer::ScopedLogTimer(Logger& logger, std::string label, LogLevel level
 ScopedLogTimer::~ScopedLogTimer() {
     try {
         if (logger_->shouldLog(level_)) {
-            const auto us =
-                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_);
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start_);
             logger_->log(level_, detail::concat(label_, " took ", us.count(), " us"));
         }
     } catch (...) { // NOLINT(bugprone-empty-catch): destructors must not throw
@@ -506,7 +531,8 @@ void demonstrateLogging(std::ostream& out) {
 
     Logger silent{"silent"};
     silent.info("nobody hears this");
-    out << "Logger without sinks emitted " << silent.count(LogLevel::Info) << " records (silent by default)\n";
+    out << "Logger without sinks emitted " << silent.count(LogLevel::Info)
+        << " records (silent by default)\n";
 
     // Human-readable output straight to the caller's stream (timestamps omitted for determinism).
     Logger logger{"demo", LogLevel::Debug};
@@ -552,9 +578,7 @@ void demonstrateLogging(std::ostream& out) {
             << ring->lines().size() << '\n';
     }
 
-    {
-        ScopedLogTimer timer{logger, "scoped work", LogLevel::Off};
-    }
+    { ScopedLogTimer timer{logger, "scoped work", LogLevel::Off}; }
     out << "Records emitted by 'demo': info=" << logger.count(LogLevel::Info)
         << " warn=" << logger.count(LogLevel::Warn) << " error=" << logger.count(LogLevel::Error) << '\n';
     logger.flush();

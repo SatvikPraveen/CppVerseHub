@@ -205,9 +205,10 @@ void BM_CompileTimeStringHash(benchmark::State& state) {
 BENCHMARK(BM_CompileTimeStringHash);
 
 void BM_ConstexprMapLookup(benchmark::State& state) {
-    static constexpr auto map = T::Meta::make_constexpr_map(
-        std::pair{std::string_view("alpha"), 1}, std::pair{std::string_view("beta"), 2},
-        std::pair{std::string_view("gamma"), 3}, std::pair{std::string_view("delta"), 4});
+    static constexpr auto map = T::Meta::make_constexpr_map(std::pair{std::string_view("alpha"), 1},
+                                                            std::pair{std::string_view("beta"), 2},
+                                                            std::pair{std::string_view("gamma"), 3},
+                                                            std::pair{std::string_view("delta"), 4});
     std::string_view key = "delta";
     for (auto _ : state) {
         benchmark::DoNotOptimize(key);

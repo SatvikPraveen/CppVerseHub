@@ -7,17 +7,17 @@
  * depth; Meyers-singleton access cost.
  */
 
-#include <benchmark/benchmark.h>
-
-#include <memory>
-#include <vector>
-
 #include "patterns/Command.hpp"
 #include "patterns/Decorator.hpp"
 #include "patterns/Observer.hpp"
 #include "patterns/Singleton.hpp"
 #include "patterns/State.hpp"
 #include "patterns/Strategy.hpp"
+
+#include <benchmark/benchmark.h>
+
+#include <memory>
+#include <vector>
 
 using namespace CppVerseHub::Patterns;
 
@@ -156,4 +156,4 @@ void BM_SingletonAccess(benchmark::State& state) {
 }
 BENCHMARK(BM_SingletonAccess)->Threads(1)->Threads(4);
 
-}  // namespace
+} // namespace

@@ -16,6 +16,8 @@
 #ifndef CPPVERSEHUB_TEMPLATES_SFINAE_EXAMPLES_HPP
 #define CPPVERSEHUB_TEMPLATES_SFINAE_EXAMPLES_HPP
 
+#include "templates/MetaProgramming.hpp"
+
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
@@ -28,8 +30,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-#include "templates/MetaProgramming.hpp"
 
 namespace CppVerseHub::Templates::SFINAE {
 
@@ -97,12 +97,12 @@ inline constexpr bool is_iterable_v = has_begin_method_v<T> && has_end_method_v<
  * @brief Generate a `has_member_<name>` trait detecting a data member or member function name.
  *        Macros are the only way to parameterise over an identifier.
  */
-#define CPPVERSEHUB_DEFINE_HAS_MEMBER(member_name)                                                   \
-    template <typename T, typename = void>                                                          \
-    struct has_member_##member_name : std::false_type {};                                           \
-    template <typename T>                                                                           \
-    struct has_member_##member_name<T, std::void_t<decltype(&T::member_name)>> : std::true_type {}; \
-    template <typename T>                                                                           \
+#define CPPVERSEHUB_DEFINE_HAS_MEMBER(member_name)                                                           \
+    template <typename T, typename = void>                                                                   \
+    struct has_member_##member_name : std::false_type {};                                                    \
+    template <typename T>                                                                                    \
+    struct has_member_##member_name<T, std::void_t<decltype(&T::member_name)>> : std::true_type {};          \
+    template <typename T>                                                                                    \
     inline constexpr bool has_member_##member_name##_v = has_member_##member_name<T>::value
 
 CPPVERSEHUB_DEFINE_HAS_MEMBER(data);
@@ -151,8 +151,8 @@ struct has_insertion_operator : std::false_type {};
 
 /** @brief Selected when the stream expression is well-formed. */
 template <typename T>
-struct has_insertion_operator<T, std::void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>>
-    : std::true_type {};
+struct has_insertion_operator<
+    T, std::void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>> : std::true_type {};
 
 /** @brief Convenience variable. */
 template <typename T>
@@ -241,8 +241,8 @@ describe_value(const T& container) {
 
 /** @brief Fallback for anything else. @return description */
 template <typename T>
-[[nodiscard]] std::enable_if_t<!std::is_arithmetic_v<T> && !std::is_same_v<T, std::string> && !is_iterable_v<T>,
-                               std::string>
+[[nodiscard]] std::enable_if_t<
+    !std::is_arithmetic_v<T> && !std::is_same_v<T, std::string> && !is_iterable_v<T>, std::string>
 describe_value(const T&) {
     return "opaque object";
 }
@@ -255,8 +255,8 @@ template <typename T>
 
 /** @brief Size by walking begin()..end() when size() is unavailable. @param container range @return count */
 template <typename T>
-[[nodiscard]] std::enable_if_t<!has_size_method_v<T> && is_iterable_v<T>, std::size_t>
-get_size(const T& container) {
+[[nodiscard]] std::enable_if_t<!has_size_method_v<T> && is_iterable_v<T>, std::size_t> get_size(
+    const T& container) {
     return static_cast<std::size_t>(std::distance(container.begin(), container.end()));
 }
 
@@ -273,8 +273,8 @@ template <typename T, std::size_t N>
 
 /** @brief Serialise a number. @param value number @return decimal text */
 template <typename T>
-[[nodiscard]] std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, std::string>
-serialize(const T& value) {
+[[nodiscard]] std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, std::string> serialize(
+    const T& value) {
     std::ostringstream oss;
     oss << value;
     return oss.str();
@@ -288,8 +288,8 @@ template <typename T>
 
 /** @brief Serialise any iterable recursively as a JSON-like array. @param container range @return text */
 template <typename T>
-[[nodiscard]] std::enable_if_t<is_iterable_v<T> && !std::is_same_v<T, std::string>, std::string>
-serialize(const T& container) {
+[[nodiscard]] std::enable_if_t<is_iterable_v<T> && !std::is_same_v<T, std::string>, std::string> serialize(
+    const T& container) {
     std::string result = "[";
     bool first = true;
     for (const auto& item : container) {
@@ -362,10 +362,10 @@ struct generic_tag {};    ///< dispatch tag for everything else
 
 /** @brief Compute the dispatch tag type for T. */
 template <typename T>
-using type_tag_t = std::conditional_t<
-    std::is_arithmetic_v<T>, arithmetic_tag,
-    std::conditional_t<std::is_same_v<T, std::string>, string_tag,
-                       std::conditional_t<is_iterable_v<T>, container_tag, generic_tag>>>;
+using type_tag_t =
+    std::conditional_t<std::is_arithmetic_v<T>, arithmetic_tag,
+                       std::conditional_t<std::is_same_v<T, std::string>, string_tag,
+                                          std::conditional_t<is_iterable_v<T>, container_tag, generic_tag>>>;
 
 /** @brief Container overload. @param value container @return description */
 template <typename T>
@@ -407,9 +407,10 @@ struct algorithm_selector {
 
 /** @brief Random-access iterators: O(1) `it += n`. */
 template <typename Iterator>
-struct algorithm_selector<Iterator,
-                          std::enable_if_t<std::is_base_of_v<std::random_access_iterator_tag,
-                                                             typename std::iterator_traits<Iterator>::iterator_category>>> {
+struct algorithm_selector<
+    Iterator,
+    std::enable_if_t<std::is_base_of_v<std::random_access_iterator_tag,
+                                       typename std::iterator_traits<Iterator>::iterator_category>>> {
     static constexpr bool is_constant_time = true; ///< whether advance is O(1)
     /** @param it iterator @param n steps */
     static void advance(Iterator& it, typename std::iterator_traits<Iterator>::difference_type n) { it += n; }
@@ -423,10 +424,11 @@ struct algorithm_selector<Iterator,
  * @return dest + (last - first)
  */
 template <typename InputIt, typename OutputIt>
-std::enable_if_t<std::is_pointer_v<InputIt> && std::is_pointer_v<OutputIt> &&
-                     std::is_trivially_copyable_v<std::remove_pointer_t<InputIt>> &&
-                     std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, std::remove_pointer_t<OutputIt>>,
-                 OutputIt>
+std::enable_if_t<
+    std::is_pointer_v<InputIt> && std::is_pointer_v<OutputIt> &&
+        std::is_trivially_copyable_v<std::remove_pointer_t<InputIt>> &&
+        std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, std::remove_pointer_t<OutputIt>>,
+    OutputIt>
 optimized_copy(InputIt first, InputIt last, OutputIt dest) {
     const auto count = static_cast<std::size_t>(last - first);
     if (count != 0) {
@@ -435,28 +437,30 @@ optimized_copy(InputIt first, InputIt last, OutputIt dest) {
     return dest + count;
 }
 
-/** @brief Generic fallback using std::copy. @param first begin @param last end @param dest out @return end of output */
+/** @brief Generic fallback using std::copy. @param first begin @param last end @param dest out @return end of
+ * output */
 template <typename InputIt, typename OutputIt>
-std::enable_if_t<!(std::is_pointer_v<InputIt> && std::is_pointer_v<OutputIt> &&
-                   std::is_trivially_copyable_v<std::remove_pointer_t<InputIt>> &&
-                   std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, std::remove_pointer_t<OutputIt>>),
-                 OutputIt>
+std::enable_if_t<
+    !(std::is_pointer_v<InputIt> && std::is_pointer_v<OutputIt> &&
+      std::is_trivially_copyable_v<std::remove_pointer_t<InputIt>> &&
+      std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, std::remove_pointer_t<OutputIt>>),
+    OutputIt>
 optimized_copy(InputIt first, InputIt last, OutputIt dest) {
     return std::copy(first, last, dest);
 }
 
 /** @brief Move if the move constructor cannot throw (re-implementation of std::move_if_noexcept). */
 template <typename T>
-[[nodiscard]] constexpr std::enable_if_t<std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>,
-                                         T&&>
+[[nodiscard]] constexpr std::enable_if_t<
+    std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>, T&&>
 conditional_move(T& value) noexcept {
     return std::move(value);
 }
 
 /** @brief Copy instead of a potentially throwing move. @param value source @return const lvalue reference */
 template <typename T>
-[[nodiscard]] constexpr std::enable_if_t<!std::is_nothrow_move_constructible_v<T> && std::is_copy_constructible_v<T>,
-                                         const T&>
+[[nodiscard]] constexpr std::enable_if_t<
+    !std::is_nothrow_move_constructible_v<T> && std::is_copy_constructible_v<T>, const T&>
 conditional_move(T& value) noexcept {
     return value;
 }
@@ -550,14 +554,15 @@ template <typename T>
 
 /** @param args constructor arguments @return std::make_unique<T>(args...) — only if T is constructible */
 template <typename T, typename... Args>
-[[nodiscard]] std::enable_if_t<std::is_constructible_v<T, Args...>, std::unique_ptr<T>>
-make_unique_with_args(Args&&... args) {
+[[nodiscard]] std::enable_if_t<std::is_constructible_v<T, Args...>, std::unique_ptr<T>> make_unique_with_args(
+    Args&&... args) {
     return std::make_unique<T>(std::forward<Args>(args)...);
 }
 
 /** @brief Element type of a std::vector; substitution fails for anything else. */
 template <typename T>
-using vector_element_t = std::enable_if_t<Meta::is_instantiation_of_v<std::vector, T>, typename T::value_type>;
+using vector_element_t =
+    std::enable_if_t<Meta::is_instantiation_of_v<std::vector, T>, typename T::value_type>;
 
 // ===== The C++20 way: concepts instead of enable_if =====
 

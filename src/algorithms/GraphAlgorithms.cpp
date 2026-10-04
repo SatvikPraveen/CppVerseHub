@@ -17,7 +17,7 @@ namespace {
 
 struct Station {
     std::string_view name;
-    std::array<double, 3> position;  // light years
+    std::array<double, 3> position; // light years
 };
 
 constexpr std::array<Station, 9> kStations{{
@@ -29,7 +29,7 @@ constexpr std::array<Station, 9> kStations{{
     {"Procyon", {-4.8, 10.3, 1.0}},
     {"Tau Ceti", {10.3, 5.0, -3.4}},
     {"Epsilon Eridani", {6.2, 8.3, -1.7}},
-    {"Luyten's Star", {-4.6, 11.4, 1.1}},  // spur: reachable only via Procyon
+    {"Luyten's Star", {-4.6, 11.4, 1.1}}, // spur: reachable only via Procyon
 }};
 
 double distance(std::size_t a, std::size_t b) {
@@ -47,7 +47,7 @@ void print_path(std::ostream& out, const std::vector<std::size_t>& path) {
     }
 }
 
-}  // namespace
+} // namespace
 
 void demonstrate_graphs(std::ostream& out) {
     out << "=== Graph algorithms: interstellar route network ===\n";
@@ -56,7 +56,19 @@ void demonstrate_graphs(std::ostream& out) {
     // Undirected network; jump cost = Euclidean distance (so Euclidean A* heuristic is consistent).
     WeightedGraph<double> net(kStations.size());
     const std::array<std::pair<std::size_t, std::size_t>, 13> lanes{{
-        {0, 1}, {0, 2}, {1, 2}, {2, 3}, {0, 3}, {3, 5}, {0, 4}, {4, 5}, {4, 7}, {7, 6}, {1, 6}, {5, 7}, {5, 8},
+        {0, 1},
+        {0, 2},
+        {1, 2},
+        {2, 3},
+        {0, 3},
+        {3, 5},
+        {0, 4},
+        {4, 5},
+        {4, 7},
+        {7, 6},
+        {1, 6},
+        {5, 7},
+        {5, 8},
     }};
     for (const auto& [a, b] : lanes) {
         net.add_edge(a, b, distance(a, b));
@@ -112,14 +124,14 @@ void demonstrate_graphs(std::ostream& out) {
 
     // Directed mission-dependency DAG.
     WeightedGraph<int> missions(6, true);
-    missions.add_edge(0, 1);  // survey -> mine
-    missions.add_edge(0, 2);  // survey -> outpost
-    missions.add_edge(1, 3);  // mine -> refinery
-    missions.add_edge(2, 3);  // outpost -> refinery
-    missions.add_edge(3, 4);  // refinery -> shipyard
-    missions.add_edge(2, 5);  // outpost -> colony
-    const std::array<std::string_view, 6> mission_names{"survey", "mine", "outpost", "refinery", "shipyard",
-                                                        "colony"};
+    missions.add_edge(0, 1); // survey -> mine
+    missions.add_edge(0, 2); // survey -> outpost
+    missions.add_edge(1, 3); // mine -> refinery
+    missions.add_edge(2, 3); // outpost -> refinery
+    missions.add_edge(3, 4); // refinery -> shipyard
+    missions.add_edge(2, 5); // outpost -> colony
+    const std::array<std::string_view, 6> mission_names{"survey",   "mine",     "outpost",
+                                                        "refinery", "shipyard", "colony"};
     out << "Topological mission order:";
     if (const auto topo = topological_sort(missions)) {
         for (std::size_t v : *topo) {
@@ -166,8 +178,8 @@ void demonstrate_graphs(std::ostream& out) {
     evac.add_edge(3, 5, 20);
     evac.add_edge(4, 5, 4);
     const long long flow = evac.max_flow(0, 5);
-    out << "Max evacuation flow (Edmonds-Karp): " << flow
-        << " ships/hour = min cut capacity " << evac.cut_capacity(evac.min_cut_source_side()) << '\n';
+    out << "Max evacuation flow (Edmonds-Karp): " << flow << " ships/hour = min cut capacity "
+        << evac.cut_capacity(evac.min_cut_source_side()) << '\n';
 
     // Exact patrol tour over the first 6 stations.
     std::vector<std::vector<double>> dist(6, std::vector<double>(6));
@@ -184,4 +196,4 @@ void demonstrate_graphs(std::ostream& out) {
     out << std::setprecision(6);
 }
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms

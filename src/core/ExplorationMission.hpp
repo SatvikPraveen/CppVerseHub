@@ -30,9 +30,11 @@ public:
      * @param duration Survey time on station, seconds.
      * @param surveyResources Whether deposits are rolled on completion.
      */
-    ExplorationMission(MissionId id, EntityId fleet, EntityId target, double duration, bool surveyResources = true);
+    ExplorationMission(MissionId id, EntityId fleet, EntityId target, double duration,
+                       bool surveyResources = true);
 
-    /// @brief Construct from JSON (base keys plus "surveyResources", "discovered"). @param id Id. @param params Params.
+    /// @brief Construct from JSON (base keys plus "surveyResources", "discovered"). @param id Id. @param
+    /// params Params.
     ExplorationMission(MissionId id, const nlohmann::json& params);
 
     /// @brief Type tag. @return MissionType::Exploration.

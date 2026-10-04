@@ -67,7 +67,8 @@ static_assert(std::is_same_v<S::detected_or_t<long, S::value_type_t, int>, long>
 static_assert(std::is_same_v<S::detected_t<S::size_expression_t, Sized>, std::size_t>);
 
 // ----- smart pointers, callables, factories -----
-static_assert(S::is_smart_pointer_v<std::unique_ptr<int>> && S::is_smart_pointer_v<const std::shared_ptr<int>>);
+static_assert(S::is_smart_pointer_v<std::unique_ptr<int>> &&
+              S::is_smart_pointer_v<const std::shared_ptr<int>>);
 static_assert(!S::is_smart_pointer_v<int*>);
 static_assert(S::is_callable_v<int (*)(int), int> && !S::is_callable_v<int (*)(int), std::string>);
 static_assert(S::is_callable_v<decltype([] {})> && !S::is_callable_v<int>);
@@ -91,7 +92,8 @@ static_assert(CanSafeInvoke<int (*)(int), int> && !CanSafeInvoke<int (*)(int), O
 
 // ----- conditional_move returns rvalue only for nothrow-movable types -----
 static_assert(std::is_same_v<decltype(S::conditional_move(std::declval<std::string&>())), std::string&&>);
-static_assert(std::is_same_v<decltype(S::conditional_move(std::declval<ThrowingMove&>())), const ThrowingMove&>);
+static_assert(
+    std::is_same_v<decltype(S::conditional_move(std::declval<ThrowingMove&>())), const ThrowingMove&>);
 static_assert(std::is_same_v<decltype(S::conditional_move(std::declval<std::unique_ptr<int>&>())),
                              std::unique_ptr<int>&&>);
 

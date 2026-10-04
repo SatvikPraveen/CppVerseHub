@@ -7,13 +7,13 @@
  */
 #pragma once
 
-#include <cstdint>
-#include <string>
-
 #include "core/Entity.hpp"
 #include "core/Identifiers.hpp"
 #include "core/Mission.hpp"
 #include "core/Resources.hpp"
+
+#include <cstdint>
+#include <string>
 
 namespace CppVerseHub::Core {
 

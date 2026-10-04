@@ -61,6 +61,7 @@ int main() {
 
     const bool reproducible = a->stateDigest() == b->stateDigest();
     const bool resumable = a->stateDigest() == restored->stateDigest();
-    std::cout << "\nreproducible: " << std::boolalpha << reproducible << "\nresumable:    " << resumable << '\n';
+    std::cout << "\nreproducible: " << std::boolalpha << reproducible << "\nresumable:    " << resumable
+              << '\n';
     return reproducible && resumable ? 0 : 1;
 }

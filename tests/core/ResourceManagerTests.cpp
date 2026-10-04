@@ -1,14 +1,13 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <thread>
-#include <vector>
-
-#include <nlohmann/json.hpp>
-
 #include "core/Exceptions.hpp"
 #include "core/Random.hpp"
 #include "core/ResourceManager.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <nlohmann/json.hpp>
+
+#include <thread>
+#include <vector>
 
 using namespace CppVerseHub::Core;
 
@@ -115,7 +114,8 @@ TEST_CASE("ResourceManager integrates fractional production exactly over many ti
     REQUIRE(produced <= 25);
     REQUIRE(rm.balance(EntityId{1}, ResourceType::Minerals) == produced);
     REQUIRE(rm.totalMinted(ResourceType::Minerals) == produced);
-    REQUIRE_THROWS_AS(rm.setProductionRate(EntityId{1}, ResourceType::Minerals, -1.0), InvalidArgumentException);
+    REQUIRE_THROWS_AS(rm.setProductionRate(EntityId{1}, ResourceType::Minerals, -1.0),
+                      InvalidArgumentException);
     REQUIRE_THROWS_AS(rm.tick(-0.1), InvalidArgumentException);
 }
 
@@ -177,8 +177,7 @@ TEST_CASE("ResourceManager concurrent transfers conserve totals", "[core][resour
                 static_cast<void>(rm.tryWithdraw(from, ResourceType::Technology, 0));
                 try {
                     rm.transfer(from, to, ResourceType::Technology, rng.uniformInt(1, 50));
-                } catch (const InsufficientResourcesException&) {
-                }
+                } catch (const InsufficientResourcesException&) {}
             }
         });
     }
@@ -189,7 +188,8 @@ TEST_CASE("ResourceManager concurrent transfers conserve totals", "[core][resour
     REQUIRE(rm.checkConservation());
 }
 
-TEST_CASE("ResourceManager JSON round-trip preserves balances, rates and carries", "[core][resources][json]") {
+TEST_CASE("ResourceManager JSON round-trip preserves balances, rates and carries",
+          "[core][resources][json]") {
     ResourceManager rm;
     rm.openAccount(EntityId{5});
     rm.openAccount(EntityId{9});

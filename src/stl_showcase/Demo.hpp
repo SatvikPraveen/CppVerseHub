@@ -15,4 +15,4 @@ namespace CppVerseHub::STL {
  */
 void runDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

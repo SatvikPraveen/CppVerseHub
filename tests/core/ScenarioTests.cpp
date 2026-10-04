@@ -1,10 +1,10 @@
+#include "core/Scenario.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <string>
-
-#include "core/Scenario.hpp"
 
 using namespace CppVerseHub::Core;
 

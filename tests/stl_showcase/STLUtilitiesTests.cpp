@@ -1,4 +1,6 @@
 // Tests for stl_showcase/STLUtilities.hpp
+#include "stl_showcase/STLUtilities.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -10,8 +12,6 @@
 #include <tuple>
 #include <variant>
 #include <vector>
-
-#include "stl_showcase/STLUtilities.hpp"
 
 using namespace CppVerseHub::STL;
 using Catch::Approx;
@@ -190,14 +190,14 @@ TEST_CASE("PropertyBag stores heterogeneous values with exact-type retrieval", "
     REQUIRE(bag.size() == 4);
     REQUIRE(bag.get<std::string>("name") == "Roci");
     REQUIRE(bag.get<int>("crew") == 4);
-    REQUIRE_FALSE(bag.get<long>("crew").has_value());  // exact type required
+    REQUIRE_FALSE(bag.get<long>("crew").has_value()); // exact type required
     REQUIRE_FALSE(bag.get<int>("missing").has_value());
     REQUIRE(bag.get<std::vector<std::string>>("tags")->front() == "corvette");
     REQUIRE(bag.holds<double>("warp"));
     REQUIRE_FALSE(bag.holds<float>("warp"));
     REQUIRE_FALSE(bag.holds<int>("missing"));
 
-    bag.set("crew", std::string("four"));  // replace with a different type
+    bag.set("crew", std::string("four")); // replace with a different type
     REQUIRE(bag.size() == 4);
     REQUIRE(bag.holds<std::string>("crew"));
     REQUIRE(bag.keys() == std::vector<std::string>{"crew", "name", "tags", "warp"});

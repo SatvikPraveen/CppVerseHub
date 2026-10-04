@@ -8,20 +8,20 @@
 #include <algorithm>
 #include <bit>
 #include <limits>
-#include <optional>
-#include <tuple>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <set>
 #include <sstream>
+#include <tuple>
 #include <vector>
 
 using namespace CppVerseHub::Algorithms;
 
 namespace {
 
-WeightedGraph<long long> random_graph(std::size_t n, std::size_t m, bool directed, long long min_w, long long max_w,
-                                      std::uint64_t seed) {
+WeightedGraph<long long> random_graph(std::size_t n, std::size_t m, bool directed, long long min_w,
+                                      long long max_w, std::uint64_t seed) {
     std::mt19937_64 rng(seed);
     std::uniform_int_distribution<std::size_t> vertex(0, n - 1);
     std::uniform_int_distribution<long long> weight(min_w, max_w);
@@ -73,7 +73,8 @@ W path_cost(const WeightedGraph<W>& g, const std::vector<std::size_t>& path) {
 }
 
 // Number of connected components of an undirected graph, skipping one edge and/or vertex.
-std::size_t components_without(const WeightedGraph<long long>& g, std::size_t skip_edge, std::size_t skip_vertex) {
+std::size_t components_without(const WeightedGraph<long long>& g, std::size_t skip_edge,
+                               std::size_t skip_vertex) {
     DisjointSet dsu(g.vertex_count());
     for (std::size_t id = 0; id < g.edge_count(); ++id) {
         const auto& e = g.edges()[id];
@@ -85,7 +86,7 @@ std::size_t components_without(const WeightedGraph<long long>& g, std::size_t sk
     return dsu.set_count() - (skip_vertex == kNoVertex ? 0 : 1);
 }
 
-}  // namespace
+} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // Graph representation
@@ -95,7 +96,7 @@ TEST_CASE("WeightedGraph stores arcs, edges and transposes correctly", "[graph][
     WeightedGraph<int> und(3);
     und.add_edge(0, 1, 5);
     und.add_edge(1, 2, 7);
-    und.add_edge(2, 2, 1);  // self loop stored once
+    und.add_edge(2, 2, 1); // self loop stored once
     REQUIRE(und.edge_count() == 3);
     REQUIRE(und.neighbors(1).size() == 2);
     REQUIRE(und.neighbors(2).size() == 2);
@@ -222,7 +223,8 @@ TEST_CASE("connected components agree with BFS reachability", "[graph][component
 // Shortest paths
 // ---------------------------------------------------------------------------------------------
 
-TEST_CASE("Dijkstra, Bellman-Ford and Floyd-Warshall agree on non-negative graphs", "[graph][sssp][property]") {
+TEST_CASE("Dijkstra, Bellman-Ford and Floyd-Warshall agree on non-negative graphs",
+          "[graph][sssp][property]") {
     for (std::uint64_t seed = 0; seed < 30; ++seed) {
         const bool directed = seed % 3 != 0;
         const auto g = random_graph(18, 50, directed, 0, 20, seed);
@@ -278,7 +280,7 @@ TEST_CASE("Bellman-Ford handles negative weights and detects negative cycles", "
         WeightedGraph<int> g(4, true);
         g.add_edge(0, 1, 1);
         g.add_edge(1, 2, -2);
-        g.add_edge(2, 1, 1);  // cycle 1->2->1 of weight -1
+        g.add_edge(2, 1, 1); // cycle 1->2->1 of weight -1
         g.add_edge(2, 3, 1);
         REQUIRE(bellman_ford(g, 0).negative_cycle);
         const auto fw = floyd_warshall(g);
@@ -332,7 +334,8 @@ TEST_CASE("A* finds optimal paths on grids with obstacles", "[graph][astar][prop
         auto manhattan = [&](std::size_t v) {
             const auto x = static_cast<long long>(v % W);
             const auto y = static_cast<long long>(v / W);
-            return static_cast<long long>(W - 1) - x + static_cast<long long>(H - 1) - y;  // min edge cost is 1
+            return static_cast<long long>(W - 1) - x + static_cast<long long>(H - 1) -
+                   y; // min edge cost is 1
         };
         const auto dj = dijkstra(g, 0);
         const auto informed = a_star(g, 0, target, manhattan);
@@ -347,7 +350,7 @@ TEST_CASE("A* finds optimal paths on grids with obstacles", "[graph][astar][prop
         }
 
         // Admissible but inconsistent heuristic: random fraction of the true remaining distance.
-        const auto to_target = dijkstra(g, target);  // undirected: dist(v, target)
+        const auto to_target = dijkstra(g, target); // undirected: dist(v, target)
         std::vector<long long> h(W * H, 0);
         for (std::size_t v = 0; v < W * H; ++v) {
             if (to_target.distance[v]) {
@@ -393,7 +396,7 @@ TEST_CASE("topological sort orders DAGs and rejects cycles", "[graph][topo][prop
         REQUIRE_FALSE(has_cycle(g));
         if (!g.edges().empty()) {
             const auto e = g.edges().front();
-            g.add_edge(e.to, e.from, 1);  // close a cycle
+            g.add_edge(e.to, e.from, 1); // close a cycle
             REQUIRE_FALSE(topological_sort(g).has_value());
             REQUIRE(has_cycle(g));
         }
@@ -402,7 +405,7 @@ TEST_CASE("topological sort orders DAGs and rejects cycles", "[graph][topo][prop
     fixed.add_edge(3, 1);
     fixed.add_edge(2, 1);
     fixed.add_edge(1, 0);
-    REQUIRE(topological_sort(fixed) == std::vector<std::size_t>{2, 3, 1, 0});  // lexicographically smallest
+    REQUIRE(topological_sort(fixed) == std::vector<std::size_t>{2, 3, 1, 0}); // lexicographically smallest
     REQUIRE_THROWS_AS(topological_sort(WeightedGraph<int>(2)), std::invalid_argument);
 }
 
@@ -436,8 +439,7 @@ TEST_CASE("Tarjan SCCs equal mutual reachability classes", "[graph][scc][propert
     g.add_edge(1, 2);
     g.add_edge(2, 0);
     g.add_edge(3, 4);
-    REQUIRE(strongly_connected_components(g) ==
-            std::vector<std::vector<std::size_t>>{{0, 1, 2}, {3}, {4}});
+    REQUIRE(strongly_connected_components(g) == std::vector<std::vector<std::size_t>>{{0, 1, 2}, {3}, {4}});
 }
 
 TEST_CASE("has_cycle on undirected graphs", "[graph][cycle]") {
@@ -463,7 +465,7 @@ TEST_CASE("has_cycle on undirected graphs", "[graph][cycle]") {
 
 TEST_CASE("Kruskal and Prim match a brute-force minimum spanning tree", "[graph][mst][property]") {
     for (std::uint64_t seed = 0; seed < 40; ++seed) {
-        const std::size_t n = 2 + seed % 5;  // 2..6 vertices
+        const std::size_t n = 2 + seed % 5; // 2..6 vertices
         const auto g = random_graph(n, n + 4, false, 1, 9, seed);
         const auto kr = kruskal_mst(g);
         const auto pr = prim_mst(g);
@@ -519,7 +521,7 @@ TEST_CASE("MST on disconnected graphs and invalid input", "[graph][mst]") {
 
 TEST_CASE("bridges and articulation points match brute-force removal", "[graph][cuts][property]") {
     for (std::uint64_t seed = 0; seed < 40; ++seed) {
-        const auto g = random_graph(12, 14, false, 1, 1, seed);  // sparse: many bridges, parallel edges
+        const auto g = random_graph(12, 14, false, 1, 1, seed); // sparse: many bridges, parallel edges
         const auto cs = find_cut_structure(g);
         const std::size_t base = components_without(g, kNoVertex, kNoVertex);
         std::vector<std::size_t> bridges;
@@ -558,7 +560,7 @@ TEST_CASE("Edmonds-Karp solves the CLRS example and conserves flow", "[graph][fl
     ids.push_back(f.add_edge(3, 5, 20));
     ids.push_back(f.add_edge(4, 5, 4));
     REQUIRE(f.max_flow(0, 5) == 23);
-    REQUIRE(f.max_flow(0, 5) == 23);  // idempotent: flow is reset first
+    REQUIRE(f.max_flow(0, 5) == 23); // idempotent: flow is reset first
     const auto side = f.min_cut_source_side();
     REQUIRE(side[0]);
     REQUIRE_FALSE(side[5]);
@@ -611,11 +613,11 @@ TEST_CASE("max flow equals brute-force minimum cut", "[graph][flow][property]") 
 TEST_CASE("Held-Karp matches brute-force permutation search", "[graph][tsp][property]") {
     for (std::uint64_t seed = 0; seed < 20; ++seed) {
         std::mt19937_64 rng(seed);
-        const std::size_t n = 2 + seed % 6;  // 2..7
+        const std::size_t n = 2 + seed % 6; // 2..7
         std::vector<std::vector<int>> d(n, std::vector<int>(n, 0));
         for (std::size_t i = 0; i < n; ++i) {
             for (std::size_t j = 0; j < n; ++j) {
-                d[i][j] = i == j ? 0 : 1 + static_cast<int>(rng() % 50);  // asymmetric
+                d[i][j] = i == j ? 0 : 1 + static_cast<int>(rng() % 50); // asymmetric
             }
         }
         const auto r = held_karp_tsp(d);
@@ -653,7 +655,8 @@ TEST_CASE("graph demo runs and reports consistent results", "[graph][demo]") {
     demonstrate_graphs(oss);
     const std::string s = oss.str();
     REQUIRE(s.find("Prim agrees: true") != std::string::npos);
-    REQUIRE(s.find("Max evacuation flow (Edmonds-Karp): 23 ships/hour = min cut capacity 23") != std::string::npos);
+    REQUIRE(s.find("Max evacuation flow (Edmonds-Karp): 23 ships/hour = min cut capacity 23") !=
+            std::string::npos);
     REQUIRE(s.find("dist(0,3) = 4") != std::string::npos);
     REQUIRE(s.find("survey") < s.find("shipyard"));
 }

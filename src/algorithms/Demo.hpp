@@ -19,6 +19,6 @@ namespace CppVerseHub::Algorithms {
  */
 void runDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Algorithms
+} // namespace CppVerseHub::Algorithms
 
-#endif  // CPPVERSEHUB_ALGORITHMS_DEMO_HPP
+#endif // CPPVERSEHUB_ALGORITHMS_DEMO_HPP

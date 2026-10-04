@@ -4,16 +4,16 @@
  */
 #include "core/Demo.hpp"
 
-#include <exception>
-#include <iomanip>
-#include <sstream>
-
 #include "core/ColonizationMission.hpp"
 #include "core/CombatMission.hpp"
 #include "core/EventSystem.hpp"
 #include "core/Events.hpp"
 #include "core/ExplorationMission.hpp"
 #include "core/Scenario.hpp"
+
+#include <exception>
+#include <iomanip>
+#include <sstream>
 
 namespace CppVerseHub::Core {
 
@@ -35,14 +35,13 @@ void showEntitiesAndFactory(std::ostream& out) {
     out << "-- Strong ids, entities and the factory registry --\n";
     Galaxy galaxy("Factory Demo");
     Planet& terra = galaxy.createPlanet("Terra", {0.0, 0.0, 0.0}, PlanetType::Terrestrial, 0.9);
-    Entity& vega = galaxy.spawn("planet", {{"name", "Vega"},
-                                           {"position", {120.0, 0.0, 0.0}},
-                                           {"planetType", "ocean"},
-                                           {"habitability", 0.7}});
-    Entity& patrol =
-        galaxy.spawn("fleet", {{"name", "Patrol"},
-                               {"position", {0.0, 0.0, 0.0}},
-                               {"ships", {{{"type", "fighter"}, {"count", 6}}, {{"type", "cruiser"}, {"count", 2}}}}});
+    Entity& vega = galaxy.spawn(
+        "planet",
+        {{"name", "Vega"}, {"position", {120.0, 0.0, 0.0}}, {"planetType", "ocean"}, {"habitability", 0.7}});
+    Entity& patrol = galaxy.spawn(
+        "fleet", {{"name", "Patrol"},
+                  {"position", {0.0, 0.0, 0.0}},
+                  {"ships", {{{"type", "fighter"}, {"count", 6}}, {{"type", "cruiser"}, {"count", 2}}}}});
     out << "registered kinds:";
     for (const auto& key : galaxy.entityFactory().keys()) {
         out << ' ' << key;
@@ -75,9 +74,10 @@ void showEconomy(std::ostream& out) {
         ledger.transfer(mine, depot, ResourceType::Minerals, 30);
     }
     out << "mine " << ledger.balance(mine, ResourceType::Minerals) << ", depot "
-        << ledger.balance(depot, ResourceType::Minerals) << ", minted " << ledger.totalMinted(ResourceType::Minerals)
-        << ", burned " << ledger.totalBurned(ResourceType::Minerals) << ", conserved "
-        << std::boolalpha << ledger.checkConservation() << "\n";
+        << ledger.balance(depot, ResourceType::Minerals) << ", minted "
+        << ledger.totalMinted(ResourceType::Minerals) << ", burned "
+        << ledger.totalBurned(ResourceType::Minerals) << ", conserved " << std::boolalpha
+        << ledger.checkConservation() << "\n";
     try {
         ledger.transfer(depot, mine, ResourceType::Minerals, 1'000'000);
     } catch (const InsufficientResourcesException& e) {
@@ -101,8 +101,8 @@ void showSimulation(std::ostream& out) {
         log << "  t=" << engine->time() << " completed " << toString(e.type) << " mission " << e.id << "\n";
     });
     Subscription s3 = engine->events().subscribe<MissionFailed>([&](const MissionFailed& e) {
-        log << "  t=" << engine->time() << " failed " << toString(e.type) << " mission " << e.id << ": " << e.reason
-            << "\n";
+        log << "  t=" << engine->time() << " failed " << toString(e.type) << " mission " << e.id << ": "
+            << e.reason << "\n";
     });
     Subscription s4 = engine->events().subscribe<ResourceDiscovered>([&](const ResourceDiscovered& e) {
         log << "  discovered " << e.amount << ' ' << toString(e.type) << " on planet " << e.planet << "\n";
@@ -114,8 +114,8 @@ void showSimulation(std::ostream& out) {
     const SimulationStats& st = engine->stats();
     out << "ran " << steps << " steps (" << engine->time() << " s simulated), missions started "
         << st.missionsStarted << ", completed " << st.missionsCompleted << ", failed " << st.missionsFailed
-        << ", combat exchanges " << exchanges << ", conservation "
-        << std::boolalpha << engine->galaxy().resources().checkConservation() << "\n";
+        << ", combat exchanges " << exchanges << ", conservation " << std::boolalpha
+        << engine->galaxy().resources().checkConservation() << "\n";
     for (const auto& entry : engine->galaxy().missions()) {
         out << "  " << entry.second->describe() << "\n";
     }
@@ -123,14 +123,16 @@ void showSimulation(std::ostream& out) {
     out << "-- Reproducibility and save/load round trip --\n";
     auto replay = makeSampleScenario(options);
     static_cast<void>(replay->runUntilMissionsFinished(5000));
-    out << "same seed, same digest: " << std::boolalpha << (replay->stateDigest() == engine->stateDigest()) << "\n";
+    out << "same seed, same digest: " << std::boolalpha << (replay->stateDigest() == engine->stateDigest())
+        << "\n";
 
     const nlohmann::json saved = saveScenario(*engine);
     auto restored = loadScenario(saved);
     engine->runSteps(50);
     restored->runSteps(50);
-    out << "scenario size " << saved.dump().size() << " bytes; restored run matches original: "
-        << (restored->stateDigest() == engine->stateDigest()) << "\n";
+    out << "scenario size " << saved.dump().size()
+        << " bytes; restored run matches original: " << (restored->stateDigest() == engine->stateDigest())
+        << "\n";
     out << "digest 0x" << std::hex << engine->stateDigest() << std::dec << "\n";
 }
 

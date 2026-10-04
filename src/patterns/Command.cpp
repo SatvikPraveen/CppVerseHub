@@ -67,7 +67,9 @@ void MoveFleetCommand::undo() {
     fleet_->restore(s);
 }
 
-std::string MoveFleetCommand::name() const { return "Move to " + destination_; }
+std::string MoveFleetCommand::name() const {
+    return "Move to " + destination_;
+}
 
 AttackCommand::AttackCommand(FleetReceiver& fleet, std::string target, double damageTaken)
     : fleet_(&fleet), target_(std::move(target)), damage_(damageTaken) {}
@@ -85,11 +87,17 @@ void AttackCommand::undo() {
     fleet_->restore(s);
 }
 
-std::string AttackCommand::name() const { return "Attack " + target_; }
+std::string AttackCommand::name() const {
+    return "Attack " + target_;
+}
 
-void ReinforceCommand::execute() { fleet_->reinforce(delta_); }
+void ReinforceCommand::execute() {
+    fleet_->reinforce(delta_);
+}
 
-void ReinforceCommand::undo() { fleet_->reinforce(-delta_); }
+void ReinforceCommand::undo() {
+    fleet_->reinforce(-delta_);
+}
 
 std::string ReinforceCommand::name() const {
     return (delta_ >= 0 ? "Reinforce +" : "Detach ") + std::to_string(delta_);
@@ -102,9 +110,13 @@ LambdaCommand::LambdaCommand(std::string name, std::function<void()> doFn, std::
     }
 }
 
-void LambdaCommand::execute() { do_(); }
+void LambdaCommand::execute() {
+    do_();
+}
 
-void LambdaCommand::undo() { undo_(); }
+void LambdaCommand::undo() {
+    undo_();
+}
 
 // ---------------------------------------------------------------------------
 // MacroCommand
@@ -154,7 +166,7 @@ void CommandHistory::execute(CommandPtr command) {
     if (!command) {
         throw std::invalid_argument("CommandHistory::execute: null command");
     }
-    command->execute();  // throws -> nothing recorded
+    command->execute(); // throws -> nothing recorded
     redo_.clear();
     undo_.push_back(std::move(command));
     if (undo_.size() > capacity_) {
@@ -167,7 +179,7 @@ bool CommandHistory::undo() {
     if (undo_.empty()) {
         return false;
     }
-    undo_.back()->undo();  // if this throws the command stays on the undo stack
+    undo_.back()->undo(); // if this throws the command stays on the undo stack
     redo_.push_back(std::move(undo_.back()));
     undo_.pop_back();
     return true;
@@ -187,9 +199,13 @@ bool CommandHistory::redo() {
     return true;
 }
 
-std::string CommandHistory::nextUndoName() const { return undo_.empty() ? std::string{} : undo_.back()->name(); }
+std::string CommandHistory::nextUndoName() const {
+    return undo_.empty() ? std::string{} : undo_.back()->name();
+}
 
-std::string CommandHistory::nextRedoName() const { return redo_.empty() ? std::string{} : redo_.back()->name(); }
+std::string CommandHistory::nextRedoName() const {
+    return redo_.empty() ? std::string{} : redo_.back()->name();
+}
 
 void CommandHistory::clear() noexcept {
     undo_.clear();
@@ -205,7 +221,7 @@ void printStatus(std::ostream& out, const FleetStatus& s) {
     out << "  [" << s.name << "] at " << s.location << ", fuel " << s.fuel << ", health " << s.health
         << ", ships " << s.ships << '\n';
 }
-}  // namespace
+} // namespace
 
 void demonstrateCommand(std::ostream& out) {
     out << "=== Command pattern ===\n";
@@ -241,4 +257,4 @@ void demonstrateCommand(std::ostream& out) {
         << history.redoDepth() << '\n';
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

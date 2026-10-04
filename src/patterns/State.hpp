@@ -52,15 +52,17 @@ class IMissionState;
  * means the event was handled without changing state.
  */
 struct StateOutcome {
-    bool accepted = false;                   ///< Whether the event was legal.
-    std::unique_ptr<IMissionState> next;     ///< New state, or null to stay.
+    bool accepted = false;               ///< Whether the event was legal.
+    std::unique_ptr<IMissionState> next; ///< New state, or null to stay.
 
     /// @brief Event rejected. @return Outcome.
     [[nodiscard]] static StateOutcome reject() { return {}; }
     /// @brief Event handled, stay in the current state. @return Outcome.
     [[nodiscard]] static StateOutcome stay() { return {true, nullptr}; }
     /// @brief Transition to @p state. @param state Next state. @return Outcome.
-    [[nodiscard]] static StateOutcome to(std::unique_ptr<IMissionState> state) { return {true, std::move(state)}; }
+    [[nodiscard]] static StateOutcome to(std::unique_ptr<IMissionState> state) {
+        return {true, std::move(state)};
+    }
 };
 
 /**
@@ -101,9 +103,9 @@ protected:
 
 /// @brief One recorded transition.
 struct PhaseTransition {
-    MissionPhase from;    ///< Phase before.
-    MissionPhase to;      ///< Phase after.
-    std::string trigger;  ///< Event name.
+    MissionPhase from;   ///< Phase before.
+    MissionPhase to;     ///< Phase after.
+    std::string trigger; ///< Event name.
 };
 
 /**
@@ -207,9 +209,10 @@ public:
      * @return true if a transition happened (possibly to a state of the same type).
      */
     bool dispatch(const EventVariant& event) {
-        std::optional<StateVariant> next = std::visit(
-            [this](const auto& s, const auto& e) -> std::optional<StateVariant> { return transitions_(s, e); },
-            state_, event);
+        std::optional<StateVariant> next =
+            std::visit([this](const auto& s,
+                              const auto& e) -> std::optional<StateVariant> { return transitions_(s, e); },
+                       state_, event);
         if (!next) {
             ++rejected_;
             return false;
@@ -248,31 +251,39 @@ private:
 /// @brief Warp-drive states (each carries only the data valid in that state).
 namespace Warp {
 /// @brief Drive powered down.
-struct Offline { static constexpr std::string_view name = "Offline"; };
+struct Offline {
+    static constexpr std::string_view name = "Offline";
+};
 /// @brief Capacitors charging.
 struct Charging {
     static constexpr std::string_view name = "Charging";
-    double percent = 0.0;  ///< Charge level, 0..100.
+    double percent = 0.0; ///< Charge level, 0..100.
 };
 /// @brief Fully charged, ready to jump.
-struct Ready { static constexpr std::string_view name = "Ready"; };
+struct Ready {
+    static constexpr std::string_view name = "Ready";
+};
 /// @brief Jump in progress.
 struct Jumping {
     static constexpr std::string_view name = "Jumping";
-    std::string destination;  ///< Jump target.
+    std::string destination; ///< Jump target.
 };
 /// @brief Cooling down after a jump.
 struct Cooldown {
     static constexpr std::string_view name = "Cooldown";
-    int ticksRemaining = 0;  ///< Ticks until charging may resume.
+    int ticksRemaining = 0; ///< Ticks until charging may resume.
 };
 
 /// @brief Power the drive on.
 struct PowerOn {};
 /// @brief Add charge.
-struct Charge { double amount = 0.0; };  ///< Percent to add.
+struct Charge {
+    double amount = 0.0;
+}; ///< Percent to add.
 /// @brief Start a jump.
-struct Engage { std::string destination; };  ///< Jump target.
+struct Engage {
+    std::string destination;
+}; ///< Jump target.
 /// @brief Time step.
 struct Tick {};
 /// @brief Power the drive off.
@@ -335,7 +346,7 @@ struct Transitions {
         return std::nullopt;
     }
 };
-}  // namespace Warp
+} // namespace Warp
 
 /// @brief Name of a warp state. @param state State. @return Its name.
 [[nodiscard]] std::string_view stateName(const Warp::State& state) noexcept;
@@ -358,7 +369,9 @@ public:
     /// @brief Current state. @return State variant.
     [[nodiscard]] const Warp::State& state() const noexcept { return machine_.state(); }
     /// @brief Current state's name. @return Name.
-    [[nodiscard]] std::string_view stateName() const noexcept { return Patterns::stateName(machine_.state()); }
+    [[nodiscard]] std::string_view stateName() const noexcept {
+        return Patterns::stateName(machine_.state());
+    }
     /// @brief Jumps started so far. @return Count.
     [[nodiscard]] std::size_t jumps() const noexcept { return jumps_; }
     /// @brief Destinations jumped to, in order. @return Destinations.
@@ -378,4 +391,4 @@ private:
  */
 void demonstrateState(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

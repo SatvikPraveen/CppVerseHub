@@ -24,7 +24,8 @@ double NavigationCoordinate::distanceTo(const NavigationCoordinate& other) const
 
 // --------------------------------------------------------------------------------- pair/tuple
 
-std::optional<std::pair<std::size_t, std::size_t>> closestPairIndices(std::span<const NavigationCoordinate> points) {
+std::optional<std::pair<std::size_t, std::size_t>> closestPairIndices(
+    std::span<const NavigationCoordinate> points) {
     if (points.size() < 2) {
         return std::nullopt;
     }
@@ -41,7 +42,8 @@ std::optional<std::pair<std::size_t, std::size_t>> closestPairIndices(std::span<
     return best;
 }
 
-std::optional<std::pair<double, double>> distanceRangeFromOrigin(std::span<const NavigationCoordinate> points) {
+std::optional<std::pair<double, double>> distanceRangeFromOrigin(
+    std::span<const NavigationCoordinate> points) {
     if (points.empty()) {
         return std::nullopt;
     }
@@ -83,7 +85,7 @@ std::optional<int> parseInt(std::string_view text) noexcept {
     }
     const char* first = text.data();
     const char* last = text.data() + text.size();
-    if (*first == '+') {  // from_chars rejects a leading '+'; accept it for friendliness
+    if (*first == '+') { // from_chars rejects a leading '+'; accept it for friendliness
         ++first;
         if (first == last || *first == '-') {
             return std::nullopt;
@@ -109,24 +111,24 @@ std::optional<VesselStatus> findVesselStatus(const std::map<std::string, VesselS
 // ------------------------------------------------------------------------------------ variant
 
 std::string describeCommand(const Command& command) {
-    return std::visit(
-        Overloaded{
-            [](const MoveCommand& c) {
-                std::ostringstream os;
-                os << "Move to (" << c.destination.x << ", " << c.destination.y << ", " << c.destination.z << ")";
-                return os.str();
-            },
-            [](const AttackCommand& c) {
-                return "Attack " + c.target + " at intensity " + std::to_string(c.intensity);
-            },
-            [](const ScanCommand& c) {
-                std::ostringstream os;
-                os << "Scan radius " << c.radius;
-                return os.str();
-            },
-            [](const DockCommand& c) { return "Dock at " + c.station; },
-        },
-        command);
+    return std::visit(Overloaded{
+                          [](const MoveCommand& c) {
+                              std::ostringstream os;
+                              os << "Move to (" << c.destination.x << ", " << c.destination.y << ", "
+                                 << c.destination.z << ")";
+                              return os.str();
+                          },
+                          [](const AttackCommand& c) {
+                              return "Attack " + c.target + " at intensity " + std::to_string(c.intensity);
+                          },
+                          [](const ScanCommand& c) {
+                              std::ostringstream os;
+                              os << "Scan radius " << c.radius;
+                              return os.str();
+                          },
+                          [](const DockCommand& c) { return "Dock at " + c.station; },
+                      },
+                      command);
 }
 
 VesselStatus statusAfter(const Command& command) noexcept {
@@ -165,13 +167,14 @@ std::vector<std::string_view> tokenize(std::string_view text) {
             break;
         }
         const auto end = text.find_first_of(" \t", start);
-        tokens.push_back(text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+        tokens.push_back(
+            text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
         pos = end == std::string_view::npos ? text.size() : end;
     }
     return tokens;
 }
 
-}  // namespace
+} // namespace
 
 CommandParseResult parseCommand(std::string_view text) {
     const auto tokens = tokenize(text);
@@ -290,8 +293,9 @@ void demonstratePairs(std::ostream& out) {
     std::map<std::string, int> docking_bays;
     const auto [where, inserted] = docking_bays.insert({"Bay 1", 4});
     const auto [again, inserted_again] = docking_bays.insert({"Bay 1", 9});
-    out << std::boolalpha << "map::insert returns pair<iterator,bool>: " << inserted << " then " << inserted_again
-        << " (value stays " << again->second << ", same node: " << (where == again) << ")\n";
+    out << std::boolalpha << "map::insert returns pair<iterator,bool>: " << inserted << " then "
+        << inserted_again << " (value stays " << again->second << ", same node: " << (where == again)
+        << ")\n";
 }
 
 void demonstrateTuples(std::ostream& out) {
@@ -299,8 +303,8 @@ void demonstrateTuples(std::ostream& out) {
     const std::vector<NavigationCoordinate> cloud{{1, 1, 1}, {3, 1, 1}, {2, 4, 1}};
     if (const auto stats = coordinateStatistics(cloud)) {
         const auto& [centroid, spread, count] = *stats;
-        out << "centroid (" << centroid.x << ", " << centroid.y << ", " << centroid.z << "), spread " << spread
-            << ", " << count << " points\n";
+        out << "centroid (" << centroid.x << ", " << centroid.y << ", " << centroid.z << "), spread "
+            << spread << ", " << count << " points\n";
     }
     const auto record = std::make_tuple(std::string("Tycho"), 42, 3.5);
     out << "formatTuple via std::apply: " << formatTuple(record) << '\n';
@@ -308,8 +312,8 @@ void demonstrateTuples(std::ostream& out) {
     out << "transformTuple: " << formatTuple(doubled) << '\n';
     std::size_t elements = 0;
     forEachElement(record, [&elements](const auto&) { ++elements; });
-    out << "forEachElement visited " << elements << " elements; tuple_size = "
-        << std::tuple_size_v<decltype(record)> << '\n';
+    out << "forEachElement visited " << elements
+        << " elements; tuple_size = " << std::tuple_size_v<decltype(record)> << '\n';
 
     std::vector<VesselRecord> fleet{{"Canterbury", VesselStatus::InTransit, 2},
                                     {"Donnager", VesselStatus::Combat, 9},
@@ -327,8 +331,8 @@ void demonstrateOptional(std::ostream& out) {
     out << "\n=== std::optional ===\n";
     for (const std::string_view input : {"42", "-7", "12abc", ""}) {
         const auto parsed = parseInt(input);
-        out << "parseInt(\"" << input << "\") -> " << (parsed ? std::to_string(*parsed) : std::string("nullopt"))
-            << '\n';
+        out << "parseInt(\"" << input << "\") -> "
+            << (parsed ? std::to_string(*parsed) : std::string("nullopt")) << '\n';
     }
     out << "safeDivide(1, 0).value_or(-1) = " << safeDivide(1.0, 0.0).value_or(-1.0) << '\n';
     const auto fuel_per_jump = andThen(parseInt("120"), [](int fuel) { return safeDivide(fuel, 8.0); });
@@ -389,7 +393,8 @@ void demonstrateViews(std::ostream& out) {
     }
     out << '\n';
     const std::array<double, 4> readings{2.0, 4.0, 6.0, 8.0};
-    out << "mean over std::span of first 3 readings: " << mean(std::span(readings).first(3)).value_or(0.0) << '\n';
+    out << "mean over std::span of first 3 readings: " << mean(std::span(readings).first(3)).value_or(0.0)
+        << '\n';
 }
 
 void runSTLUtilitiesDemo(std::ostream& out) {
@@ -401,4 +406,4 @@ void runSTLUtilitiesDemo(std::ostream& out) {
     demonstrateViews(out);
 }
 
-}  // namespace CppVerseHub::STL
+} // namespace CppVerseHub::STL

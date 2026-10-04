@@ -121,7 +121,9 @@ public:
     [[nodiscard]] std::string description() const override;
     [[nodiscard]] double cost() const override { return inner().cost() + 2000.0; }
     [[nodiscard]] double successProbability() const override;
-    [[nodiscard]] std::vector<std::string> enhancements() const override { return enhancementsPlus("Stealth"); }
+    [[nodiscard]] std::vector<std::string> enhancements() const override {
+        return enhancementsPlus("Stealth");
+    }
 };
 
 /// @brief Afterburners: duration x0.7, cost x1.25.
@@ -131,7 +133,9 @@ public:
     [[nodiscard]] std::string description() const override;
     [[nodiscard]] double cost() const override { return inner().cost() * 1.25; }
     [[nodiscard]] double durationHours() const override { return inner().durationHours() * 0.7; }
-    [[nodiscard]] std::vector<std::string> enhancements() const override { return enhancementsPlus("SpeedBoost"); }
+    [[nodiscard]] std::vector<std::string> enhancements() const override {
+        return enhancementsPlus("SpeedBoost");
+    }
 };
 
 /// @brief Extra weaponry: +5000 cost, success bonus that is larger for combat missions.
@@ -142,7 +146,9 @@ public:
     [[nodiscard]] std::string description() const override;
     [[nodiscard]] double cost() const override { return inner().cost() + 5000.0; }
     [[nodiscard]] double successProbability() const override;
-    [[nodiscard]] std::vector<std::string> enhancements() const override { return enhancementsPlus("HeavyArmament"); }
+    [[nodiscard]] std::vector<std::string> enhancements() const override {
+        return enhancementsPlus("HeavyArmament");
+    }
 
 private:
     bool combat_;
@@ -156,7 +162,9 @@ public:
     [[nodiscard]] double cost() const override { return inner().cost() + 800.0; }
     [[nodiscard]] double durationHours() const override { return inner().durationHours() + 1.0; }
     [[nodiscard]] double successProbability() const override;
-    [[nodiscard]] std::vector<std::string> enhancements() const override { return enhancementsPlus("Medical"); }
+    [[nodiscard]] std::vector<std::string> enhancements() const override {
+        return enhancementsPlus("Medical");
+    }
 };
 
 /**
@@ -240,7 +248,7 @@ template <typename R, typename... Args>
                 return it->second;
             }
         }
-        R value = fn(args...);  // computed outside the lock; a racing duplicate is harmless
+        R value = fn(args...); // computed outside the lock; a racing duplicate is harmless
         std::scoped_lock lock(cache->mutex);
         return cache->values.emplace(std::move(key), std::move(value)).first->second;
     };
@@ -252,4 +260,4 @@ template <typename R, typename... Args>
  */
 void demonstrateDecorator(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

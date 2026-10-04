@@ -16,15 +16,15 @@
 
 namespace CppVerseHub::Concurrency {
 
-    /**
-     * @brief Runs every showcase of the concurrency module.
-     *
-     * Completes in well under a second, needs no input and never throws (any unexpected
-     * exception is reported to `out`).
-     * @param out Destination stream.
-     */
-    void runDemo(std::ostream& out = std::cout);
+/**
+ * @brief Runs every showcase of the concurrency module.
+ *
+ * Completes in well under a second, needs no input and never throws (any unexpected
+ * exception is reported to `out`).
+ * @param out Destination stream.
+ */
+void runDemo(std::ostream& out = std::cout);
 
-}  // namespace CppVerseHub::Concurrency
+} // namespace CppVerseHub::Concurrency
 
-#endif  // CPPVERSEHUB_CONCURRENCY_DEMO_HPP
+#endif // CPPVERSEHUB_CONCURRENCY_DEMO_HPP

@@ -18,7 +18,8 @@ double score(const Route& route, const RouteWeights& weights) noexcept {
 
 namespace {
 /// Closest point on segment [a,b] to p.
-Coordinate3D closestPointOnSegment(const Coordinate3D& a, const Coordinate3D& b, const Coordinate3D& p) noexcept {
+Coordinate3D closestPointOnSegment(const Coordinate3D& a, const Coordinate3D& b,
+                                   const Coordinate3D& p) noexcept {
     const Coordinate3D ab = b - a;
     const double len2 = ab.dot(ab);
     if (len2 == 0.0) {
@@ -28,8 +29,10 @@ Coordinate3D closestPointOnSegment(const Coordinate3D& a, const Coordinate3D& b,
     return a + ab * t;
 }
 
-bool contains(const Hazard& h, const Coordinate3D& p) noexcept { return p.distanceTo(h.center) < h.radius; }
-}  // namespace
+bool contains(const Hazard& h, const Coordinate3D& p) noexcept {
+    return p.distanceTo(h.center) < h.radius;
+}
+} // namespace
 
 bool segmentIntersects(const Coordinate3D& a, const Coordinate3D& b, const Hazard& hazard) noexcept {
     return closestPointOnSegment(a, b, hazard.center).distanceTo(hazard.center) < hazard.radius;
@@ -57,11 +60,13 @@ Route evaluateRoute(std::vector<Coordinate3D> waypoints, double throttle, const 
     return r;
 }
 
-Route DirectLineStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+Route DirectLineStrategy::plan(const Coordinate3D& from, const Coordinate3D& to,
+                               const NavigationContext& ctx) const {
     return evaluateRoute({from, to}, 1.0, ctx, std::string(name()));
 }
 
-FuelOptimizedStrategy::FuelOptimizedStrategy(double throttle) noexcept : throttle_(std::clamp(throttle, 0.05, 1.0)) {}
+FuelOptimizedStrategy::FuelOptimizedStrategy(double throttle) noexcept
+    : throttle_(std::clamp(throttle, 0.05, 1.0)) {}
 
 Route FuelOptimizedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to,
                                   const NavigationContext& ctx) const {
@@ -70,7 +75,8 @@ Route FuelOptimizedStrategy::plan(const Coordinate3D& from, const Coordinate3D& 
 
 SafeRouteStrategy::SafeRouteStrategy(double margin) noexcept : margin_(std::max(margin, 1.05)) {}
 
-Route SafeRouteStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+Route SafeRouteStrategy::plan(const Coordinate3D& from, const Coordinate3D& to,
+                              const NavigationContext& ctx) const {
     std::vector<Coordinate3D> path{from, to};
     constexpr int kMaxRefinements = 32;
     for (int iter = 0; iter < kMaxRefinements; ++iter) {
@@ -105,7 +111,8 @@ Route SafeRouteStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, 
     return evaluateRoute(std::move(path), 0.9, ctx, std::string(name()));
 }
 
-Route BalancedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+Route BalancedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to,
+                             const NavigationContext& ctx) const {
     const DirectLineStrategy direct;
     const FuelOptimizedStrategy fuel;
     const SafeRouteStrategy safe;
@@ -126,10 +133,14 @@ Route BalancedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, c
 
 std::unique_ptr<IRoutingStrategy> makeRoutingStrategy(RoutingStrategyType type) {
     switch (type) {
-        case RoutingStrategyType::Direct: return std::make_unique<DirectLineStrategy>();
-        case RoutingStrategyType::FuelOptimized: return std::make_unique<FuelOptimizedStrategy>();
-        case RoutingStrategyType::SafeRoute: return std::make_unique<SafeRouteStrategy>();
-        case RoutingStrategyType::Balanced: return std::make_unique<BalancedStrategy>();
+        case RoutingStrategyType::Direct:
+            return std::make_unique<DirectLineStrategy>();
+        case RoutingStrategyType::FuelOptimized:
+            return std::make_unique<FuelOptimizedStrategy>();
+        case RoutingStrategyType::SafeRoute:
+            return std::make_unique<SafeRouteStrategy>();
+        case RoutingStrategyType::Balanced:
+            return std::make_unique<BalancedStrategy>();
     }
     throw std::invalid_argument("unknown RoutingStrategyType");
 }
@@ -166,14 +177,14 @@ std::optional<std::size_t> argBest(std::span<const PlanetTarget> targets, Key ke
     double bestKey = key(targets[0]);
     for (std::size_t i = 1; i < targets.size(); ++i) {
         const double k = key(targets[i]);
-        if (k > bestKey) {  // strict: ties resolve to the first candidate (deterministic)
+        if (k > bestKey) { // strict: ties resolve to the first candidate (deterministic)
             bestKey = k;
             best = i;
         }
     }
     return best;
 }
-}  // namespace
+} // namespace
 
 std::optional<std::size_t> nearestTarget(std::span<const PlanetTarget> targets, const Coordinate3D& origin) {
     return argBest(targets, [&](const PlanetTarget& t) { return -t.position.distanceTo(origin); });
@@ -183,7 +194,8 @@ std::optional<std::size_t> highestValueTarget(std::span<const PlanetTarget> targ
     return argBest(targets, [](const PlanetTarget& t) { return t.value; });
 }
 
-std::optional<std::size_t> bestValueRatioTarget(std::span<const PlanetTarget> targets, const Coordinate3D& origin) {
+std::optional<std::size_t> bestValueRatioTarget(std::span<const PlanetTarget> targets,
+                                                const Coordinate3D& origin) {
     return argBest(targets, [&](const PlanetTarget& t) {
         return t.value / (1.0 + t.position.distanceTo(origin) + std::max(0.0, t.defense));
     });
@@ -223,8 +235,8 @@ void demonstrateStrategy(std::ostream& out) {
     const Coordinate3D to{100.0, 0.0, 0.0};
 
     FleetRouter router(makeRoutingStrategy(RoutingStrategyType::Direct), ctx);
-    for (auto type : {RoutingStrategyType::Direct, RoutingStrategyType::FuelOptimized, RoutingStrategyType::SafeRoute,
-                      RoutingStrategyType::Balanced}) {
+    for (auto type : {RoutingStrategyType::Direct, RoutingStrategyType::FuelOptimized,
+                      RoutingStrategyType::SafeRoute, RoutingStrategyType::Balanced}) {
         router.setStrategy(makeRoutingStrategy(type));
         const Route r = router.plan(from, to);
         out << "  " << r.strategy << ": waypoints " << r.waypoints.size() << ", distance " << r.distance
@@ -251,4 +263,4 @@ void demonstrateStrategy(std::ostream& out) {
     }
 }
 
-}  // namespace CppVerseHub::Patterns
+} // namespace CppVerseHub::Patterns

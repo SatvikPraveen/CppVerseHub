@@ -40,13 +40,13 @@ struct Tracked {
         }
         ++live;
     }
-    Tracked(Tracked&& o) noexcept(false) : value(o.value) { ++live; }  // throwing move => vector copies
+    Tracked(Tracked&& o) noexcept(false) : value(o.value) { ++live; } // throwing move => vector copies
     Tracked& operator=(const Tracked&) = default;
     Tracked& operator=(Tracked&&) = default;
     ~Tracked() { --live; }
 };
 
-}  // namespace
+} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // DynamicArray
@@ -89,7 +89,7 @@ TEST_CASE("DynamicArray copy, move, equality and bounds checking", "[ds][dynamic
     REQUIRE_FALSE(a == b);
     REQUIRE(a[1] == "beta");
     DynamicArray<std::string> c = std::move(b);
-    REQUIRE(b.empty());  // NOLINT(bugprone-use-after-move): moved-from state is specified as empty
+    REQUIRE(b.empty()); // NOLINT(bugprone-use-after-move): moved-from state is specified as empty
     REQUIRE(c.size() == 3);
     c = a;
     REQUIRE(c == a);
@@ -106,7 +106,7 @@ TEST_CASE("DynamicArray copy, move, equality and bounds checking", "[ds][dynamic
 
 TEST_CASE("DynamicArray push_back of its own element during growth is safe", "[ds][dynamic-array]") {
     DynamicArray<std::string> a;
-    a.push_back(std::string(40, 'x'));  // long string: no SSO, so a dangling reference would be visible
+    a.push_back(std::string(40, 'x')); // long string: no SSO, so a dangling reference would be visible
     for (int i = 0; i < 100; ++i) {
         a.push_back(a[0]);
         a.emplace_back(a.back());
@@ -138,15 +138,16 @@ TEST_CASE("DynamicArray supports move-only types and never leaks", "[ds][dynamic
     REQUIRE(Tracked::live == 0);
 }
 
-TEST_CASE("DynamicArray reallocation gives the strong exception guarantee", "[ds][dynamic-array][exceptions]") {
+TEST_CASE("DynamicArray reallocation gives the strong exception guarantee",
+          "[ds][dynamic-array][exceptions]") {
     Tracked::live = 0;
     {
         DynamicArray<Tracked> a;
         for (int i = 0; i < 4; ++i) {
-            a.emplace_back(i);  // fills capacity 4 exactly
+            a.emplace_back(i); // fills capacity 4 exactly
         }
         REQUIRE(a.capacity() == 4);
-        Tracked::copies_until_throw = 2;  // the 3rd copy during reallocation throws
+        Tracked::copies_until_throw = 2; // the 3rd copy during reallocation throws
         REQUIRE_THROWS_AS(a.emplace_back(99), std::runtime_error);
         Tracked::copies_until_throw = -1;
         REQUIRE(a.size() == 4);
@@ -192,7 +193,7 @@ TEST_CASE("LinkedList matches std::list under random operations", "[ds][linked-l
         }
         REQUIRE(l.size() == model.size());
         if (!model.empty()) {
-            REQUIRE(l.back() == model.back());  // tail pointer stays correct
+            REQUIRE(l.back() == model.back()); // tail pointer stays correct
         }
     }
     REQUIRE(std::equal(l.begin(), l.end(), model.begin(), model.end()));
@@ -220,7 +221,7 @@ TEST_CASE("LinkedList iterators, copies and edge cases", "[ds][linked-list]") {
     e.push_back(1);
     e.remove_if([](int) { return true; });
     REQUIRE(e.empty());
-    e.push_back(2);  // tail must have been reset
+    e.push_back(2); // tail must have been reset
     REQUIRE(e.front() == 2);
     REQUIRE(e.back() == 2);
 }
@@ -291,10 +292,10 @@ TEST_CASE("BinarySearchTree LCA, copies, custom order and degenerate shape", "[d
 
     BinarySearchTree<int> chain;
     for (int i = 0; i < 4'000; ++i) {
-        chain.insert(i);  // sorted insertion: height == n (insertion is O(n^2) overall)
+        chain.insert(i); // sorted insertion: height == n (insertion is O(n^2) overall)
     }
     REQUIRE(chain.height() == 4'000);
-    auto chain_copy = chain;  // iterative copy of a linear chain
+    auto chain_copy = chain; // iterative copy of a linear chain
     REQUIRE(chain_copy.size() == 4'000);
     REQUIRE(chain_copy.in_order().back() == 3'999);
     chain.clear();
@@ -400,7 +401,7 @@ TEST_CASE("HashTable stays correct with a pathological constant hash", "[ds][has
     }
     REQUIRE(h.at("key7") == 7);
     REQUIRE_THROWS_AS(h.at("key8"), std::out_of_range);
-    REQUIRE(h.max_probe_distance() >= 99);  // everything collides: one long cluster
+    REQUIRE(h.max_probe_distance() >= 99); // everything collides: one long cluster
     h.clear();
     REQUIRE(h.empty());
     REQUIRE_FALSE(h.contains("key1"));
@@ -463,7 +464,7 @@ TEST_CASE("Trie erase prunes nodes; copies are deep; limits are honoured", "[ds]
     REQUIRE(t.contains(""));
     Trie moved = std::move(copy);
     REQUIRE(moved.size() == 2);
-    REQUIRE(copy.size() == 0);  // NOLINT(bugprone-use-after-move): specified empty
+    REQUIRE(copy.size() == 0); // NOLINT(bugprone-use-after-move): specified empty
     REQUIRE(copy.insert("reuse"));
 }
 
@@ -507,7 +508,7 @@ TEST_CASE("DisjointSet agrees with naive relabelling", "[ds][union-find][propert
 
 TEST_CASE("BloomFilter has no false negatives and meets its false-positive target", "[ds][bloom][property]") {
     BloomFilter f(2000, 0.01);
-    REQUIRE(f.bit_count() == 19171);  // ceil(-2000 ln 0.01 / ln^2 2)
+    REQUIRE(f.bit_count() == 19171); // ceil(-2000 ln 0.01 / ln^2 2)
     REQUIRE(f.hash_count() == 7);
     for (int i = 0; i < 2000; ++i) {
         f.insert("item-" + std::to_string(i));
@@ -571,7 +572,7 @@ TEST_CASE("SkipList copy/move semantics, custom order and large sizes", "[ds][sk
     REQUIRE_FALSE(copy.contains("b"));
     auto moved = std::move(desc);
     REQUIRE(moved.size() == 3);
-    REQUIRE(desc.empty());  // NOLINT(bugprone-use-after-move): specified empty
+    REQUIRE(desc.empty()); // NOLINT(bugprone-use-after-move): specified empty
     REQUIRE(desc.insert("z"));
     REQUIRE(desc.contains("z"));
 
@@ -580,7 +581,7 @@ TEST_CASE("SkipList copy/move semantics, custom order and large sizes", "[ds][sk
         big.insert(i);
     }
     REQUIRE(big.size() == 100'000);
-    REQUIRE(big.levels() >= 10);  // expected ~log2(n) = 17
+    REQUIRE(big.levels() >= 10); // expected ~log2(n) = 17
     REQUIRE(big.levels() <= 32);
     for (int i = 0; i < 100'000; i += 2) {
         REQUIRE(big.erase(i));

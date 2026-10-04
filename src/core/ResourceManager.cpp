@@ -4,12 +4,12 @@
  */
 #include "core/ResourceManager.hpp"
 
-#include <cmath>
-#include <string>
+#include "core/Exceptions.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include "core/Exceptions.hpp"
+#include <cmath>
+#include <string>
 
 namespace CppVerseHub::Core {
 
@@ -256,7 +256,8 @@ ResourceTickReport ResourceManager::tick(double dt) {
                 report.produced[t] += made;
             }
             if (account.consumption[t] > 0.0) {
-                const ResourceAmount demand = integrate(account.consumptionCarry[t], account.consumption[t], dt);
+                const ResourceAmount demand = integrate(account.consumptionCarry[t], account.consumption[t],
+                                                        dt);
                 const ResourceAmount used = demand < account.balance[t] ? demand : account.balance[t];
                 account.balance[t] -= used;
                 burned_[t] += used;
@@ -326,7 +327,9 @@ void ResourceManager::toJson(nlohmann::json& out) const {
                         {"productionCarry", ratesToJson(a.productionCarry)},
                         {"consumptionCarry", ratesToJson(a.consumptionCarry)}});
     }
-    out = {{"accounts", std::move(list)}, {"minted", amountsToJson(minted_)}, {"burned", amountsToJson(burned_)}};
+    out = {{"accounts", std::move(list)},
+           {"minted", amountsToJson(minted_)},
+           {"burned", amountsToJson(burned_)}};
 }
 
 void ResourceManager::fromJson(const nlohmann::json& in) {

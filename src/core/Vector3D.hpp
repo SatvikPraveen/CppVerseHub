@@ -76,9 +76,13 @@ struct Vector3D {
     }
 
     /// @brief Sum. @param a Lhs. @param b Rhs. @return a + b.
-    [[nodiscard]] friend constexpr Vector3D operator+(Vector3D a, const Vector3D& b) noexcept { return a += b; }
+    [[nodiscard]] friend constexpr Vector3D operator+(Vector3D a, const Vector3D& b) noexcept {
+        return a += b;
+    }
     /// @brief Difference. @param a Lhs. @param b Rhs. @return a - b.
-    [[nodiscard]] friend constexpr Vector3D operator-(Vector3D a, const Vector3D& b) noexcept { return a -= b; }
+    [[nodiscard]] friend constexpr Vector3D operator-(Vector3D a, const Vector3D& b) noexcept {
+        return a -= b;
+    }
     /// @brief Scale. @param a Vector. @param s Scalar. @return a * s.
     [[nodiscard]] friend constexpr Vector3D operator*(Vector3D a, double s) noexcept { return a *= s; }
     /// @brief Scale. @param s Scalar. @param a Vector. @return s * a.
@@ -86,7 +90,9 @@ struct Vector3D {
     /// @brief Divide. @param a Vector. @param s Scalar. @return a / s.
     [[nodiscard]] friend constexpr Vector3D operator/(Vector3D a, double s) noexcept { return a /= s; }
     /// @brief Negation. @param a Vector. @return -a.
-    [[nodiscard]] friend constexpr Vector3D operator-(const Vector3D& a) noexcept { return {-a.x, -a.y, -a.z}; }
+    [[nodiscard]] friend constexpr Vector3D operator-(const Vector3D& a) noexcept {
+        return {-a.x, -a.y, -a.z};
+    }
     /// @brief Unary plus. @param a Vector. @return a.
     [[nodiscard]] friend constexpr Vector3D operator+(const Vector3D& a) noexcept { return a; }
 
@@ -94,7 +100,9 @@ struct Vector3D {
     [[nodiscard]] friend constexpr bool operator==(const Vector3D& a, const Vector3D& b) noexcept = default;
 
     /// @brief Dot product. @param o Other vector. @return this . o.
-    [[nodiscard]] constexpr double dot(const Vector3D& o) const noexcept { return x * o.x + y * o.y + z * o.z; }
+    [[nodiscard]] constexpr double dot(const Vector3D& o) const noexcept {
+        return x * o.x + y * o.y + z * o.z;
+    }
 
     /// @brief Cross product. @param o Other vector. @return this x o.
     [[nodiscard]] constexpr Vector3D cross(const Vector3D& o) const noexcept {

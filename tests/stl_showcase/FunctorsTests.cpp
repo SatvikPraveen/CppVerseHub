@@ -1,4 +1,6 @@
 // Tests for stl_showcase/Functors.hpp
+#include "stl_showcase/Functors.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,8 +12,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include "stl_showcase/Functors.hpp"
 
 using namespace CppVerseHub::STL;
 using Catch::Approx;
@@ -41,9 +41,9 @@ TEST_CASE("ByCombatEffectivenessDesc orders ships", "[functors][comparator]") {
     REQUIRE(std::ranges::is_sorted(ships, std::greater<>{}, &Starship::combatEffectiveness));
     const Starship a{"A", "", 50.0, 5.0, 1, 10.0};
     const Starship b{"B", "", 50.0, 5.0, 1, 10.0};
-    REQUIRE(ByCombatEffectivenessDesc{}(a, b));  // tie broken by name
+    REQUIRE(ByCombatEffectivenessDesc{}(a, b)); // tie broken by name
     REQUIRE_FALSE(ByCombatEffectivenessDesc{}(b, a));
-    REQUIRE_FALSE(ByCombatEffectivenessDesc{}(a, a));  // irreflexive
+    REQUIRE_FALSE(ByCombatEffectivenessDesc{}(a, a)); // irreflexive
 }
 
 TEST_CASE("FleetStatsAccumulator folds with std::accumulate", "[functors][accumulator]") {
@@ -65,7 +65,7 @@ TEST_CASE("StarshipNameGenerator state survives only through std::ref", "[functo
     REQUIRE(gen.generated() == 3);
 
     std::vector<std::string> by_value;
-    std::generate_n(std::back_inserter(by_value), 2, gen);  // a copy advances, not gen
+    std::generate_n(std::back_inserter(by_value), 2, gen); // a copy advances, not gen
     REQUIRE(by_value == std::vector<std::string>{"NX-010", "NX-011"});
     REQUIRE(gen.generated() == 3);
     REQUIRE(gen() == "NX-010");
@@ -90,7 +90,7 @@ TEST_CASE("Closure factories: makeMultiplier and makeCounter", "[functors][lambd
     auto counter = makeCounter(5);
     REQUIRE(counter() == 5);
     REQUIRE(counter() == 6);
-    auto snapshot = counter;  // copying a mutable lambda copies its state
+    auto snapshot = counter; // copying a mutable lambda copies its state
     REQUIRE(snapshot() == 7);
     REQUIRE(counter() == 7);
     constexpr int third = [] {
@@ -123,7 +123,7 @@ TEST_CASE("countWhere accepts generic lambdas and member pointers", "[functors][
         bool active;
     };
     const std::vector<Flagged> items{{true}, {false}, {true}, {true}};
-    REQUIRE(countWhere(items, &Flagged::active) == 3);  // data-member pointer via std::invoke
+    REQUIRE(countWhere(items, &Flagged::active) == 3); // data-member pointer via std::invoke
 }
 
 TEST_CASE("Memoized caches results", "[functors][memo]") {

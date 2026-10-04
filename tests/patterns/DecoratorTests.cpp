@@ -3,6 +3,8 @@
  * @brief Tests for mission decorators and function decorators.
  */
 
+#include "patterns/Decorator.hpp"
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -11,8 +13,6 @@
 #include <cstdint>
 #include <stdexcept>
 #include <thread>
-
-#include "patterns/Decorator.hpp"
 
 using namespace CppVerseHub::Patterns;
 using Catch::Approx;
@@ -54,8 +54,10 @@ TEST_CASE("Single decorators modify exactly their aspect", "[decorator]") {
 }
 
 TEST_CASE("HeavyArmament helps combat missions more", "[decorator]") {
-    const auto combat = decorate<HeavyArmament>(std::make_unique<BasicMission>(MissionKind::Combat, "Z"), true);
-    const auto explore = decorate<HeavyArmament>(std::make_unique<BasicMission>(MissionKind::Exploration, "Z"), false);
+    const auto combat = decorate<HeavyArmament>(std::make_unique<BasicMission>(MissionKind::Combat, "Z"),
+                                                true);
+    const auto explore =
+        decorate<HeavyArmament>(std::make_unique<BasicMission>(MissionKind::Exploration, "Z"), false);
     CHECK(combat->successProbability() == Approx(0.55 + 0.45 * 0.40));
     CHECK(explore->successProbability() == Approx(0.80 + 0.20 * 0.05));
     CHECK(combat->cost() == Approx(30000.0));
@@ -140,7 +142,7 @@ TEST_CASE("memoize caches results per argument tuple", "[decorator][function]") 
     CHECK(slowSquare(12) == 144);
     CHECK(slowSquare(3) == 9);
     CHECK(evaluations == 2);
-    auto copy = slowSquare;  // copies share the cache
+    auto copy = slowSquare; // copies share the cache
     CHECK(copy(12) == 144);
     CHECK(evaluations == 2);
 }
@@ -149,7 +151,9 @@ TEST_CASE("memoize turns exponential recursion linear", "[decorator][function]")
     auto calls = std::make_shared<std::size_t>(0);
     std::function<std::uint64_t(int)> fib;
     fib = memoize<std::uint64_t, int>(withCallCounter(
-        [&fib](int n) -> std::uint64_t { return n < 2 ? static_cast<std::uint64_t>(n) : fib(n - 1) + fib(n - 2); },
+        [&fib](int n) -> std::uint64_t {
+            return n < 2 ? static_cast<std::uint64_t>(n) : fib(n - 1) + fib(n - 2);
+        },
         calls));
     CHECK(fib(60) == 1548008755920ULL);
     CHECK(*calls == 61);

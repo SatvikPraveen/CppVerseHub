@@ -11,16 +11,6 @@
  */
 #pragma once
 
-#include <concepts>
-#include <cstddef>
-#include <map>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include <nlohmann/json_fwd.hpp>
-
 #include "core/Entity.hpp"
 #include "core/Exceptions.hpp"
 #include "core/Factory.hpp"
@@ -28,6 +18,16 @@
 #include "core/Mission.hpp"
 #include "core/Planet.hpp"
 #include "core/ResourceManager.hpp"
+
+#include <nlohmann/json_fwd.hpp>
+
+#include <concepts>
+#include <cstddef>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Core {
 
@@ -45,7 +45,8 @@ public:
      */
     Galaxy(std::string name, const Vector3D& minCorner, const Vector3D& maxCorner);
 
-    /// @brief Construct an empty galaxy spanning [-kDefaultHalfExtent, kDefaultHalfExtent]^3. @param name Name.
+    /// @brief Construct an empty galaxy spanning [-kDefaultHalfExtent, kDefaultHalfExtent]^3. @param name
+    /// Name.
     explicit Galaxy(std::string name = "Galaxy");
 
     Galaxy(const Galaxy&) = delete;            ///< Not copyable.
@@ -76,8 +77,8 @@ public:
      * @param habitability Habitability in [0, 1].
      * @return The new planet.
      */
-    Planet& createPlanet(std::string name, const Vector3D& position, PlanetType type = PlanetType::Terrestrial,
-                         double habitability = 0.5);
+    Planet& createPlanet(std::string name, const Vector3D& position,
+                         PlanetType type = PlanetType::Terrestrial, double habitability = 0.5);
 
     /**
      * @brief Create and add an empty fleet.
@@ -110,18 +111,21 @@ public:
     /// @brief Look up any entity. @param id Id. @return Pointer or nullptr.
     [[nodiscard]] const Entity* find(EntityId id) const noexcept;
 
-    /// @brief Typed lookup. @tparam T Entity subtype. @param id Id. @return Pointer, or nullptr if absent/wrong type.
+    /// @brief Typed lookup. @tparam T Entity subtype. @param id Id. @return Pointer, or nullptr if
+    /// absent/wrong type.
     template <std::derived_from<Entity> T>
     [[nodiscard]] T* find(EntityId id) noexcept {
         return dynamic_cast<T*>(find(id));
     }
-    /// @brief Typed lookup. @tparam T Entity subtype. @param id Id. @return Pointer, or nullptr if absent/wrong type.
+    /// @brief Typed lookup. @tparam T Entity subtype. @param id Id. @return Pointer, or nullptr if
+    /// absent/wrong type.
     template <std::derived_from<Entity> T>
     [[nodiscard]] const T* find(EntityId id) const noexcept {
         return dynamic_cast<const T*>(find(id));
     }
 
-    /// @brief Typed lookup that throws EntityNotFoundException. @tparam T Subtype. @param id Id. @return Entity.
+    /// @brief Typed lookup that throws EntityNotFoundException. @tparam T Subtype. @param id Id. @return
+    /// Entity.
     template <std::derived_from<Entity> T>
     [[nodiscard]] T& get(EntityId id) {
         if (T* p = find<T>(id)) {
@@ -129,7 +133,8 @@ public:
         }
         throw EntityNotFoundException(id, find(id) ? "entity has a different kind" : "");
     }
-    /// @brief Typed lookup that throws EntityNotFoundException. @tparam T Subtype. @param id Id. @return Entity.
+    /// @brief Typed lookup that throws EntityNotFoundException. @tparam T Subtype. @param id Id. @return
+    /// Entity.
     template <std::derived_from<Entity> T>
     [[nodiscard]] const T& get(EntityId id) const {
         if (const T* p = find<T>(id)) {
@@ -162,7 +167,9 @@ public:
     }
 
     /// @brief Every entity, ordered by id. @return Owning map (read-only).
-    [[nodiscard]] const std::map<EntityId, std::unique_ptr<Entity>>& entities() const noexcept { return entities_; }
+    [[nodiscard]] const std::map<EntityId, std::unique_ptr<Entity>>& entities() const noexcept {
+        return entities_;
+    }
     /// @brief Number of entities. @return Count.
     [[nodiscard]] std::size_t entityCount() const noexcept { return entities_.size(); }
 
@@ -213,7 +220,9 @@ public:
     /// @brief Look up a mission. @param id Id. @return Pointer or nullptr.
     [[nodiscard]] const Mission* findMission(MissionId id) const noexcept;
     /// @brief Every mission, ordered by id. @return Owning map (read-only).
-    [[nodiscard]] const std::map<MissionId, std::unique_ptr<Mission>>& missions() const noexcept { return missions_; }
+    [[nodiscard]] const std::map<MissionId, std::unique_ptr<Mission>>& missions() const noexcept {
+        return missions_;
+    }
     /// @brief Number of missions (any status). @return Count.
     [[nodiscard]] std::size_t missionCount() const noexcept { return missions_.size(); }
     /// @brief Number of pending or active missions. @return Count.
@@ -244,9 +253,9 @@ public:
      * @param missionFactory Factory for missions.
      * @return The galaxy; throws SerializationException on malformed input.
      */
-    [[nodiscard]] static std::unique_ptr<Galaxy> fromJson(const nlohmann::json& in,
-                                                          EntityFactory entityFactory = makeDefaultEntityFactory(),
-                                                          MissionFactory missionFactory = makeDefaultMissionFactory());
+    [[nodiscard]] static std::unique_ptr<Galaxy> fromJson(
+        const nlohmann::json& in, EntityFactory entityFactory = makeDefaultEntityFactory(),
+        MissionFactory missionFactory = makeDefaultMissionFactory());
 
 private:
     std::string name_;

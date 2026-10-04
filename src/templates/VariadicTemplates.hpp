@@ -54,7 +54,8 @@ void print_recursive(std::ostream& out, const T& last) {
     out << last << '\n';
 }
 
-/** @brief Peel off the head and recurse (pre-C++17 style). @param out stream @param head first @param tail rest */
+/** @brief Peel off the head and recurse (pre-C++17 style). @param out stream @param head first @param tail
+ * rest */
 template <typename T, typename... Rest>
 void print_recursive(std::ostream& out, const T& head, const Rest&... tail) {
     out << head << ' ';
@@ -217,7 +218,8 @@ public:
     /** @brief Element-wise construction (exactly one argument per element). @param h head @param t tail */
     template <typename H, typename... T>
         requires(sizeof...(T) == sizeof...(Tail) && !std::is_same_v<std::remove_cvref_t<H>, RecursiveTuple>)
-    constexpr explicit RecursiveTuple(H&& h, T&&... t) : Base(std::forward<T>(t)...), head_(std::forward<H>(h)) {}
+    constexpr explicit RecursiveTuple(H&& h, T&&... t)
+        : Base(std::forward<T>(t)...), head_(std::forward<H>(h)) {}
 
     /** @return head element */
     [[nodiscard]] constexpr Head& head() & noexcept { return head_; }
@@ -347,7 +349,8 @@ public:
     template <typename... ExtraArgs>
     [[nodiscard]] Product create(ExtraArgs&&... extra_args) const {
         return std::apply(
-            [&](const auto&... stored) { return Product(stored..., std::forward<ExtraArgs>(extra_args)...); }, args_);
+            [&](const auto&... stored) { return Product(stored..., std::forward<ExtraArgs>(extra_args)...); },
+            args_);
     }
 
 private:
@@ -375,9 +378,7 @@ public:
     }
 
     /** @return Product(fields...) */
-    [[nodiscard]] Product build() && {
-        return std::make_from_tuple<Product>(std::move(fields_));
-    }
+    [[nodiscard]] Product build() && { return std::make_from_tuple<Product>(std::move(fields_)); }
 
     /** @return number of accumulated fields */
     [[nodiscard]] static constexpr std::size_t field_count() noexcept { return sizeof...(Fields); }
@@ -456,7 +457,8 @@ template <typename F>
     return std::forward<F>(f);
 }
 
-/** @brief compose(f, g, h)(x) == f(g(h(x))). @param f outermost @param funcs inner callables @return composite */
+/** @brief compose(f, g, h)(x) == f(g(h(x))). @param f outermost @param funcs inner callables @return
+ * composite */
 template <typename F, typename... Funcs>
 [[nodiscard]] constexpr auto compose(F&& f, Funcs&&... funcs) {
     return [outer = std::forward<F>(f), inner = compose(std::forward<Funcs>(funcs)...)](auto&&... args) {

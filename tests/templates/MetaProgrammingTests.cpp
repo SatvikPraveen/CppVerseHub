@@ -36,15 +36,19 @@ static_assert(Meta::type_index_v<float> == Meta::npos);
 static_assert(Meta::type_exists_v<double, int, double> && !Meta::type_exists_v<void, int>);
 static_assert(std::is_same_v<Meta::push_front_t<bool, list>, Meta::type_list<bool, int, double, char>>);
 static_assert(std::is_same_v<Meta::push_back_t<bool, list>, Meta::type_list<int, double, char, bool>>);
-static_assert(std::is_same_v<Meta::transform_t<list, std::add_pointer>, Meta::type_list<int*, double*, char*>>);
-static_assert(std::is_same_v<Meta::concat_t<list, Meta::type_list<long>>, Meta::type_list<int, double, char, long>>);
+static_assert(
+    std::is_same_v<Meta::transform_t<list, std::add_pointer>, Meta::type_list<int*, double*, char*>>);
+static_assert(
+    std::is_same_v<Meta::concat_t<list, Meta::type_list<long>>, Meta::type_list<int, double, char, long>>);
 static_assert(std::is_same_v<Meta::filter_t<list, std::is_integral>, Meta::type_list<int, char>>);
 static_assert(std::is_same_v<Meta::filter_t<Meta::type_list<>, std::is_integral>, Meta::type_list<>>);
 
 // ----- compile-time arithmetic -----
-static_assert(Meta::factorial_v<0> == 1 && Meta::factorial_v<5> == 120 && Meta::factorial_v<20> == 2432902008176640000ULL);
+static_assert(Meta::factorial_v<0> == 1 && Meta::factorial_v<5> == 120 &&
+              Meta::factorial_v<20> == 2432902008176640000ULL);
 static_assert(Meta::factorial_func(10) == Meta::factorial_v<10>);
-static_assert(Meta::fibonacci_v<0> == 0 && Meta::fibonacci_v<1> == 1 && Meta::fibonacci_v<50> == 12586269025ULL);
+static_assert(Meta::fibonacci_v<0> == 0 && Meta::fibonacci_v<1> == 1 &&
+              Meta::fibonacci_v<50> == 12586269025ULL);
 static_assert(Meta::fibonacci_func(50) == Meta::fibonacci_v<50>);
 static_assert(Meta::fibonacci_func(0) == 0 && Meta::fibonacci_func(2) == 1);
 static_assert(Meta::power_v<3, 4> == 81 && Meta::power_v<7, 0> == 1);
@@ -71,12 +75,12 @@ static_assert(Meta::hash_string("abc") != Meta::hash_string("acb"));
 
 constexpr int dispatch(std::string_view command) {
     switch (Meta::hash_string(command)) {
-    case Meta::hash_string("start"):
-        return 1;
-    case Meta::hash_string("stop"):
-        return 2;
-    default:
-        return 0;
+        case Meta::hash_string("start"):
+            return 1;
+        case Meta::hash_string("stop"):
+            return 2;
+        default:
+            return 0;
     }
 }
 static_assert(dispatch("start") == 1 && dispatch("stop") == 2 && dispatch("other") == 0);
@@ -206,7 +210,8 @@ TEST_CASE("tuple utilities work on runtime values", "[templates][meta]") {
     CHECK(std::get<0>(moved) == 7);
     CHECK(*std::get<1>(moved) == 4);
 
-    const auto filtered = Meta::tuple_filter<std::is_floating_point>(std::make_tuple(1, 2.0, std::string("s"), 3.0F));
+    const auto filtered = Meta::tuple_filter<std::is_floating_point>(
+        std::make_tuple(1, 2.0, std::string("s"), 3.0F));
     static_assert(std::is_same_v<std::remove_cvref_t<decltype(filtered)>, std::tuple<double, float>>);
     CHECK(std::get<1>(filtered) == 3.0F);
 
@@ -299,7 +304,8 @@ TEST_CASE("StateMachine transitions on handled events only", "[templates][meta][
 }
 
 TEST_CASE("ConstexprMap works at runtime too", "[templates][meta]") {
-    const auto map = Meta::make_constexpr_map(std::pair{1, std::string_view("one")}, std::pair{2, std::string_view("two")},
+    const auto map = Meta::make_constexpr_map(std::pair{1, std::string_view("one")},
+                                              std::pair{2, std::string_view("two")},
                                               std::pair{3, std::string_view("three")});
     CHECK(map.at(3) == "three");
     CHECK(map.find(4) == std::nullopt);

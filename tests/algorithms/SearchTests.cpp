@@ -40,7 +40,7 @@ std::string random_string(std::size_t n, char alphabet_size, std::mt19937_64& rn
     return s;
 }
 
-}  // namespace
+} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // Sequence searches
@@ -93,7 +93,7 @@ TEST_CASE("interpolation search finds the first equal key on uniform and skewed 
         auto uniform = sorted_with_duplicates(500, 1000, seed);
         std::vector<long long> skewed;
         for (int i = 0; i < 40; ++i) {
-            skewed.push_back(1LL << i);  // exponential growth: interpolation's worst case
+            skewed.push_back(1LL << i); // exponential growth: interpolation's worst case
             skewed.push_back(1LL << i);
         }
         for (int target = -1005; target <= 1005; target += 7) {
@@ -150,7 +150,7 @@ TEST_CASE("ternary peak search locates the maximum of unimodal sequences", "[sea
     REQUIRE(ternary_search_peak(empty) == empty.end());
     std::vector<int> increasing{1, 2, 3, 4};
     REQUIRE(*ternary_search_peak(increasing) == 4);
-    std::vector<int> valley_by_greater{5, 3, 1, 2, 8};  // unimodal under the reversed order
+    std::vector<int> valley_by_greater{5, 3, 1, 2, 8}; // unimodal under the reversed order
     REQUIRE(*ternary_search_peak(valley_by_greater, std::ranges::greater{}) == 1);
 }
 
@@ -191,7 +191,9 @@ TEST_CASE("string matchers handle edge cases", "[search][string]") {
         REQUIRE(fn("ab", "abc").empty());
         REQUIRE(fn("aaaa", "aa") == std::vector<std::size_t>{0, 1, 2});
         REQUIRE(fn("abc", "abc") == std::vector<std::size_t>{0});
-        const std::string binary("a\0b\xff" "a\0b", 7);
+        const std::string binary("a\0b\xff"
+                                 "a\0b",
+                                 7);
         REQUIRE(fn(binary, std::string_view("a\0b", 3)) == std::vector<std::size_t>{0, 4});
     }
     REQUIRE(kmp_search(std::string("abc"), std::string()) == every);
@@ -235,7 +237,7 @@ TEST_CASE("Aho-Corasick classic example and degenerate inputs", "[search][aho-co
     const AhoCorasick ac({"he", "she", "his", "hers"});
     const auto m = ac.find_all("ushers");
     REQUIRE(m == std::vector<AhoCorasick::Match>{{1, 1}, {2, 0}, {2, 3}});
-    REQUIRE(ac.state_count() == 10);  // root + h,he,her,hers,hi,his,s,sh,she
+    REQUIRE(ac.state_count() == 10); // root + h,he,her,hers,hi,his,s,sh,she
 
     const AhoCorasick with_empty({"", "a", "a"});
     REQUIRE(with_empty.find_all("aa") == std::vector<AhoCorasick::Match>{{0, 1}, {0, 2}, {1, 1}, {1, 2}});
@@ -336,7 +338,7 @@ TEST_CASE("k-d tree k-NN and radius queries match brute force", "[search][kdtree
         using Tree = KDTree<double, 2>;
         std::vector<Tree::Point> pts;
         for (int i = 0; i < 300; ++i) {
-            pts.push_back({std::round(coord(rng)), std::round(coord(rng))});  // integer grid: many ties
+            pts.push_back({std::round(coord(rng)), std::round(coord(rng))}); // integer grid: many ties
         }
         const Tree tree(pts);
         for (int q = 0; q < 100; ++q) {

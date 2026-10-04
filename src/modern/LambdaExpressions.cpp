@@ -18,22 +18,17 @@ namespace CppVerseHub::Modern::LambdaExpressions {
 
 std::vector<SpaceShip> sampleFleet() {
     return {
-        {1, "USS Explorer", "Science", 85.5, 150, true},
-        {2, "USS Guardian", "Battleship", 92.0, 300, true},
-        {3, "USS Voyager", "Scout", 23.1, 50, false},
-        {4, "USS Defender", "Destroyer", 67.8, 200, true},
+        {1, "USS Explorer", "Science", 85.5, 150, true},   {2, "USS Guardian", "Battleship", 92.0, 300, true},
+        {3, "USS Voyager", "Scout", 23.1, 50, false},      {4, "USS Defender", "Destroyer", 67.8, 200, true},
         {5, "USS Discovery", "Research", 41.2, 180, true},
     };
 }
 
 std::vector<Planet> samplePlanets() {
     return {
-        {1, "Mercury", 0.39, 0, false},
-        {2, "Venus", 0.72, 0, false},
-        {3, "Earth", 1.0, 8'000'000'000LL, true},
-        {4, "Mars", 1.52, 0, false},
-        {5, "Jupiter", 5.20, 0, false},
-        {6, "Kepler-442b", 112.0, 50'000'000LL, true},
+        {1, "Mercury", 0.39, 0, false},           {2, "Venus", 0.72, 0, false},
+        {3, "Earth", 1.0, 8'000'000'000LL, true}, {4, "Mars", 1.52, 0, false},
+        {5, "Jupiter", 5.20, 0, false},           {6, "Kepler-442b", 112.0, 50'000'000LL, true},
         {7, "Proxima-b", 42400.0, 0, true},
     };
 }
@@ -117,8 +112,9 @@ FleetSummary summarizeFleet(const std::vector<SpaceShip>& fleet) {
         return s.isActive ? sum + s.crewSize : sum;
     });
     if (!fleet.empty()) {
-        const double totalFuel = std::accumulate(fleet.begin(), fleet.end(), 0.0,
-                                                 [](double acc, const SpaceShip& s) { return acc + s.fuelLevel; });
+        const double totalFuel =
+            std::accumulate(fleet.begin(), fleet.end(), 0.0,
+                            [](double acc, const SpaceShip& s) { return acc + s.fuelLevel; });
         summary.meanFuel = totalFuel / static_cast<double>(fleet.size());
     }
     return summary;
@@ -131,12 +127,10 @@ void demonstrateBasicLambdas(std::ostream& out) {
     auto greet = [] { return std::string_view{"Welcome to CppVerseHub!"}; };
     out << greet() << '\n';
 
-    auto distance = [](double x1, double y1, double x2, double y2) {
-        return std::hypot(x2 - x1, y2 - y1);
-    };
+    auto distance = [](double x1, double y1, double x2, double y2) { return std::hypot(x2 - x1, y2 - y1); };
     out << "distance((0,0),(3,4)) = " << distance(0.0, 0.0, 3.0, 4.0) << '\n';
 
-    auto clampPercent = [](double v) -> int {  // explicit trailing return type
+    auto clampPercent = [](double v) -> int { // explicit trailing return type
         return static_cast<int>(std::clamp(v, 0.0, 100.0));
     };
     out << "clampPercent(140.7) = " << clampPercent(140.7) << '\n';
@@ -148,7 +142,7 @@ void demonstrateBasicLambdas(std::ostream& out) {
     }
     out << "score after three additions: " << totalScore << '\n';
 
-    int (*fnPtr)(int) = [](int x) { return x * 3; };  // capture-less lambdas convert to function pointers
+    int (*fnPtr)(int) = [](int x) { return x * 3; }; // capture-less lambdas convert to function pointers
     out << "function-pointer conversion: fnPtr(7) = " << fnPtr(7) << '\n';
 }
 
@@ -158,9 +152,12 @@ void demonstrateCaptureModes(std::ostream& out) {
     double fuelReserve = 1000.0;
     const std::string commander = "Admiral Zhang";
 
-    auto byValue = [=] { return fleetCount * 10; };          // copies taken now
-    auto byReference = [&] { fuelReserve -= 150.0; ++fleetCount; };
-    auto mixed = [=, &fuelReserve](double cost) {            // everything by value except fuelReserve
+    auto byValue = [=] { return fleetCount * 10; }; // copies taken now
+    auto byReference = [&] {
+        fuelReserve -= 150.0;
+        ++fleetCount;
+    };
+    auto mixed = [=, &fuelReserve](double cost) { // everything by value except fuelReserve
         fuelReserve -= cost;
         return commander + " has " + std::to_string(static_cast<int>(fuelReserve)) + " fuel";
     };
@@ -213,7 +210,8 @@ void demonstrateGenericLambdas(std::ostream& out) {
     out << "\n--- Generic, template and constexpr lambdas ---\n";
     auto greater = [](const auto& a, const auto& b) { return a > b; };
     out << std::boolalpha << "greater(5, 3) = " << greater(5, 3)
-        << ", greater(\"zebra\"s, \"apple\"s) = " << greater(std::string("zebra"), std::string("apple")) << '\n';
+        << ", greater(\"zebra\"s, \"apple\"s) = " << greater(std::string("zebra"), std::string("apple"))
+        << '\n';
 
     auto joinMapped = [](const auto& container, auto fn) {
         std::string s;
@@ -224,15 +222,12 @@ void demonstrateGenericLambdas(std::ostream& out) {
     };
     out << "squares: " << joinMapped(std::vector{1, 2, 3, 4}, [](int n) { return n * n; }) << '\n';
     out << "lengths: "
-        << joinMapped(std::vector<std::string>{"space", "game", "lambda"}, [](const std::string& w) {
-               return w.size();
-           })
+        << joinMapped(std::vector<std::string>{"space", "game", "lambda"},
+                      [](const std::string& w) { return w.size(); })
         << '\n';
 
     // Template lambda: the explicit type parameter lets us name the element type.
-    auto sumAs = []<typename T>(const std::vector<T>& v) {
-        return std::accumulate(v.begin(), v.end(), T{});
-    };
+    auto sumAs = []<typename T>(const std::vector<T>& v) { return std::accumulate(v.begin(), v.end(), T{}); };
     out << "sumAs<double>({0.5, 1.5, 2.0}) = " << sumAs(std::vector{0.5, 1.5, 2.0}) << '\n';
     out << "sizeInBits(double) = " << sizeInBits(1.0) << '\n';
 
@@ -280,7 +275,8 @@ void demonstrateFunctionalUtilities(std::ostream& out) {
 
     auto add3 = [](int a, int b, int c) { return a + b + c; };
     auto add5 = curry(add3)(5);
-    out << "curry(add3)(5)(10)(20) = " << add5(10)(20) << ", curry(add3)(5)(10, 20) = " << add5(10, 20) << '\n';
+    out << "curry(add3)(5)(10)(20) = " << add5(10)(20) << ", curry(add3)(5)(10, 20) = " << add5(10, 20)
+        << '\n';
 
     using Reading = std::variant<int, double, std::string>;
     const std::vector<Reading> readings{42, 3.5, std::string{"offline"}};
@@ -313,17 +309,16 @@ void demonstrateEventSystem(std::ostream& out) {
     const auto alertId = bus.subscribe("ship_launched", [&out](const std::string& p) {
         out << "  [alert] " << p << " has launched\n";
     });
-    bus.subscribe("resource_found", [&resourceTotal](const std::string& p) {
-        resourceTotal += static_cast<int>(p.size());
-    });
+    bus.subscribe("resource_found",
+                  [&resourceTotal](const std::string& p) { resourceTotal += static_cast<int>(p.size()); });
 
     bus.emit("ship_launched", "USS Explorer");
     bus.unsubscribe(alertId);
     bus.emit("ship_launched", "USS Guardian");
     bus.emit("resource_found", "dilithium");
     const auto unheard = bus.emit("unknown_event", "ignored");
-    out << "Logged " << log.size() << " launches, resource score " << resourceTotal << ", unknown event reached "
-        << unheard << " handlers\n";
+    out << "Logged " << log.size() << " launches, resource score " << resourceTotal
+        << ", unknown event reached " << unheard << " handlers\n";
 }
 
 void demonstrateAsyncLambdas(std::ostream& out) {
@@ -350,4 +345,4 @@ void demonstrateAllLambdas(std::ostream& out) {
     demonstrateAsyncLambdas(out);
 }
 
-}  // namespace CppVerseHub::Modern::LambdaExpressions
+} // namespace CppVerseHub::Modern::LambdaExpressions

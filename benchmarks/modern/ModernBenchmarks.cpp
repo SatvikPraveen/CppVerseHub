@@ -3,17 +3,17 @@
  * @brief Micro-benchmarks for the `modern` module: copy vs move, container growth strategies,
  *        ranges pipelines vs raw loops, std::function vs template callables, and constexpr tables.
  */
+#include "modern/ConstexprProgramming.hpp"
+#include "modern/LambdaExpressions.hpp"
+#include "modern/MoveSemantics.hpp"
+#include "modern/RangesDemo.hpp"
+
 #include <benchmark/benchmark.h>
 
 #include <cmath>
 #include <functional>
 #include <string>
 #include <vector>
-
-#include "modern/ConstexprProgramming.hpp"
-#include "modern/LambdaExpressions.hpp"
-#include "modern/MoveSemantics.hpp"
-#include "modern/RangesDemo.hpp"
 
 namespace {
 
@@ -48,7 +48,7 @@ void BM_MoveTrackedResources(benchmark::State& state) {
             target.push_back(std::move(r));
         }
         benchmark::DoNotOptimize(target.data());
-        source.swap(target);  // move everything back for the next iteration
+        source.swap(target); // move everything back for the next iteration
         target.clear();
         for (auto& r : source) {
             target.push_back(std::move(r));
@@ -159,7 +159,8 @@ BENCHMARK(BM_MemoizedVsDirect);
 void BM_ParallelSum(benchmark::State& state) {
     std::vector<int> data(1 << 18, 1);
     for (auto _ : state) {
-        benchmark::DoNotOptimize(LambdaExpressions::parallelSum(data, static_cast<std::size_t>(state.range(0))));
+        benchmark::DoNotOptimize(
+            LambdaExpressions::parallelSum(data, static_cast<std::size_t>(state.range(0))));
     }
 }
 BENCHMARK(BM_ParallelSum)->Arg(1)->Arg(4);
@@ -183,4 +184,4 @@ void BM_RuntimeSinTaylor(benchmark::State& state) {
 }
 BENCHMARK(BM_RuntimeSinTaylor);
 
-}  // namespace
+} // namespace

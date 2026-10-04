@@ -55,13 +55,20 @@ inline constexpr std::size_t kLogLevelCount = 6;
  */
 [[nodiscard]] constexpr std::string_view toString(LogLevel level) noexcept {
     switch (level) {
-    case LogLevel::Trace: return "TRACE";
-    case LogLevel::Debug: return "DEBUG";
-    case LogLevel::Info: return "INFO";
-    case LogLevel::Warn: return "WARN";
-    case LogLevel::Error: return "ERROR";
-    case LogLevel::Fatal: return "FATAL";
-    case LogLevel::Off: return "OFF";
+        case LogLevel::Trace:
+            return "TRACE";
+        case LogLevel::Debug:
+            return "DEBUG";
+        case LogLevel::Info:
+            return "INFO";
+        case LogLevel::Warn:
+            return "WARN";
+        case LogLevel::Error:
+            return "ERROR";
+        case LogLevel::Fatal:
+            return "FATAL";
+        case LogLevel::Off:
+            return "OFF";
     }
     return "UNKNOWN";
 }
@@ -76,11 +83,11 @@ inline constexpr std::size_t kLogLevelCount = 6;
 /// @brief One log event, captured at the call site and handed to every sink.
 struct LogRecord {
     std::chrono::system_clock::time_point timestamp{}; ///< Wall-clock time of the call.
-    LogLevel level{LogLevel::Info};                     ///< Severity.
-    std::string loggerName;                             ///< Name of the emitting logger.
-    std::string message;                                ///< Fully formatted message text.
+    LogLevel level{LogLevel::Info};                    ///< Severity.
+    std::string loggerName;                            ///< Name of the emitting logger.
+    std::string message;                               ///< Fully formatted message text.
     std::source_location location{};                   ///< Call site.
-    std::thread::id threadId{};                         ///< Emitting thread.
+    std::thread::id threadId{};                        ///< Emitting thread.
 };
 
 // ===================================================================================================
@@ -110,11 +117,11 @@ class PatternFormatter final : public Formatter {
 public:
     /// @brief Which optional fields are emitted.
     struct Options {
-        bool timestamp = true;   ///< ISO-8601 UTC timestamp with milliseconds.
-        bool level = true;       ///< "[INFO]".
-        bool loggerName = true;  ///< "[name]" (omitted when the name is empty).
-        bool threadId = false;   ///< "[tid]".
-        bool location = false;   ///< "(file:line)".
+        bool timestamp = true;  ///< ISO-8601 UTC timestamp with milliseconds.
+        bool level = true;      ///< "[INFO]".
+        bool loggerName = true; ///< "[name]" (omitted when the name is empty).
+        bool threadId = false;  ///< "[tid]".
+        bool location = false;  ///< "(file:line)".
     };
 
     /// @brief Constructs a formatter with default options.
@@ -468,7 +475,9 @@ public:
 
     /// @brief Returns the number of attached sinks.
     /// @return Sink count.
-    [[nodiscard]] std::size_t sinkCount() const noexcept { return sinkCount_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::size_t sinkCount() const noexcept {
+        return sinkCount_.load(std::memory_order_relaxed);
+    }
 
     /**
      * @brief Emits a message.
@@ -528,7 +537,9 @@ public:
 
     /// @brief Returns how many sink exceptions were swallowed.
     /// @return Count.
-    [[nodiscard]] std::size_t sinkErrors() const noexcept { return sinkErrors_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::size_t sinkErrors() const noexcept {
+        return sinkErrors_.load(std::memory_order_relaxed);
+    }
 
 private:
     [[nodiscard]] std::vector<std::shared_ptr<Sink>> snapshotSinks() const;
@@ -641,10 +652,10 @@ void demonstrateLogging(std::ostream& out = std::cout);
  *
  * Usage: `CPPVERSEHUB_LOG(logger, CppVerseHub::Utils::LogLevel::Info, "x=", x);`
  */
-#define CPPVERSEHUB_LOG(logger, lvl, ...)                                                                 \
-    do {                                                                                                  \
-        auto& cppversehub_logger_ref_ = (logger);                                                         \
-        if (cppversehub_logger_ref_.shouldLog(lvl)) {                                                     \
-            cppversehub_logger_ref_.log((lvl), ::CppVerseHub::Utils::detail::concat(__VA_ARGS__));        \
-        }                                                                                                 \
+#define CPPVERSEHUB_LOG(logger, lvl, ...)                                                                    \
+    do {                                                                                                     \
+        auto& cppversehub_logger_ref_ = (logger);                                                            \
+        if (cppversehub_logger_ref_.shouldLog(lvl)) {                                                        \
+            cppversehub_logger_ref_.log((lvl), ::CppVerseHub::Utils::detail::concat(__VA_ARGS__));           \
+        }                                                                                                    \
     } while (false)
