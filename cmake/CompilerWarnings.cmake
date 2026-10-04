@@ -20,6 +20,7 @@ function(cppversehub_set_warnings target warnings_as_errors)
         /w14928 # illegal copy-initialisation
         /wd4324 # structure padded due to alignment specifier: intentional cache-line padding
         /Zc:__cplusplus
+        /Zc:preprocessor # conforming preprocessor; the legacy one mis-tokenises raw strings inside macros
         /utf-8
     )
 
