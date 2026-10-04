@@ -64,7 +64,7 @@ These rules apply to every module and are enforced by review, by the compiler, o
 
 - **Warning-free under a strict set.** `-Wall -Wextra -Wpedantic -Wshadow -Wold-style-cast
   -Wnon-virtual-dtor -Woverloaded-virtual -Wnull-dereference -Wdouble-promotion` and more, with
-  `-Werror` in CI. GCC builds add `-Wduplicated-cond -Wlogical-op -Wuseless-cast`.
+  `-Werror` in CI. GCC builds add `-Wduplicated-cond -Wduplicated-branches -Wlogical-op`.
 - **Quiet libraries.** Library code never writes to standard output. Showcase functions take a
   `std::ostream&`, so tests capture their output and the CLI decides where it goes.
 - **RAII and value semantics.** No owning raw pointers. Special members follow the rule of zero

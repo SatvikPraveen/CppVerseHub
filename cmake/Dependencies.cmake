@@ -15,7 +15,7 @@ FetchContent_Declare(
     FIND_PACKAGE_ARGS 3.11 NAMES nlohmann_json
 )
 set(JSON_BuildTests OFF CACHE INTERNAL "")
-set(JSON_Install OFF CACHE INTERNAL "")
+set(JSON_Install ON CACHE INTERNAL "")  # fetched copy must be installable: core exports a dependency on it
 FetchContent_MakeAvailable(nlohmann_json)
 
 if(CPPVERSEHUB_BUILD_TESTS)

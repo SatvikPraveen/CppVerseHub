@@ -249,7 +249,7 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        const Options opts(std::span(args).subspan(1));
+        const Options opts(std::span<const std::string_view>(args).subspan(1));
         if (args[0] == "list") {
             return cmdList(out);
         }

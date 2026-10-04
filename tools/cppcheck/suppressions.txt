@@ -1,0 +1,21 @@
+# cppcheck false positives, reviewed individually. Format: <id>:<file>[:<line>]
+# Keep each entry justified; remove it if the underlying code changes.
+
+# Intentional: the timed_mutex is held so another thread can demonstrate try_lock_for timing out.
+localMutex:src/concurrency/MutexExamples.cpp
+# The reference points at a heap object owned by a unique_ptr that was moved into the map, not a local.
+returnReference:src/core/Galaxy.cpp
+# cppcheck cannot parse an immediately-invoked constexpr lambda over a pack expansion.
+syntaxError:src/templates/MetaProgramming.hpp
+# The placement-new result is assigned before use; the analyser does not model placement new here.
+legacyUninitvar:src/memory/MemoryPools.hpp
+# cppcheck's AST builder fails on a forwarding-reference parameter in a constexpr if chain.
+internalAstError:src/modern/MoveSemantics.hpp
+# k is bounded by n <= 93, checked on entry, so known[k] is always in range.
+containerOutOfBounds:src/stl_showcase/Functors.cpp
+# Deliberate demonstration: push_back within reserved capacity does not reallocate; only addresses are compared.
+invalidContainer:src/stl_showcase/Iterators.cpp
+# Listeners are bound to their instance and deliberately not copied, so the id counter stays per-instance.
+operatorEqVarError:src/utils/ConfigManager.cpp
+# first is 1 only when records is non-empty, so begin() + first never passes end().
+containerOutOfBounds:src/utils/FileParser.cpp

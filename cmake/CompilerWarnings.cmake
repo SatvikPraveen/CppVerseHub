@@ -43,7 +43,6 @@ function(cppversehub_set_warnings target warnings_as_errors)
         -Wduplicated-cond
         -Wduplicated-branches
         -Wlogical-op
-        -Wuseless-cast
     )
 
     if(warnings_as_errors)
