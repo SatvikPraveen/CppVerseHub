@@ -5,6 +5,7 @@
 
 #include "algorithms/SortingAlgorithms.hpp"
 
+#include <numeric>
 #include <iomanip>
 #include <random>
 #include <string>

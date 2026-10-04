@@ -4,6 +4,7 @@
  */
 #include "stl_showcase/Algorithms.hpp"
 
+#include <numeric>
 #include <array>
 #include <cctype>
 #include <random>

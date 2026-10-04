@@ -16,6 +16,7 @@
  */
 #pragma once
 
+#include <numeric>
 #include <concepts>
 #include <cstddef>
 #include <functional>

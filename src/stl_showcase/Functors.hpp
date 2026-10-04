@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include <numeric>
 #include <cstddef>
 #include <cstdint>
 #include <functional>

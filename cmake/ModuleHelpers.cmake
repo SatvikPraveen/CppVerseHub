@@ -26,7 +26,7 @@ function(cppversehub_add_module)
             $<BUILD_INTERFACE:${CPPVERSEHUB_INCLUDE_DIR}>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cppversehub>
         )
-        target_link_libraries(${target} INTERFACE Threads::Threads ${ARG_DEPENDS})
+        target_link_libraries(${target} INTERFACE Threads::Threads ${CPPVERSEHUB_ATOMIC_LIBRARY} ${ARG_DEPENDS})
         target_compile_features(${target} INTERFACE cxx_std_20)
     else()
         add_library(${target} STATIC ${ARG_SOURCES})
@@ -35,7 +35,7 @@ function(cppversehub_add_module)
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cppversehub>
         )
         target_link_libraries(${target}
-            PUBLIC  Threads::Threads ${ARG_DEPENDS}
+            PUBLIC  Threads::Threads ${CPPVERSEHUB_ATOMIC_LIBRARY} ${ARG_DEPENDS}
             PRIVATE $<BUILD_INTERFACE:cppversehub_options>
         )
         target_compile_features(${target} PUBLIC cxx_std_20)

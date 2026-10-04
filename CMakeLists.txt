@@ -52,6 +52,7 @@ include(CompilerWarnings)
 include(Sanitizers)
 include(Coverage)
 include(StaticAnalysis)
+include(Atomics)
 include(ModuleHelpers)
 include(Dependencies)
 
