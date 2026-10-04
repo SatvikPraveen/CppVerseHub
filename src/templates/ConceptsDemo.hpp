@@ -1,127 +1,121 @@
-// File: src/templates/ConceptsDemo.hpp
-// C++20 concepts usage and demonstrations
+/**
+ * @file ConceptsDemo.hpp
+ * @brief C++20 concepts: defining, composing and constraining with named requirements.
+ *
+ * Demonstrates
+ *  - building a concept hierarchy by conjunction so that the compiler can apply *subsumption*
+ *    (the more constrained overload wins, see `classify`);
+ *  - requires-expressions checking member functions, nested types and expression validity;
+ *  - abbreviated function templates (`Unsigned auto exponent`);
+ *  - constrained class templates and constrained member functions (`ContainerAdapter`, `MathVector`);
+ *  - concept-constrained wrappers around `std::ranges` algorithms.
+ *
+ * Concepts replace most uses of SFINAE (compare with SFINAE_Examples.hpp): diagnostics name the
+ * unsatisfied requirement instead of a failed substitution deep inside an overload set.
+ */
 
-#ifndef CONCEPTS_DEMO_HPP
-#define CONCEPTS_DEMO_HPP
+#ifndef CPPVERSEHUB_TEMPLATES_CONCEPTS_DEMO_HPP
+#define CPPVERSEHUB_TEMPLATES_CONCEPTS_DEMO_HPP
 
+#include <algorithm>
+#include <cmath>
 #include <concepts>
-#include <type_traits>
-#include <iterator>
-#include <ranges>
+#include <cstddef>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
-#include <vector>
-#include <string>
+#include <iterator>
 #include <memory>
 #include <numeric>
-#include <algorithm>
+#include <ranges>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
-namespace CppVerseHub {
-namespace Templates {
-namespace Concepts {
+namespace CppVerseHub::Templates::Concepts {
 
-// ===== Basic Concepts =====
+// ===== Basic concept hierarchy (built by conjunction so subsumption works) =====
 
-/**
- * @brief Concept for arithmetic types
- */
-template<typename T>
+/** @brief Satisfied by built-in arithmetic types (integral and floating point, including bool/char). */
+template <typename T>
 concept Arithmetic = std::is_arithmetic_v<T>;
 
-/**
- * @brief Concept for integral types
- */
-template<typename T>
-concept Integral = std::integral<T>;
+/** @brief Integral arithmetic types; refines (subsumes) Arithmetic. */
+template <typename T>
+concept Integral = Arithmetic<T> && std::integral<T>;
 
-/**
- * @brief Concept for floating point types
- */
-template<typename T>
-concept FloatingPoint = std::floating_point<T>;
+/** @brief Signed integral types; refines (subsumes) Integral. */
+template <typename T>
+concept SignedIntegral = Integral<T> && std::signed_integral<T>;
 
-/**
- * @brief Concept for signed types
- */
-template<typename T>
-concept Signed = std::signed_integral<T> || std::floating_point<T>;
+/** @brief Unsigned integral types; refines (subsumes) Integral. */
+template <typename T>
+concept Unsigned = Integral<T> && std::unsigned_integral<T>;
 
-/**
- * @brief Concept for unsigned types
- */
-template<typename T>
-concept Unsigned = std::unsigned_integral<T>;
+/** @brief Floating point types; refines (subsumes) Arithmetic. */
+template <typename T>
+concept FloatingPoint = Arithmetic<T> && std::floating_point<T>;
 
-// ===== Custom Concepts =====
+/** @brief Types that can represent negative values (signed integers or floating point). */
+template <typename T>
+concept Signed = SignedIntegral<T> || FloatingPoint<T>;
 
-/**
- * @brief Concept for types with size() method
- */
-template<typename T>
-concept HasSize = requires(T t) {
+// ===== Structural concepts (requires-expressions) =====
+
+/** @brief Types exposing a `size()` convertible to std::size_t. */
+template <typename T>
+concept HasSize = requires(const T& t) {
     { t.size() } -> std::convertible_to<std::size_t>;
 };
 
-/**
- * @brief Concept for types with begin() and end() methods
- */
-template<typename T>
-concept Iterable = requires(T t) {
+/** @brief Types with member `begin()`/`end()` returning iterators. */
+template <typename T>
+concept Iterable = requires(T& t) {
     { t.begin() } -> std::input_or_output_iterator;
     { t.end() } -> std::input_or_output_iterator;
 };
 
-/**
- * @brief Concept for container types
- */
-template<typename T>
-concept Container = Iterable<T> && HasSize<T> && requires(T t) {
+/** @brief A minimal "Container" named requirement: iterable, sized, with the usual nested types. */
+template <typename T>
+concept Container = Iterable<T> && HasSize<T> && requires(const T& t) {
     typename T::value_type;
     typename T::iterator;
     typename T::const_iterator;
     { t.empty() } -> std::convertible_to<bool>;
 };
 
-/**
- * @brief Concept for types with push_back method
- */
-template<typename T>
-concept PushBackable = requires(T t, typename T::value_type v) {
-    t.push_back(v);
+/** @brief Containers that accept `push_back(value_type)`. */
+template <typename T>
+concept PushBackable = requires(T& t, const typename T::value_type& v) { t.push_back(v); };
+
+/** @brief Sequence containers: Container + push_back + front/back access. */
+template <typename T>
+concept SequenceContainer = Container<T> && PushBackable<T> && requires(T& t) {
+    { t.front() } -> std::same_as<typename T::value_type&>;
+    { t.back() } -> std::same_as<typename T::value_type&>;
 };
 
-/**
- * @brief Concept for sequence containers
- */
-template<typename T>
-concept SequenceContainer = Container<T> && PushBackable<T> && requires(T t) {
-    { t.front() } -> std::convertible_to<typename T::value_type&>;
-    { t.back() } -> std::convertible_to<typename T::value_type&>;
-};
-
-/**
- * @brief Concept for associative containers
- */
-template<typename T>
-concept AssociativeContainer = Container<T> && requires(T t) {
+/** @brief Associative containers with key/mapped types and `find(key)`. */
+template <typename T>
+concept AssociativeContainer = Container<T> && requires(T& t, const typename T::key_type& k) {
     typename T::key_type;
     typename T::mapped_type;
-    { t.find(typename T::key_type{}) } -> std::convertible_to<typename T::iterator>;
+    { t.find(k) } -> std::same_as<typename T::iterator>;
 };
 
-/**
- * @brief Concept for printable types
- */
-template<typename T>
-concept Printable = requires(T t, std::ostream& os) {
+/** @brief Types that can be written to a std::ostream. */
+template <typename T>
+concept Printable = requires(const T& t, std::ostream& os) {
     { os << t } -> std::convertible_to<std::ostream&>;
 };
 
-/**
- * @brief Concept for comparable types
- */
-template<typename T>
-concept Comparable = requires(T a, T b) {
+/** @brief Types supporting all six relational operators with bool-convertible results. */
+template <typename T>
+concept Comparable = requires(const T& a, const T& b) {
     { a == b } -> std::convertible_to<bool>;
     { a != b } -> std::convertible_to<bool>;
     { a < b } -> std::convertible_to<bool>;
@@ -130,80 +124,60 @@ concept Comparable = requires(T a, T b) {
     { a >= b } -> std::convertible_to<bool>;
 };
 
-/**
- * @brief Concept for hashable types
- */
-template<typename T>
-concept Hashable = requires(T t) {
+/** @brief Types for which `std::hash<T>` is enabled. */
+template <typename T>
+concept Hashable = requires(const T& t) {
     { std::hash<T>{}(t) } -> std::convertible_to<std::size_t>;
 };
 
-/**
- * @brief Concept for copyable types
- */
-template<typename T>
+/** @brief Copy-constructible and copy-assignable types. */
+template <typename T>
 concept Copyable = std::copy_constructible<T> && std::assignable_from<T&, const T&>;
 
-/**
- * @brief Concept for movable types
- */
-template<typename T>
+/** @brief Move-constructible and move-assignable types. */
+template <typename T>
 concept Movable = std::move_constructible<T> && std::assignable_from<T&, T>;
 
-/**
- * @brief Concept for smart pointer types
- */
-template<typename T>
+/** @brief Smart-pointer-like types: dereferenceable, `get()`, `reset()`, and contextual bool. */
+template <typename T>
 concept SmartPointer = requires(T t) {
-    { *t };
+    typename T::element_type;
+    { *t } -> std::same_as<typename T::element_type&>;
     { t.get() } -> std::convertible_to<typename T::element_type*>;
-    { t.reset() } -> std::convertible_to<void>;
-    { static_cast<bool>(t) } -> std::convertible_to<bool>;
+    t.reset();
+    { static_cast<bool>(t) } -> std::same_as<bool>;
 };
 
-// ===== Advanced Concepts =====
+// ===== Callable concepts =====
 
-/**
- * @brief Concept for function objects
- */
-template<typename F, typename... Args>
+/** @brief Callables invocable with Args (thin alias over std::invocable). */
+template <typename F, typename... Args>
 concept Invocable = std::invocable<F, Args...>;
 
-/**
- * @brief Concept for predicates
- */
-template<typename F, typename... Args>
-concept Predicate = Invocable<F, Args...> && 
-                   std::convertible_to<std::invoke_result_t<F, Args...>, bool>;
+/** @brief Callables invocable with Args whose result converts to bool. */
+template <typename F, typename... Args>
+concept Predicate = Invocable<F, Args...> && std::convertible_to<std::invoke_result_t<F, Args...>, bool>;
 
-/**
- * @brief Concept for unary predicates
- */
-template<typename F, typename T>
+/** @brief Predicate over one T. */
+template <typename F, typename T>
 concept UnaryPredicate = Predicate<F, T>;
 
-/**
- * @brief Concept for binary predicates
- */
-template<typename F, typename T>
+/** @brief Predicate over two T. */
+template <typename F, typename T>
 concept BinaryPredicate = Predicate<F, T, T>;
 
-/**
- * @brief Concept for ranges
- */
-template<typename R>
+/** @brief Any std::ranges::range. */
+template <typename R>
 concept Range = std::ranges::range<R>;
 
-/**
- * @brief Concept for random access ranges
- */
-template<typename R>
+/** @brief Any std::ranges::random_access_range. */
+template <typename R>
 concept RandomAccessRange = std::ranges::random_access_range<R>;
 
-/**
- * @brief Concept for numeric types
- */
-template<typename T>
+// ===== Algebraic concepts =====
+
+/** @brief Arithmetic types closed under + - * /. */
+template <typename T>
 concept Numeric = Arithmetic<T> && requires(T a, T b) {
     { a + b } -> std::convertible_to<T>;
     { a - b } -> std::convertible_to<T>;
@@ -211,431 +185,536 @@ concept Numeric = Arithmetic<T> && requires(T a, T b) {
     { a / b } -> std::convertible_to<T>;
 };
 
-/**
- * @brief Concept for additive types
- */
-template<typename T>
+/** @brief Types supporting `+` and `+=`. */
+template <typename T>
 concept Additive = requires(T a, T b) {
     { a + b } -> std::convertible_to<T>;
     { a += b } -> std::convertible_to<T&>;
 };
 
-/**
- * @brief Concept for multiplicative types
- */
-template<typename T>
+/** @brief Types supporting `*` and `*=`. */
+template <typename T>
 concept Multiplicative = requires(T a, T b) {
     { a * b } -> std::convertible_to<T>;
     { a *= b } -> std::convertible_to<T&>;
 };
 
-/**
- * @brief Concept for ring-like types (additive + multiplicative)
- */
-template<typename T>
+/** @brief Ring-like types: additive, multiplicative, negatable, with 0 and 1 constructible. */
+template <typename T>
 concept Ring = Additive<T> && Multiplicative<T> && requires(T a) {
     { -a } -> std::convertible_to<T>;
-    T{0}; // Zero element
-    T{1}; // Unity element
+    T{0};
+    T{1};
 };
 
 /**
- * @brief Concept for field-like types
+ * @brief Field-like types: a Ring with division. Purely syntactic, so `int` also satisfies it;
+ *        concepts check syntax, the semantic axioms remain the programmer's responsibility.
  */
-template<typename T>
+template <typename T>
 concept Field = Ring<T> && requires(T a, T b) {
     { a / b } -> std::convertible_to<T>;
     { a /= b } -> std::convertible_to<T&>;
 };
 
-/**
- * @brief Concept for serializable types
- */
-template<typename T>
+/** @brief Types that can be both written to and read from streams. */
+template <typename T>
 concept Serializable = requires(T t, std::ostream& os, std::istream& is) {
     { os << t } -> std::convertible_to<std::ostream&>;
     { is >> t } -> std::convertible_to<std::istream&>;
 };
 
-// ===== Concept-based Function Templates =====
+// ===== Subsumption-based overloading =====
+
+/** @brief Fallback for non-arithmetic types. @return "non-arithmetic". */
+template <typename T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept {
+    return "non-arithmetic";
+}
+
+/** @brief Overload for arithmetic types. @return "arithmetic". */
+template <Arithmetic T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept {
+    return "arithmetic";
+}
+
+/** @brief Integral subsumes Arithmetic, so this wins for integers. @return "integral". */
+template <Integral T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept {
+    return "integral";
+}
+
+/** @brief SignedIntegral subsumes Integral. @return "signed integral". */
+template <SignedIntegral T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept {
+    return "signed integral";
+}
+
+/** @brief FloatingPoint subsumes Arithmetic. @return "floating point". */
+template <FloatingPoint T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept {
+    return "floating point";
+}
+
+// ===== Concept-constrained function templates =====
 
 /**
- * @brief Print function for printable types
+ * @brief Format a Printable value as a string.
+ * @param value value to format
+ * @return the streamed representation
  */
-template<Printable T>
-void print(const T& value) {
-    std::cout << value << std::endl;
+template <Printable T>
+[[nodiscard]] std::string format_value(const T& value) {
+    std::ostringstream oss;
+    oss << value;
+    return oss.str();
 }
 
 /**
- * @brief Print function for containers
+ * @brief Format a container of printable elements as "[a, b, c]".
+ *
+ * The `!Printable<C>` clause disambiguates types that are both containers and printable
+ * (e.g. std::string), which would otherwise make the two overloads ambiguous.
+ * @param container container to format
+ * @return bracketed, comma separated representation
  */
-template<Container T>
-    requires Printable<typename T::value_type>
-void print(const T& container) {
-    std::cout << "[";
+template <Container C>
+    requires(Printable<typename C::value_type> && !Printable<C>)
+[[nodiscard]] std::string format_value(const C& container) {
+    std::ostringstream oss;
+    oss << '[';
     bool first = true;
     for (const auto& item : container) {
-        if (!first) std::cout << ", ";
-        std::cout << item;
+        if (!first) {
+            oss << ", ";
+        }
+        oss << item;
         first = false;
     }
-    std::cout << "]" << std::endl;
+    oss << ']';
+    return oss.str();
 }
 
 /**
- * @brief Generic algorithm for numeric operations
+ * @brief Write a value (or container) followed by a newline to a stream.
+ * @param out destination stream
+ * @param value value accepted by one of the format_value overloads
  */
-template<Numeric T>
-constexpr T power(T base, Unsigned auto exponent) {
-    if (exponent == 0) return T{1};
-    if (exponent == 1) return base;
-    
+template <typename T>
+    requires requires(const T& v) { format_value(v); }
+void print(std::ostream& out, const T& value) {
+    out << format_value(value) << '\n';
+}
+
+/**
+ * @brief Exponentiation by squaring for any Numeric base and unsigned exponent.
+ * @param base base value
+ * @param exponent non-negative exponent (abbreviated template parameter)
+ * @return base raised to exponent
+ */
+template <Numeric T>
+[[nodiscard]] constexpr T power(T base, Unsigned auto exponent) noexcept {
     T result = T{1};
     while (exponent > 0) {
-        if (exponent & 1) result *= base;
-        base *= base;
-        exponent >>= 1;
+        if ((exponent & 1U) != 0U) {
+            result *= base;
+        }
+        exponent >>= 1U;
+        if (exponent > 0) {
+            base *= base;
+        }
     }
     return result;
 }
 
 /**
- * @brief Sum function for additive types
+ * @brief Sum the elements of a range whose value type is Additive.
+ * @param range input range
+ * @return sum, starting from a value-initialised element
  */
-template<Range R>
+template <Range R>
     requires Additive<std::ranges::range_value_t<R>>
-constexpr auto sum_range(const R& range) {
+[[nodiscard]] constexpr auto sum_range(const R& range) {
     using T = std::ranges::range_value_t<R>;
     return std::accumulate(std::ranges::begin(range), std::ranges::end(range), T{});
 }
 
 /**
- * @brief Product function for multiplicative types
+ * @brief Multiply the elements of a range whose value type is Multiplicative.
+ * @param range input range
+ * @return product, starting from T{1}
  */
-template<Range R>
+template <Range R>
     requires Multiplicative<std::ranges::range_value_t<R>>
-constexpr auto product_range(const R& range) {
+[[nodiscard]] constexpr auto product_range(const R& range) {
     using T = std::ranges::range_value_t<R>;
     return std::accumulate(std::ranges::begin(range), std::ranges::end(range), T{1}, std::multiplies<T>{});
 }
 
 /**
- * @brief Generic sort function
+ * @brief Sort a random-access range in place.
+ * @param range range to sort
  */
-template<std::ranges::random_access_range R>
+template <std::ranges::random_access_range R>
     requires std::sortable<std::ranges::iterator_t<R>>
-void sort_range(R&& range) {
+constexpr void sort_range(R&& range) {
     std::ranges::sort(range);
 }
 
 /**
- * @brief Generic sort with comparator
+ * @brief Sort a random-access range in place using a comparator.
+ * @param range range to sort
+ * @param comp strict weak ordering
  */
-template<std::ranges::random_access_range R, typename Compare>
+template <std::ranges::random_access_range R, typename Compare>
     requires std::sortable<std::ranges::iterator_t<R>, Compare>
-void sort_range(R&& range, Compare comp) {
+constexpr void sort_range(R&& range, Compare comp) {
     std::ranges::sort(range, comp);
 }
 
 /**
- * @brief Generic find function
+ * @brief Find the first element equal to value.
+ * @param range input range
+ * @param value value to look for
+ * @return iterator to the element or end
  */
-template<std::ranges::input_range R, typename T>
+template <std::ranges::input_range R, typename T>
     requires std::equality_comparable_with<std::ranges::range_value_t<R>, T>
-constexpr std::ranges::iterator_t<R> find_in_range(R&& range, const T& value) {
-    return std::ranges::find(range, value);
+[[nodiscard]] constexpr std::ranges::borrowed_iterator_t<R> find_in_range(R&& range, const T& value) {
+    return std::ranges::find(std::forward<R>(range), value);
 }
 
 /**
- * @brief Generic find_if function
+ * @brief Find the first element satisfying pred.
+ * @param range input range
+ * @param pred unary predicate
+ * @return iterator to the element or end
  */
-template<std::ranges::input_range R, UnaryPredicate<std::ranges::range_value_t<R>> Pred>
-constexpr std::ranges::iterator_t<R> find_if_in_range(R&& range, Pred pred) {
-    return std::ranges::find_if(range, pred);
+template <std::ranges::input_range R, UnaryPredicate<std::ranges::range_reference_t<R>> Pred>
+[[nodiscard]] constexpr std::ranges::borrowed_iterator_t<R> find_if_in_range(R&& range, Pred pred) {
+    return std::ranges::find_if(std::forward<R>(range), pred);
 }
 
 /**
- * @brief Generic copy function
+ * @brief Copy a range to an output iterator.
+ * @param input source range
+ * @param output destination iterator
+ * @return iterator past the last written element
  */
-template<std::ranges::input_range InputRange, std::weakly_incrementable OutputIt>
+template <std::ranges::input_range InputRange, std::weakly_incrementable OutputIt>
     requires std::indirectly_copyable<std::ranges::iterator_t<InputRange>, OutputIt>
 constexpr OutputIt copy_range(InputRange&& input, OutputIt output) {
     return std::ranges::copy(input, output).out;
 }
 
 /**
- * @brief Generic transform function
+ * @brief Transform a range into an output iterator.
+ * @param input source range
+ * @param output destination iterator
+ * @param op unary transformation
+ * @return iterator past the last written element
  */
-template<std::ranges::input_range InputRange, 
-         std::weakly_incrementable OutputIt, 
-         typename UnaryOp>
-    requires std::indirectly_writable<OutputIt, std::invoke_result_t<UnaryOp, std::ranges::range_reference_t<InputRange>>>
+template <std::ranges::input_range InputRange, std::weakly_incrementable OutputIt, typename UnaryOp>
+    requires std::indirectly_writable<OutputIt,
+                                      std::invoke_result_t<UnaryOp&, std::ranges::range_reference_t<InputRange>>>
 constexpr OutputIt transform_range(InputRange&& input, OutputIt output, UnaryOp op) {
     return std::ranges::transform(input, output, op).out;
 }
 
-// ===== Concept-based Class Templates =====
+// ===== Concept-constrained class templates =====
 
 /**
- * @brief Generic container adapter
+ * @brief Wraps any Container; sequence-only operations are enabled through member constraints.
+ * @tparam C wrapped container type
  */
-template<Container C>
+template <Container C>
 class ContainerAdapter {
-private:
-    C container_;
-    
 public:
     using container_type = C;
     using value_type = typename C::value_type;
     using size_type = typename C::size_type;
-    
+
+    /** @brief Default-construct an empty adapter. */
     ContainerAdapter() = default;
-    explicit ContainerAdapter(const C& container) : container_(container) {}
-    explicit ContainerAdapter(C&& container) : container_(std::move(container)) {}
-    
-    size_type size() const { return container_.size(); }
-    bool empty() const { return container_.empty(); }
-    
-    auto begin() -> decltype(container_.begin()) { return container_.begin(); }
-    auto end() -> decltype(container_.end()) { return container_.end(); }
-    auto begin() const -> decltype(container_.begin()) { return container_.begin(); }
-    auto end() const -> decltype(container_.end()) { return container_.end(); }
-    
-    // Only available for sequence containers
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    value_type& front() { return container_.front(); }
-    
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    const value_type& front() const { return container_.front(); }
-    
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    value_type& back() { return container_.back(); }
-    
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    const value_type& back() const { return container_.back(); }
-    
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    void push_back(const value_type& value) { container_.push_back(value); }
-    
-    template<typename Self = C>
-        requires SequenceContainer<Self>
-    void push_back(value_type&& value) { container_.push_back(std::move(value)); }
+
+    /** @brief Adopt a container. @param container container moved into the adapter */
+    explicit ContainerAdapter(C container) : container_(std::move(container)) {}
+
+    /** @return number of elements */
+    [[nodiscard]] size_type size() const noexcept { return container_.size(); }
+    /** @return true if empty */
+    [[nodiscard]] bool empty() const noexcept { return container_.empty(); }
+
+    /** @return iterator to first element */
+    [[nodiscard]] auto begin() { return container_.begin(); }
+    /** @return iterator past last element */
+    [[nodiscard]] auto end() { return container_.end(); }
+    /** @return const iterator to first element */
+    [[nodiscard]] auto begin() const { return container_.begin(); }
+    /** @return const iterator past last element */
+    [[nodiscard]] auto end() const { return container_.end(); }
+
+    /** @return first element (sequence containers only) */
+    [[nodiscard]] value_type& front()
+        requires SequenceContainer<C>
+    {
+        return container_.front();
+    }
+
+    /** @return last element (sequence containers only) */
+    [[nodiscard]] value_type& back()
+        requires SequenceContainer<C>
+    {
+        return container_.back();
+    }
+
+    /** @brief Append a value (sequence containers only). @param value element to append */
+    void push_back(value_type value)
+        requires SequenceContainer<C>
+    {
+        container_.push_back(std::move(value));
+    }
+
+    /** @return true if key is present (associative containers only) @param key key to search */
+    [[nodiscard]] bool contains_key(const auto& key) const
+        requires AssociativeContainer<C>
+    {
+        return container_.find(key) != container_.end();
+    }
+
+    /** @return the wrapped container */
+    [[nodiscard]] const C& underlying() const noexcept { return container_; }
+
+private:
+    C container_{};
 };
 
 /**
- * @brief Generic mathematical vector
+ * @brief Dense mathematical vector over a Field-like scalar type.
+ * @tparam T scalar type satisfying Field
  */
-template<Field T>
-class Vector {
-private:
-    std::vector<T> data_;
-    
+template <Field T>
+class MathVector {
 public:
     using value_type = T;
     using size_type = std::size_t;
     using iterator = typename std::vector<T>::iterator;
     using const_iterator = typename std::vector<T>::const_iterator;
-    
-    Vector() = default;
-    explicit Vector(size_type size) : data_(size) {}
-    Vector(size_type size, const T& value) : data_(size, value) {}
-    Vector(std::initializer_list<T> init) : data_(init) {}
-    
-    size_type size() const { return data_.size(); }
-    bool empty() const { return data_.empty(); }
-    
-    T& operator[](size_type index) { return data_[index]; }
-    const T& operator[](size_type index) const { return data_[index]; }
-    
-    T& at(size_type index) { return data_.at(index); }
-    const T& at(size_type index) const { return data_.at(index); }
-    
-    iterator begin() { return data_.begin(); }
-    iterator end() { return data_.end(); }
-    const_iterator begin() const { return data_.begin(); }
-    const_iterator end() const { return data_.end(); }
-    const_iterator cbegin() const { return data_.cbegin(); }
-    const_iterator cend() const { return data_.cend(); }
-    
-    void push_back(const T& value) { data_.push_back(value); }
-    void push_back(T&& value) { data_.push_back(std::move(value)); }
-    
-    void resize(size_type size) { data_.resize(size); }
-    void resize(size_type size, const T& value) { data_.resize(size, value); }
-    
-    // Vector operations
-    Vector& operator+=(const Vector& other) {
-        if (size() != other.size()) {
-            throw std::invalid_argument("Vector sizes must match for addition");
-        }
+
+    /** @brief Empty vector. */
+    MathVector() = default;
+    /** @brief Zero vector of given dimension. @param size dimension */
+    explicit MathVector(size_type size) : data_(size) {}
+    /** @brief Vector with every component set to value. @param size dimension @param value fill */
+    MathVector(size_type size, const T& value) : data_(size, value) {}
+    /** @brief Vector from components. @param init components */
+    MathVector(std::initializer_list<T> init) : data_(init) {}
+
+    /** @return dimension */
+    [[nodiscard]] size_type size() const noexcept { return data_.size(); }
+    /** @return true if dimension is zero */
+    [[nodiscard]] bool empty() const noexcept { return data_.empty(); }
+
+    /** @param index component index @return component reference (unchecked) */
+    [[nodiscard]] T& operator[](size_type index) noexcept { return data_[index]; }
+    /** @param index component index @return component (unchecked) */
+    [[nodiscard]] const T& operator[](size_type index) const noexcept { return data_[index]; }
+    /** @param index component index @return component reference @throws std::out_of_range */
+    [[nodiscard]] T& at(size_type index) { return data_.at(index); }
+    /** @param index component index @return component @throws std::out_of_range */
+    [[nodiscard]] const T& at(size_type index) const { return data_.at(index); }
+
+    /** @return iterator to first component */
+    [[nodiscard]] iterator begin() noexcept { return data_.begin(); }
+    /** @return iterator past last component */
+    [[nodiscard]] iterator end() noexcept { return data_.end(); }
+    /** @return const iterator to first component */
+    [[nodiscard]] const_iterator begin() const noexcept { return data_.begin(); }
+    /** @return const iterator past last component */
+    [[nodiscard]] const_iterator end() const noexcept { return data_.end(); }
+
+    /** @brief Component-wise addition. @param other same-sized vector @return *this @throws std::invalid_argument */
+    MathVector& operator+=(const MathVector& other) {
+        require_same_size(other, "addition");
         for (size_type i = 0; i < size(); ++i) {
             data_[i] += other[i];
         }
         return *this;
     }
-    
-    Vector& operator-=(const Vector& other) {
-        if (size() != other.size()) {
-            throw std::invalid_argument("Vector sizes must match for subtraction");
-        }
+
+    /** @brief Component-wise subtraction. @param other same-sized vector @return *this @throws std::invalid_argument */
+    MathVector& operator-=(const MathVector& other) {
+        require_same_size(other, "subtraction");
         for (size_type i = 0; i < size(); ++i) {
             data_[i] -= other[i];
         }
         return *this;
     }
-    
-    Vector& operator*=(const T& scalar) {
+
+    /** @brief Scale in place. @param scalar factor @return *this */
+    MathVector& operator*=(const T& scalar) {
         for (auto& element : data_) {
             element *= scalar;
         }
         return *this;
     }
-    
-    Vector& operator/=(const T& scalar) {
+
+    /** @brief Divide in place. @param scalar divisor @return *this */
+    MathVector& operator/=(const T& scalar) {
         for (auto& element : data_) {
             element /= scalar;
         }
         return *this;
     }
-    
-    Vector operator+(const Vector& other) const {
-        Vector result = *this;
-        result += other;
-        return result;
+
+    /** @param lhs left operand @param rhs right operand @return lhs + rhs */
+    [[nodiscard]] friend MathVector operator+(MathVector lhs, const MathVector& rhs) {
+        lhs += rhs;
+        return lhs;
     }
-    
-    Vector operator-(const Vector& other) const {
-        Vector result = *this;
-        result -= other;
-        return result;
+    /** @param lhs left operand @param rhs right operand @return lhs - rhs */
+    [[nodiscard]] friend MathVector operator-(MathVector lhs, const MathVector& rhs) {
+        lhs -= rhs;
+        return lhs;
     }
-    
-    Vector operator*(const T& scalar) const {
-        Vector result = *this;
-        result *= scalar;
-        return result;
+    /** @param lhs vector @param scalar factor @return lhs * scalar */
+    [[nodiscard]] friend MathVector operator*(MathVector lhs, const T& scalar) {
+        lhs *= scalar;
+        return lhs;
     }
-    
-    Vector operator/(const T& scalar) const {
-        Vector result = *this;
-        result /= scalar;
-        return result;
+    /** @param lhs vector @param scalar divisor @return lhs / scalar */
+    [[nodiscard]] friend MathVector operator/(MathVector lhs, const T& scalar) {
+        lhs /= scalar;
+        return lhs;
     }
-    
-    // Dot product
-    T dot(const Vector& other) const {
-        if (size() != other.size()) {
-            throw std::invalid_argument("Vector sizes must match for dot product");
-        }
-        T result = T{};
+    /** @return true if all components are equal */
+    [[nodiscard]] friend bool operator==(const MathVector&, const MathVector&) = default;
+
+    /**
+     * @brief Dot product.
+     * @param other same-sized vector
+     * @return sum of component products
+     * @throws std::invalid_argument on size mismatch
+     */
+    [[nodiscard]] T dot(const MathVector& other) const {
+        require_same_size(other, "dot product");
+        T result{};
         for (size_type i = 0; i < size(); ++i) {
             result += data_[i] * other[i];
         }
         return result;
     }
-    
-    // Magnitude
-    T magnitude() const 
-        requires requires(T t) { { std::sqrt(t) } -> std::convertible_to<T>; }
+
+    /** @return Euclidean norm (floating point scalars only) */
+    [[nodiscard]] T magnitude() const
+        requires FloatingPoint<T>
     {
         return std::sqrt(dot(*this));
     }
-    
-    // Normalize
-    Vector normalized() const 
-        requires requires(T t) { { std::sqrt(t) } -> std::convertible_to<T>; }
+
+    /** @return unit vector in the same direction @throws std::invalid_argument for the zero vector */
+    [[nodiscard]] MathVector normalized() const
+        requires FloatingPoint<T>
     {
-        T mag = magnitude();
+        const T mag = magnitude();
         if (mag == T{}) {
             throw std::invalid_argument("Cannot normalize zero vector");
         }
         return *this / mag;
     }
+
+private:
+    void require_same_size(const MathVector& other, const char* operation) const {
+        if (size() != other.size()) {
+            throw std::invalid_argument(std::string("MathVector sizes must match for ") + operation);
+        }
+    }
+
+    std::vector<T> data_;
 };
 
 /**
- * @brief Generic smart pointer wrapper
+ * @brief Thin wrapper accepting anything that models SmartPointer.
+ * @tparam P smart pointer type (std::unique_ptr, std::shared_ptr, ...)
  */
-template<SmartPointer P>
+template <SmartPointer P>
 class SmartPtrWrapper {
-private:
-    P ptr_;
-    
 public:
     using pointer_type = P;
     using element_type = typename P::element_type;
-    
+
+    /** @brief Empty wrapper. */
     SmartPtrWrapper() = default;
-    explicit SmartPtrWrapper(P ptr) : ptr_(std::move(ptr)) {}
-    
-    element_type& operator*() { return *ptr_; }
-    const element_type& operator*() const { return *ptr_; }
-    
-    element_type* operator->() { return ptr_.get(); }
-    const element_type* operator->() const { return ptr_.get(); }
-    
-    element_type* get() { return ptr_.get(); }
-    const element_type* get() const { return ptr_.get(); }
-    
-    explicit operator bool() const { return static_cast<bool>(ptr_); }
-    
-    void reset() { ptr_.reset(); }
-    
-    template<typename... Args>
-        requires requires(P p, Args... args) { p.reset(args...); }
-    void reset(Args&&... args) { 
-        ptr_.reset(std::forward<Args>(args)...); 
-    }
-    
-    P& get_pointer() { return ptr_; }
-    const P& get_pointer() const { return ptr_; }
+    /** @brief Take ownership of a smart pointer. @param ptr pointer to adopt */
+    explicit SmartPtrWrapper(P ptr) noexcept : ptr_(std::move(ptr)) {}
+
+    /** @return reference to the pointee (must not be null) */
+    [[nodiscard]] element_type& operator*() const { return *ptr_; }
+    /** @return raw pointer to the pointee */
+    [[nodiscard]] element_type* operator->() const noexcept { return ptr_.get(); }
+    /** @return raw pointer to the pointee */
+    [[nodiscard]] element_type* get() const noexcept { return ptr_.get(); }
+    /** @return true if non-null */
+    [[nodiscard]] explicit operator bool() const noexcept { return static_cast<bool>(ptr_); }
+    /** @brief Release the pointee. */
+    void reset() noexcept { ptr_.reset(); }
+    /** @return the underlying smart pointer */
+    [[nodiscard]] const P& get_pointer() const noexcept { return ptr_; }
+
+private:
+    P ptr_{};
 };
 
-// ===== Constrained Algorithms =====
+// ===== Constrained algorithm wrappers =====
 
-/**
- * @brief Generic algorithms with concept constraints
- */
+/** @brief Thin, concept-constrained wrappers over std::ranges algorithms. */
 namespace algorithms {
 
-template<std::ranges::input_range R, UnaryPredicate<std::ranges::range_value_t<R>> Pred>
-constexpr bool all_of(R&& range, Pred pred) {
+/** @param range input range @param pred predicate @return true if pred holds for all elements */
+template <std::ranges::input_range R, UnaryPredicate<std::ranges::range_reference_t<R>> Pred>
+[[nodiscard]] constexpr bool all_of(R&& range, Pred pred) {
     return std::ranges::all_of(range, pred);
 }
 
-template<std::ranges::input_range R, UnaryPredicate<std::ranges::range_value_t<R>> Pred>
-constexpr bool any_of(R&& range, Pred pred) {
+/** @param range input range @param pred predicate @return true if pred holds for any element */
+template <std::ranges::input_range R, UnaryPredicate<std::ranges::range_reference_t<R>> Pred>
+[[nodiscard]] constexpr bool any_of(R&& range, Pred pred) {
     return std::ranges::any_of(range, pred);
 }
 
-template<std::ranges::input_range R, UnaryPredicate<std::ranges::range_value_t<R>> Pred>
-constexpr bool none_of(R&& range, Pred pred) {
+/** @param range input range @param pred predicate @return true if pred holds for no element */
+template <std::ranges::input_range R, UnaryPredicate<std::ranges::range_reference_t<R>> Pred>
+[[nodiscard]] constexpr bool none_of(R&& range, Pred pred) {
     return std::ranges::none_of(range, pred);
 }
 
-template<std::ranges::input_range R, UnaryPredicate<std::ranges::range_value_t<R>> Pred>
-constexpr auto count_if(R&& range, Pred pred) {
+/** @param range input range @param pred predicate @return number of elements satisfying pred */
+template <std::ranges::input_range R, UnaryPredicate<std::ranges::range_reference_t<R>> Pred>
+[[nodiscard]] constexpr auto count_if(R&& range, Pred pred) {
     return std::ranges::count_if(range, pred);
 }
 
-template<std::ranges::forward_range R>
-    requires std::equality_comparable<std::ranges::range_value_t<R>>
-constexpr std::ranges::iterator_t<R> unique(R&& range) {
+/**
+ * @brief Remove consecutive duplicates (std::unique semantics).
+ * @param range forward range
+ * @return iterator to the new logical end
+ */
+template <std::ranges::forward_range R>
+    requires std::permutable<std::ranges::iterator_t<R>> &&
+             std::equality_comparable<std::ranges::range_value_t<R>>
+constexpr std::ranges::iterator_t<R> unique(R& range) {
     return std::ranges::unique(range).begin();
 }
 
-template<std::ranges::random_access_range R, BinaryPredicate<std::ranges::range_value_t<R>> Compare>
+/** @brief Sort with comparator. @param range range @param comp binary predicate */
+template <std::ranges::random_access_range R, BinaryPredicate<std::ranges::range_reference_t<R>> Compare>
+    requires std::sortable<std::ranges::iterator_t<R>, Compare>
 constexpr void sort(R&& range, Compare comp) {
     std::ranges::sort(range, comp);
 }
 
-template<std::ranges::random_access_range R>
+/** @brief Sort ascending. @param range range */
+template <std::ranges::random_access_range R>
     requires std::sortable<std::ranges::iterator_t<R>>
 constexpr void sort(R&& range) {
     std::ranges::sort(range);
@@ -643,43 +722,41 @@ constexpr void sort(R&& range) {
 
 } // namespace algorithms
 
-// ===== Concept Testing Utilities =====
+// ===== Showcase =====
 
 /**
- * @brief Test if a type satisfies a concept
+ * @brief Walk through the concept-based utilities of this header.
+ * @param out destination stream
  */
-#define TEST_CONCEPT(ConceptName, Type) \
-    static_assert(ConceptName<Type>, #Type " should satisfy " #ConceptName); \
-    constexpr bool test_##ConceptName##_##Type = ConceptName<Type>
+inline void demonstrate_concepts(std::ostream& out = std::cout) {
+    out << "--- Concepts ---\n";
+    out << "classify(42)        = " << classify(42) << '\n';
+    out << "classify(42u)       = " << classify(42U) << '\n';
+    out << "classify(3.14)      = " << classify(3.14) << '\n';
+    out << "classify(string)    = " << classify(std::string("x")) << '\n';
+    out << "power(2, 10u)       = " << power(2, 10U) << '\n';
 
-/**
- * @brief Concept validation at compile time
- */
-template<typename T>
-constexpr void validate_concept_requirements() {
-    // Test basic concepts
-    constexpr bool is_arithmetic = Arithmetic<T>;
-    constexpr bool is_printable = Printable<T>;
-    constexpr bool is_comparable = Comparable<T>;
-    constexpr bool is_hashable = Hashable<T>;
-    
-    // Print results (will be optimized away)
-    if constexpr (is_arithmetic) {
-        // T satisfies Arithmetic concept
-    }
-    if constexpr (is_printable) {
-        // T satisfies Printable concept
-    }
-    if constexpr (is_comparable) {
-        // T satisfies Comparable concept
-    }
-    if constexpr (is_hashable) {
-        // T satisfies Hashable concept
-    }
+    std::vector<int> values{5, 3, 8, 1, 9, 2};
+    out << "values              = " << format_value(values) << '\n';
+    sort_range(values);
+    out << "sorted              = " << format_value(values) << '\n';
+    out << "sum / product       = " << sum_range(values) << " / " << product_range(values) << '\n';
+    out << "count_if(even)      = " << algorithms::count_if(values, [](int v) { return v % 2 == 0; }) << '\n';
+
+    MathVector<double> a{3.0, 4.0};
+    const MathVector<double> b{1.0, 2.0};
+    out << "|(3,4)|             = " << a.magnitude() << '\n';
+    out << "(3,4).(1,2)         = " << a.dot(b) << '\n';
+
+    ContainerAdapter<std::vector<int>> adapter;
+    adapter.push_back(7);
+    adapter.push_back(11);
+    out << "adapter front/back  = " << adapter.front() << '/' << adapter.back() << '\n';
+
+    const SmartPtrWrapper<std::unique_ptr<int>> wrapped(std::make_unique<int>(99));
+    out << "wrapped unique_ptr  = " << *wrapped << '\n';
 }
 
-} // namespace Concepts
-} // namespace Templates
-} // namespace CppVerseHub
+} // namespace CppVerseHub::Templates::Concepts
 
-#endif // CONCEPTS_DEMO_HPP
+#endif // CPPVERSEHUB_TEMPLATES_CONCEPTS_DEMO_HPP

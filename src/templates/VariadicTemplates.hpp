@@ -1,236 +1,241 @@
-// File: src/templates/VariadicTemplates.hpp
-// Variadic template demonstrations and parameter pack techniques
+/**
+ * @file VariadicTemplates.hpp
+ * @brief Variadic templates: parameter packs, pack expansion and fold expressions.
+ *
+ * Demonstrates
+ *  - recursive pack processing (pre-C++17) vs. fold expressions (C++17);
+ *  - pack introspection (`sizeof...`, first/last/index-of type);
+ *  - a recursive-inheritance tuple (`RecursiveTuple`) and index-based access;
+ *  - the `overload` idiom (`using Ts::operator()...`) vs. a first-match `multifunction`;
+ *  - perfect forwarding of packs, storing packs in tuples and replaying them with std::apply
+ *    (`Factory`, `Builder`, `make_pipeline`, `compose`);
+ *  - nested pack expansion (`zip`), monadic chaining of std::optional, memoisation keyed by a pack.
+ */
 
-#ifndef VARIADIC_TEMPLATES_HPP
-#define VARIADIC_TEMPLATES_HPP
+#ifndef CPPVERSEHUB_TEMPLATES_VARIADIC_TEMPLATES_HPP
+#define CPPVERSEHUB_TEMPLATES_VARIADIC_TEMPLATES_HPP
 
-#include <tuple>
-#include <utility>
-#include <type_traits>
+#include <algorithm>
+#include <array>
+#include <concepts>
+#include <cstddef>
 #include <functional>
 #include <iostream>
-#include <vector>
-#include <array>
-#include <string>
-#include <sstream>
-#include <memory>
+#include <map>
 #include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
 
-namespace CppVerseHub {
-namespace Templates {
-namespace Variadic {
+namespace CppVerseHub::Templates::Variadic {
 
-// ===== Basic Variadic Templates =====
+// ===== Printing: fold vs. recursion =====
 
 /**
- * @brief Simple variadic function to print multiple arguments
+ * @brief Print arguments separated by spaces using a comma fold.
+ * @param out destination stream
+ * @param args values to print
  */
-template<typename... Args>
-void print(Args&&... args) {
-    ((std::cout << args << " "), ...);
-    std::cout << std::endl;
+template <typename... Args>
+void print(std::ostream& out, const Args&... args) {
+    [[maybe_unused]] std::size_t index = 0;
+    ((out << (index++ == 0 ? "" : " ") << args), ...);
+    out << '\n';
+}
+
+/** @brief Recursion base case. @param out stream @param last final value */
+template <typename T>
+void print_recursive(std::ostream& out, const T& last) {
+    out << last << '\n';
+}
+
+/** @brief Peel off the head and recurse (pre-C++17 style). @param out stream @param head first @param tail rest */
+template <typename T, typename... Rest>
+void print_recursive(std::ostream& out, const T& head, const Rest&... tail) {
+    out << head << ' ';
+    print_recursive(out, tail...);
 }
 
 /**
- * @brief Recursive variadic template (pre-C++17 style)
+ * @brief Join arguments into a string with a separator.
+ * @param separator text between items
+ * @param args values
+ * @return joined text
  */
-template<typename T>
-void print_recursive(T&& t) {
-    std::cout << t << std::endl;
+template <typename... Args>
+[[nodiscard]] std::string join([[maybe_unused]] std::string_view separator, const Args&... args) {
+    std::ostringstream oss;
+    [[maybe_unused]] std::size_t index = 0;
+    ((oss << (index++ == 0 ? std::string_view{} : separator) << args), ...);
+    return oss.str();
 }
 
-template<typename T, typename... Args>
-void print_recursive(T&& t, Args&&... args) {
-    std::cout << t << " ";
-    print_recursive(std::forward<Args>(args)...);
-}
+// ===== Fold-expression arithmetic =====
 
-/**
- * @brief Count number of arguments
- */
-template<typename... Args>
-constexpr std::size_t count_args(Args&&...) {
+/** @return number of arguments */
+template <typename... Args>
+[[nodiscard]] constexpr std::size_t count_args(const Args&...) noexcept {
     return sizeof...(Args);
 }
 
-/**
- * @brief Sum all numeric arguments
- */
-template<typename... Args>
-constexpr auto sum(Args&&... args) {
+/** @param args at least one addend @return right fold of + */
+template <typename... Args>
+    requires(sizeof...(Args) > 0)
+[[nodiscard]] constexpr auto sum(const Args&... args) {
     return (args + ...);
 }
 
-/**
- * @brief Product of all numeric arguments
- */
-template<typename... Args>
-constexpr auto product(Args&&... args) {
-    return (args * ...);
+/** @param args factors (empty product is 1) @return left fold of * with identity */
+template <typename... Args>
+[[nodiscard]] constexpr auto product(const Args&... args) {
+    return (1 * ... * args);
 }
 
-/**
- * @brief Logical AND of all boolean arguments
- */
-template<typename... Args>
-constexpr bool all_true(Args&&... args) {
-    return (args && ...);
+/** @param args values @return true if all are truthy (true for an empty pack) */
+template <typename... Args>
+[[nodiscard]] constexpr bool all_true(const Args&... args) {
+    return (static_cast<bool>(args) && ...);
 }
 
-/**
- * @brief Logical OR of all boolean arguments
- */
-template<typename... Args>
-constexpr bool any_true(Args&&... args) {
-    return (args || ...);
+/** @param args values @return true if any is truthy (false for an empty pack) */
+template <typename... Args>
+[[nodiscard]] constexpr bool any_true(const Args&... args) {
+    return (static_cast<bool>(args) || ...);
 }
 
-// ===== Advanced Variadic Techniques =====
-
-/**
- * @brief Variadic minimum function
- */
-template<typename T>
-constexpr T min_variadic(T&& t) {
-    return std::forward<T>(t);
+/** @brief Recursive minimum: base case. @param value only value @return value */
+template <typename T>
+[[nodiscard]] constexpr T min_recursive(const T& value) {
+    return value;
 }
 
-template<typename T, typename... Args>
-constexpr auto min_variadic(T&& t, Args&&... args) {
-    auto rest_min = min_variadic(std::forward<Args>(args)...);
-    return t < rest_min ? std::forward<T>(t) : rest_min;
+/** @brief Recursive minimum. @param first head @param rest tail @return smallest value (common type) */
+template <typename T, typename... Rest>
+[[nodiscard]] constexpr std::common_type_t<T, Rest...> min_recursive(const T& first, const Rest&... rest) {
+    using R = std::common_type_t<T, Rest...>;
+    const R tail_min = min_recursive(static_cast<R>(rest)...);
+    return static_cast<R>(first) < tail_min ? static_cast<R>(first) : tail_min;
 }
 
-/**
- * @brief C++17 fold expression version
- */
-template<typename... Args>
-constexpr auto min_fold(Args&&... args) {
-    return (args < ...);
+/** @brief Minimum via a comma fold over assignments. @param first head @param rest tail @return smallest */
+template <typename T, typename... Rest>
+[[nodiscard]] constexpr std::common_type_t<T, Rest...> min_fold(const T& first, const Rest&... rest) {
+    std::common_type_t<T, Rest...> result = first;
+    ((result = rest < result ? rest : result), ...);
+    return result;
 }
 
-/**
- * @brief Variadic maximum function
- */
-template<typename... Args>
-constexpr auto max_variadic(Args&&... args) {
-    return (args > ...);
+/** @brief Maximum via a comma fold. @param first head @param rest tail @return largest */
+template <typename T, typename... Rest>
+[[nodiscard]] constexpr std::common_type_t<T, Rest...> max_fold(const T& first, const Rest&... rest) {
+    std::common_type_t<T, Rest...> result = first;
+    ((result = result < rest ? rest : result), ...);
+    return result;
 }
 
-/**
- * @brief Check if all arguments are the same type
- */
-template<typename T, typename... Args>
-constexpr bool all_same_type_v = (std::is_same_v<T, Args> && ...);
+// ===== Pack introspection =====
 
-/**
- * @brief Check if all arguments are convertible to a type
- */
-template<typename Target, typename... Args>
-constexpr bool all_convertible_v = (std::is_convertible_v<Args, Target> && ...);
+/** @brief True if every type in Args is T. */
+template <typename T, typename... Args>
+inline constexpr bool all_same_type_v = (std::is_same_v<T, Args> && ...);
 
-/**
- * @brief Variadic type list utilities
- */
-template<typename... Types>
-struct type_list {
-    static constexpr std::size_t size = sizeof...(Types);
-};
+/** @brief True if every type in Args converts to Target. */
+template <typename Target, typename... Args>
+inline constexpr bool all_convertible_v = (std::is_convertible_v<Args, Target> && ...);
 
-/**
- * @brief Get the first type from a pack
- */
-template<typename... Types>
+/** @brief First type of a non-empty pack. */
+template <typename... Types>
 struct first_type;
-
-template<typename First, typename... Rest>
+/** @brief Implementation. */
+template <typename First, typename... Rest>
 struct first_type<First, Rest...> {
     using type = First;
 };
-
-template<typename... Types>
+/** @brief Alias. */
+template <typename... Types>
 using first_type_t = typename first_type<Types...>::type;
 
-/**
- * @brief Get the last type from a pack
- */
-template<typename... Types>
-struct last_type;
-
-template<typename T>
-struct last_type<T> {
-    using type = T;
+/** @brief Last type of a non-empty pack (via a fold over the comma-separated type identities). */
+template <typename... Types>
+struct last_type {
+    using type = typename decltype((std::type_identity<Types>{}, ...))::type;
 };
-
-template<typename First, typename... Rest>
-struct last_type<First, Rest...> {
-    using type = typename last_type<Rest...>::type;
-};
-
-template<typename... Types>
+/** @brief Alias. */
+template <typename... Types>
 using last_type_t = typename last_type<Types...>::type;
 
-/**
- * @brief Check if a type exists in a parameter pack
- */
-template<typename T, typename... Types>
-constexpr bool contains_type_v = (std::is_same_v<T, Types> || ...);
+/** @brief True if T appears in Types. */
+template <typename T, typename... Types>
+inline constexpr bool contains_type_v = (std::is_same_v<T, Types> || ...);
 
-/**
- * @brief Get index of type in parameter pack
- */
-template<typename T, typename... Types>
-constexpr std::size_t type_index_v = []() -> std::size_t {
+/** @brief Index of the first T in Types, or sizeof...(Types) if absent. */
+template <typename T, typename... Types>
+inline constexpr std::size_t type_index_v = [] {
+    constexpr std::array<bool, sizeof...(Types) + 1> matches{std::is_same_v<T, Types>..., true};
     std::size_t index = 0;
-    bool found = false;
-    ((std::is_same_v<T, Types> ? (found = true) : (found ? false : ++index)), ...);
-    return found ? index : sizeof...(Types);
+    while (!matches[index]) {
+        ++index;
+    }
+    return index;
 }();
 
-// ===== Variadic Class Templates =====
+/** @brief Number of occurrences of T in Types. */
+template <typename T, typename... Types>
+inline constexpr std::size_t count_type_v = (std::size_t{0} + ... + (std::is_same_v<T, Types> ? 1U : 0U));
 
-/**
- * @brief Variadic tuple-like class
- */
-template<typename... Types>
-class Tuple;
+// ===== Recursive-inheritance tuple =====
 
-template<>
-class Tuple<> {
+/** @brief A tuple built by inheriting from the tuple of the tail types. */
+template <typename... Types>
+class RecursiveTuple;
+
+/** @brief Empty tuple terminates the recursion. */
+template <>
+class RecursiveTuple<> {
 public:
-    static constexpr std::size_t size() { return 0; }
+    /** @return 0 */
+    [[nodiscard]] static constexpr std::size_t size() noexcept { return 0; }
 };
 
-template<typename Head, typename... Tail>
-class Tuple<Head, Tail...> : private Tuple<Tail...> {
+/** @brief Head element + base holding the tail. */
+template <typename Head, typename... Tail>
+class RecursiveTuple<Head, Tail...> : private RecursiveTuple<Tail...> {
+    using Base = RecursiveTuple<Tail...>;
+
+public:
+    /** @return number of elements */
+    [[nodiscard]] static constexpr std::size_t size() noexcept { return 1 + sizeof...(Tail); }
+
+    /** @brief Value-initialise every element. */
+    constexpr RecursiveTuple() = default;
+
+    /** @brief Element-wise construction (exactly one argument per element). @param h head @param t tail */
+    template <typename H, typename... T>
+        requires(sizeof...(T) == sizeof...(Tail) && !std::is_same_v<std::remove_cvref_t<H>, RecursiveTuple>)
+    constexpr explicit RecursiveTuple(H&& h, T&&... t) : Base(std::forward<T>(t)...), head_(std::forward<H>(h)) {}
+
+    /** @return head element */
+    [[nodiscard]] constexpr Head& head() & noexcept { return head_; }
+    /** @return head element */
+    [[nodiscard]] constexpr const Head& head() const& noexcept { return head_; }
+    /** @return tail tuple */
+    [[nodiscard]] constexpr Base& tail() noexcept { return *this; }
+    /** @return tail tuple */
+    [[nodiscard]] constexpr const Base& tail() const noexcept { return *this; }
+
 private:
-    Head head_;
-    using Base = Tuple<Tail...>;
-    
-public:
-    static constexpr std::size_t size() { return 1 + Base::size(); }
-    
-    Tuple() = default;
-    
-    template<typename H, typename... T>
-    explicit Tuple(H&& h, T&&... t) 
-        : Base(std::forward<T>(t)...), head_(std::forward<H>(h)) {}
-    
-    Head& head() & { return head_; }
-    const Head& head() const& { return head_; }
-    Head&& head() && { return std::move(head_); }
-    const Head&& head() const&& { return std::move(head_); }
-    
-    Base& tail() { return static_cast<Base&>(*this); }
-    const Base& tail() const { return static_cast<const Base&>(*this); }
+    Head head_{};
 };
 
-/**
- * @brief Get element from tuple by index
- */
-template<std::size_t Index, typename... Types>
-constexpr auto& get(Tuple<Types...>& t) {
+/** @brief Index-based access (recursion on the index). @param t tuple @return element Index */
+template <std::size_t Index, typename... Types>
+    requires(Index < sizeof...(Types))
+[[nodiscard]] constexpr auto& get(RecursiveTuple<Types...>& t) noexcept {
     if constexpr (Index == 0) {
         return t.head();
     } else {
@@ -238,8 +243,10 @@ constexpr auto& get(Tuple<Types...>& t) {
     }
 }
 
-template<std::size_t Index, typename... Types>
-constexpr const auto& get(const Tuple<Types...>& t) {
+/** @brief Const index-based access. @param t tuple @return element Index */
+template <std::size_t Index, typename... Types>
+    requires(Index < sizeof...(Types))
+[[nodiscard]] constexpr const auto& get(const RecursiveTuple<Types...>& t) noexcept {
     if constexpr (Index == 0) {
         return t.head();
     } else {
@@ -247,391 +254,468 @@ constexpr const auto& get(const Tuple<Types...>& t) {
     }
 }
 
-/**
- * @brief Make tuple helper
- */
-template<typename... Types>
-constexpr auto make_tuple(Types&&... args) {
-    return Tuple<std::decay_t<Types>...>(std::forward<Types>(args)...);
+/** @param args elements @return RecursiveTuple of decayed argument types */
+template <typename... Types>
+[[nodiscard]] constexpr auto make_recursive_tuple(Types&&... args) {
+    return RecursiveTuple<std::decay_t<Types>...>(std::forward<Types>(args)...);
 }
 
-/**
- * @brief Variadic visitor pattern
- */
-template<typename... Visitors>
+// ===== Overload sets from lambdas =====
+
+/** @brief Inherit call operators from every lambda; overload resolution picks the best match. */
+template <typename... Visitors>
 struct overload : Visitors... {
     using Visitors::operator()...;
 };
 
-template<typename... Visitors>
+/** @brief Deduction guide (unnecessary since C++20 aggregate CTAD, kept for clarity/portability). */
+template <typename... Visitors>
 overload(Visitors...) -> overload<Visitors...>;
 
-/**
- * @brief Variadic function object
- */
-template<typename... Funcs>
+/** @brief First-match dispatcher: tries callables in order (contrast with overload's best-match). */
+template <typename... Funcs>
 class multifunction;
 
-template<typename Func>
+/** @brief Last callable. */
+template <typename Func>
 class multifunction<Func> {
+public:
+    /** @param f callable */
+    explicit multifunction(Func f) : func_(std::move(f)) {}
+    /** @param args arguments @return f(args...) */
+    template <typename... Args>
+        requires std::invocable<const Func&, Args...>
+    decltype(auto) operator()(Args&&... args) const {
+        return std::invoke(func_, std::forward<Args>(args)...);
+    }
+
 private:
     Func func_;
-    
-public:
-    explicit multifunction(Func f) : func_(std::move(f)) {}
-    
-    template<typename... Args>
-    auto operator()(Args&&... args) const {
-        return func_(std::forward<Args>(args)...);
-    }
 };
 
-template<typename Func, typename... Funcs>
+/** @brief Try Func, else delegate to the rest. */
+template <typename Func, typename... Funcs>
 class multifunction<Func, Funcs...> : private multifunction<Funcs...> {
-private:
-    Func func_;
     using Base = multifunction<Funcs...>;
-    
+
 public:
-    explicit multifunction(Func f, Funcs... fs) 
-        : Base(std::move(fs)...), func_(std::move(f)) {}
-    
-    template<typename... Args>
-    auto operator()(Args&&... args) const {
-        if constexpr (std::is_invocable_v<Func, Args...>) {
-            return func_(std::forward<Args>(args)...);
+    /** @param f first callable @param fs remaining callables */
+    explicit multifunction(Func f, Funcs... fs) : Base(std::move(fs)...), func_(std::move(f)) {}
+    /** @param args arguments @return result of the first callable invocable with args */
+    template <typename... Args>
+    decltype(auto) operator()(Args&&... args) const {
+        if constexpr (std::is_invocable_v<const Func&, Args...>) {
+            return std::invoke(func_, std::forward<Args>(args)...);
         } else {
             return Base::operator()(std::forward<Args>(args)...);
         }
     }
+
+private:
+    Func func_;
 };
 
-/**
- * @brief Variadic hash combiner
- */
-template<typename... Types>
+/** @brief CTAD guide. */
+template <typename... Funcs>
+multifunction(Funcs...) -> multifunction<Funcs...>;
+
+/** @brief Boost-style hash_combine over a pack of hashable values. */
+template <typename... Types>
 struct hash_combine {
-    std::size_t operator()(const Types&... values) const {
+    /** @param values values to hash @return combined hash */
+    [[nodiscard]] std::size_t operator()(const Types&... values) const {
         std::size_t seed = 0;
-        ((seed ^= std::hash<Types>{}(values) + 0x9e3779b9 + (seed << 6) + (seed >> 2)), ...);
+        ((seed ^= std::hash<Types>{}(values) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U)), ...);
         return seed;
     }
 };
 
+// ===== Storing and replaying packs =====
+
 /**
- * @brief Variadic factory class
+ * @brief Stores constructor arguments and creates Products on demand, optionally appending more.
+ * @tparam Product type to create
+ * @tparam Args stored argument types
  */
-template<typename Product, typename... Args>
+template <typename Product, typename... Args>
 class Factory {
+public:
+    /** @param args arguments stored by value */
+    explicit Factory(Args... args) : args_(std::move(args)...) {}
+
+    /** @param extra_args appended arguments @return Product(stored..., extra...) */
+    template <typename... ExtraArgs>
+    [[nodiscard]] Product create(ExtraArgs&&... extra_args) const {
+        return std::apply(
+            [&](const auto&... stored) { return Product(stored..., std::forward<ExtraArgs>(extra_args)...); }, args_);
+    }
+
 private:
     std::tuple<Args...> args_;
-    
-public:
-    explicit Factory(Args... args) : args_(std::move(args)...) {}
-    
-    template<typename... ExtraArgs>
-    Product create(ExtraArgs&&... extra_args) const {
-        return std::apply([&](const auto&... stored_args) {
-            return Product(stored_args..., std::forward<ExtraArgs>(extra_args)...);
-        }, args_);
-    }
 };
 
 /**
- * @brief Variadic builder pattern
+ * @brief Type-accumulating builder: every with() returns a new Builder type whose pack grows by one.
+ * @tparam Product type to construct
+ * @tparam Fields accumulated argument types
  */
-template<typename Product>
-class VariadicBuilder {
+template <typename Product, typename... Fields>
+class Builder {
+public:
+    /** @brief Empty builder. */
+    Builder() = default;
+    /** @param fields accumulated arguments */
+    explicit Builder(std::tuple<Fields...> fields) : fields_(std::move(fields)) {}
+
+    /** @param value next constructor argument @return builder with one more field */
+    template <typename T>
+    [[nodiscard]] auto with(T&& value) && {
+        return Builder<Product, Fields..., std::decay_t<T>>(
+            std::tuple_cat(std::move(fields_), std::make_tuple(std::forward<T>(value))));
+    }
+
+    /** @return Product(fields...) */
+    [[nodiscard]] Product build() && {
+        return std::make_from_tuple<Product>(std::move(fields_));
+    }
+
+    /** @return number of accumulated fields */
+    [[nodiscard]] static constexpr std::size_t field_count() noexcept { return sizeof...(Fields); }
+
 private:
-    std::tuple<> data_;
-    
-public:
-    VariadicBuilder() = default;
-    
-    template<typename T>
-    auto with(T&& value) && {
-        auto new_data = std::tuple_cat(std::move(data_), std::make_tuple(std::forward<T>(value)));
-        
-        class NewBuilder {
-        private:
-            decltype(new_data) data_;
-            
-        public:
-            explicit NewBuilder(decltype(new_data) d) : data_(std::move(d)) {}
-            
-            template<typename U>
-            auto with(U&& val) && {
-                return VariadicBuilder<Product>{}.init_with_tuple(
-                    std::tuple_cat(std::move(data_), std::make_tuple(std::forward<U>(val)))
-                );
-            }
-            
-            Product build() && {
-                return std::apply([](auto&&... args) {
-                    return Product(std::forward<decltype(args)>(args)...);
-                }, std::move(data_));
-            }
-            
-            template<typename Tuple>
-            auto init_with_tuple(Tuple&& t) {
-                class TupleBuilder {
-                private:
-                    Tuple data_;
-                    
-                public:
-                    explicit TupleBuilder(Tuple d) : data_(std::move(d)) {}
-                    
-                    template<typename U>
-                    auto with(U&& val) && {
-                        return TupleBuilder{std::tuple_cat(std::move(data_), std::make_tuple(std::forward<U>(val)))};
-                    }
-                    
-                    Product build() && {
-                        return std::apply([](auto&&... args) {
-                            return Product(std::forward<decltype(args)>(args)...);
-                        }, std::move(data_));
-                    }
-                };
-                return TupleBuilder{std::forward<Tuple>(t)};
-            }
-        };
-        
-        return NewBuilder{std::move(new_data)};
-    }
+    std::tuple<Fields...> fields_;
 };
 
-// ===== Variadic Algorithms =====
-
-/**
- * @brief Apply function to each argument
- */
-template<typename Func, typename... Args>
-void for_each_arg(Func&& func, Args&&... args) {
-    (func(std::forward<Args>(args)), ...);
+/** @return empty Builder for Product */
+template <typename Product>
+[[nodiscard]] Builder<Product> make_builder() {
+    return Builder<Product>{};
 }
 
-/**
- * @brief Transform each argument and collect results
- */
-template<typename Func, typename... Args>
-constexpr auto transform_args(Func&& func, Args&&... args) {
-    return std::make_tuple(func(std::forward<Args>(args))...);
+// ===== Pack algorithms =====
+
+/** @brief Call func on each argument, in order. @param func callable @param args arguments */
+template <typename Func, typename... Args>
+constexpr void for_each_arg(Func&& func, Args&&... args) {
+    (std::invoke(func, std::forward<Args>(args)), ...);
 }
 
-/**
- * @brief Filter arguments based on predicate
- */
-template<typename Pred, typename... Args>
-constexpr auto filter_args(Pred&& pred, Args&&... args) {
-    return std::tuple_cat(
-        std::conditional_t<
-            std::invoke_result_v<Pred, Args>,
-            std::tuple<std::decay_t<Args>>,
-            std::tuple<>
-        >(args)...
-    );
+/** @param func callable @param args arguments @return tuple of func(arg) for each arg */
+template <typename Func, typename... Args>
+[[nodiscard]] constexpr auto transform_args(Func&& func, Args&&... args) {
+    return std::make_tuple(std::invoke(func, std::forward<Args>(args))...);
 }
 
-/**
- * @brief Zip multiple parameter packs
- */
-template<std::size_t... Indices, typename... Tuples>
-constexpr auto zip_impl(std::index_sequence<Indices...>, Tuples&&... tuples) {
-    return std::make_tuple(std::make_tuple(std::get<Indices>(tuples)...)...);
+namespace detail {
+template <template <typename> class Pred, typename Arg>
+constexpr auto keep_if(Arg&& arg) {
+    using T = std::decay_t<Arg>;
+    if constexpr (Pred<T>::value) {
+        return std::tuple<T>(std::forward<Arg>(arg));
+    } else {
+        return std::tuple<>{};
+    }
 }
-
-template<typename... Tuples>
-constexpr auto zip(Tuples&&... tuples) {
-    constexpr auto min_size = std::min({std::tuple_size_v<std::decay_t<Tuples>>...});
-    return zip_impl(std::make_index_sequence<min_size>{}, std::forward<Tuples>(tuples)...);
-}
+} // namespace detail
 
 /**
- * @brief Variadic compose function
+ * @brief Keep the arguments whose decayed type satisfies the trait Pred (e.g. std::is_integral).
+ * @param args arguments
+ * @return tuple of kept (decayed) arguments
  */
-template<typename F>
-constexpr auto compose(F&& f) {
+template <template <typename> class Pred, typename... Args>
+[[nodiscard]] constexpr auto filter_args(Args&&... args) {
+    return std::tuple_cat(detail::keep_if<Pred>(std::forward<Args>(args))...);
+}
+
+namespace detail {
+template <std::size_t I, typename... Tuples>
+constexpr auto zip_at(const Tuples&... tuples) {
+    return std::make_tuple(std::get<I>(tuples)...);
+}
+} // namespace detail
+
+/**
+ * @brief Zip tuples element-wise up to the shortest length. Uses nested expansion: the inner
+ *        `tuples...` expands per index, the outer `I...` builds the result.
+ * @param tuples tuple-like objects
+ * @return tuple of tuples
+ */
+template <typename... Tuples>
+    requires(sizeof...(Tuples) > 0)
+[[nodiscard]] constexpr auto zip(const Tuples&... tuples) {
+    constexpr std::size_t length = std::min({std::tuple_size_v<Tuples>...});
+    return [&]<std::size_t... I>(std::index_sequence<I...>) {
+        return std::make_tuple(detail::zip_at<I>(tuples...)...);
+    }(std::make_index_sequence<length>{});
+}
+
+/** @brief compose(f) == f. @param f callable @return f */
+template <typename F>
+[[nodiscard]] constexpr auto compose(F&& f) {
     return std::forward<F>(f);
 }
 
-template<typename F, typename... Funcs>
-constexpr auto compose(F&& f, Funcs&&... funcs) {
-    return [f = std::forward<F>(f), composed = compose(std::forward<Funcs>(funcs)...)](auto&&... args) {
-        return f(composed(std::forward<decltype(args)>(args)...));
+/** @brief compose(f, g, h)(x) == f(g(h(x))). @param f outermost @param funcs inner callables @return composite */
+template <typename F, typename... Funcs>
+[[nodiscard]] constexpr auto compose(F&& f, Funcs&&... funcs) {
+    return [outer = std::forward<F>(f), inner = compose(std::forward<Funcs>(funcs)...)](auto&&... args) {
+        return outer(inner(std::forward<decltype(args)>(args)...));
     };
 }
 
 /**
- * @brief Variadic pipeline
+ * @brief Value-carrying pipeline; each then() may change the value type.
+ * @tparam T current value type
  */
-template<typename T>
+template <typename T>
 class Pipeline {
+public:
+    /** @param value initial value */
+    explicit Pipeline(T value) : value_(std::move(value)) {}
+
+    /** @param func transformation @return pipeline over func(value) */
+    template <typename Func>
+    [[nodiscard]] auto then(Func&& func) && {
+        using R = std::decay_t<std::invoke_result_t<Func, T&&>>;
+        return Pipeline<R>(std::invoke(std::forward<Func>(func), std::move(value_)));
+    }
+
+    /** @return final value (moved out) */
+    [[nodiscard]] T get() && { return std::move(value_); }
+    /** @return final value */
+    [[nodiscard]] const T& get() const& { return value_; }
+
 private:
     T value_;
-    
-public:
-    explicit Pipeline(T value) : value_(std::move(value)) {}
-    
-    template<typename Func>
-    auto then(Func&& func) && {
-        auto result = func(std::move(value_));
-        return Pipeline<decltype(result)>{std::move(result)};
-    }
-    
-    T get() && { return std::move(value_); }
-    const T& get() const& { return value_; }
 };
 
-template<typename T>
-Pipeline<std::decay_t<T>> make_pipeline(T&& value) {
-    return Pipeline<std::decay_t<T>>{std::forward<T>(value)};
+/** @param value initial value @return pipeline */
+template <typename T>
+[[nodiscard]] Pipeline<std::decay_t<T>> make_pipeline(T&& value) {
+    return Pipeline<std::decay_t<T>>(std::forward<T>(value));
 }
 
-// ===== Variadic Utilities =====
+// ===== Utilities =====
 
 /**
- * @brief Variadic string formatter
+ * @brief Replace successive "{}" placeholders with the arguments (extra args are ignored,
+ *        missing args leave the placeholder in place).
+ * @param format pattern
+ * @param args substitutions
+ * @return formatted text
  */
-template<typename... Args>
-std::string format_string(const std::string& format, Args&&... args) {
+template <typename... Args>
+[[nodiscard]] std::string format_string(std::string_view format, const Args&... args) {
     std::ostringstream oss;
     std::size_t pos = 0;
-    std::size_t arg_index = 0;
-    
-    auto format_arg = [&](auto&& arg) {
-        std::size_t placeholder = format.find("{}", pos);
-        if (placeholder != std::string::npos && arg_index < sizeof...(Args)) {
-            oss << format.substr(pos, placeholder - pos) << arg;
-            pos = placeholder + 2;
+    const auto emit = [&](const auto& arg) {
+        const std::size_t placeholder = format.find("{}", pos);
+        if (placeholder == std::string_view::npos) {
+            return;
         }
-        ++arg_index;
+        oss << format.substr(pos, placeholder - pos) << arg;
+        pos = placeholder + 2;
     };
-    
-    (format_arg(args), ...);
+    (emit(args), ...);
     oss << format.substr(pos);
-    
     return oss.str();
 }
 
-/**
- * @brief Variadic array maker
- */
-template<typename T, typename... Args>
-    requires (std::is_convertible_v<Args, T> && ...)
-constexpr std::array<T, sizeof...(Args)> make_array(Args&&... args) {
+/** @param args values convertible to T @return std::array<T, N> */
+template <typename T, typename... Args>
+    requires(std::is_convertible_v<Args, T> && ...)
+[[nodiscard]] constexpr std::array<T, sizeof...(Args)> make_array(Args&&... args) {
     return {{static_cast<T>(std::forward<Args>(args))...}};
 }
 
-/**
- * @brief Variadic vector maker
- */
-template<typename... Args>
-auto make_vector(Args&&... args) {
+/** @param args at least one value @return vector of the common type */
+template <typename... Args>
+    requires(sizeof...(Args) > 0)
+[[nodiscard]] auto make_vector(Args&&... args) {
     using T = std::common_type_t<std::decay_t<Args>...>;
-    return std::vector<T>{static_cast<T>(std::forward<Args>(args))...};
+    std::vector<T> result;
+    result.reserve(sizeof...(Args));
+    (result.push_back(static_cast<T>(std::forward<Args>(args))), ...);
+    return result;
 }
 
-/**
- * @brief Variadic optional chain
- */
-template<typename T>
-constexpr std::optional<T> optional_chain(std::optional<T> opt) {
+/** @brief Chain base case. @param opt value @return opt */
+template <typename T>
+[[nodiscard]] constexpr std::optional<T> optional_chain(std::optional<T> opt) {
     return opt;
 }
 
-template<typename T, typename Func, typename... Funcs>
-constexpr auto optional_chain(std::optional<T> opt, Func&& func, Funcs&&... funcs) {
-    if (!opt) return decltype(optional_chain(func(*opt), funcs...)){};
-    return optional_chain(func(*opt), std::forward<Funcs>(funcs)...);
+/**
+ * @brief Monadic chaining: each func maps a value to std::optional<U>; the first empty result
+ *        short-circuits the rest.
+ * @param opt starting value
+ * @param func next step
+ * @param funcs remaining steps
+ * @return final optional
+ */
+template <typename T, typename Func, typename... Funcs>
+[[nodiscard]] constexpr auto optional_chain(std::optional<T> opt, Func&& func, Funcs&&... funcs) {
+    using Next = std::invoke_result_t<Func, T&>;
+    using Result = decltype(optional_chain(std::declval<Next>(), std::declval<Funcs>()...));
+    if (!opt) {
+        return Result{};
+    }
+    return optional_chain(std::invoke(func, *opt), std::forward<Funcs>(funcs)...);
 }
 
-/**
- * @brief Variadic variant visitor
- */
-template<typename Variant, typename... Visitors>
-auto visit_variant(Variant&& var, Visitors&&... visitors) {
+/** @param var variant @param visitors lambdas, one per alternative @return visitor result */
+template <typename Variant, typename... Visitors>
+decltype(auto) visit_variant(Variant&& var, Visitors&&... visitors) {
     return std::visit(overload{std::forward<Visitors>(visitors)...}, std::forward<Variant>(var));
 }
 
 /**
- * @brief Thread-safe variadic function call
+ * @brief Exception-safe call. For non-void results returns std::optional (empty on exception);
+ *        for void results returns bool (false on exception).
+ * @param func callable
+ * @param args arguments
+ * @return optional result or success flag
  */
-template<typename Func, typename... Args>
-auto safe_call(Func&& func, Args&&... args) -> std::optional<std::invoke_result_t<Func, Args...>> {
-    try {
-        if constexpr (std::is_void_v<std::invoke_result_t<Func, Args...>>) {
+template <typename Func, typename... Args>
+[[nodiscard]] auto safe_call(Func&& func, Args&&... args) noexcept {
+    using R = std::invoke_result_t<Func, Args...>;
+    if constexpr (std::is_void_v<R>) {
+        try {
             std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
-            return std::nullopt; // Placeholder for void return
-        } else {
-            return std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+            return true;
+        } catch (...) {
+            return false;
         }
-    } catch (...) {
-        return std::nullopt;
+    } else {
+        using Result = std::optional<std::decay_t<R>>;
+        try {
+            return Result(std::invoke(std::forward<Func>(func), std::forward<Args>(args)...));
+        } catch (...) {
+            return Result{};
+        }
     }
 }
 
 /**
- * @brief Variadic perfect forwarding wrapper
+ * @brief Wraps a callable and perfectly forwards every call to it.
+ * @tparam Func wrapped callable
  */
-template<typename Func>
+template <typename Func>
 class perfect_forwarder {
+public:
+    /** @param func callable */
+    explicit perfect_forwarder(Func func) : func_(std::move(func)) {}
+    /** @param args arguments @return func(args...) */
+    template <typename... Args>
+    decltype(auto) operator()(Args&&... args) const {
+        return std::invoke(func_, std::forward<Args>(args)...);
+    }
+    /** @param args arguments @return func(args...) */
+    template <typename... Args>
+    decltype(auto) operator()(Args&&... args) {
+        return std::invoke(func_, std::forward<Args>(args)...);
+    }
+
 private:
     Func func_;
-    
-public:
-    explicit perfect_forwarder(Func func) : func_(std::move(func)) {}
-    
-    template<typename... Args>
-    decltype(auto) operator()(Args&&... args) const {
-        return func_(std::forward<Args>(args)...);
-    }
-    
-    template<typename... Args>
-    decltype(auto) operator()(Args&&... args) {
-        return func_(std::forward<Args>(args)...);
-    }
 };
 
-template<typename Func>
-perfect_forwarder<std::decay_t<Func>> make_perfect_forwarder(Func&& func) {
-    return perfect_forwarder<std::decay_t<Func>>{std::forward<Func>(func)};
+/** @param func callable @return forwarding wrapper */
+template <typename Func>
+[[nodiscard]] perfect_forwarder<std::decay_t<Func>> make_perfect_forwarder(Func&& func) {
+    return perfect_forwarder<std::decay_t<Func>>(std::forward<Func>(func));
 }
 
-/**
- * @brief Variadic memoization
- */
-template<typename Func>
+/** @brief Memoising wrapper keyed by the decayed argument pack. Not thread-safe. */
+template <typename Signature>
 class memoized;
 
-template<typename R, typename... Args>
+/** @brief Implementation for R(Args...). */
+template <typename R, typename... Args>
 class memoized<R(Args...)> {
-private:
-    mutable std::map<std::tuple<Args...>, R> cache_;
-    std::function<R(Args...)> func_;
-    
 public:
+    using key_type = std::tuple<std::decay_t<Args>...>; ///< cache key
+
+    /** @param f function to memoise */
     explicit memoized(std::function<R(Args...)> f) : func_(std::move(f)) {}
-    
-    R operator()(Args... args) const {
-        auto key = std::make_tuple(args...);
-        auto it = cache_.find(key);
-        if (it != cache_.end()) {
+
+    /** @param args arguments @return cached or freshly computed result */
+    R operator()(Args... args) {
+        key_type key(args...);
+        if (const auto it = cache_.find(key); it != cache_.end()) {
+            ++hits_;
             return it->second;
         }
-        
-        auto result = func_(args...);
-        cache_[key] = result;
+        R result = func_(std::forward<Args>(args)...);
+        cache_.emplace(std::move(key), result);
         return result;
     }
+
+    /** @return number of cache hits */
+    [[nodiscard]] std::size_t hits() const noexcept { return hits_; }
+    /** @return number of cached entries */
+    [[nodiscard]] std::size_t cache_size() const noexcept { return cache_.size(); }
+
+private:
+    std::function<R(Args...)> func_;
+    std::map<key_type, R> cache_;
+    std::size_t hits_ = 0;
 };
 
-template<typename Func>
-auto memoize(Func&& func) {
-    return memoized<std::decay_t<Func>>{std::forward<Func>(func)};
+/**
+ * @brief Memoise func with an explicit signature, e.g. `memoize<long(int)>(f)`.
+ * @param func callable compatible with Signature
+ * @return memoising wrapper
+ */
+template <typename Signature, typename Func>
+[[nodiscard]] memoized<Signature> memoize(Func&& func) {
+    return memoized<Signature>(std::function<Signature>(std::forward<Func>(func)));
 }
 
-} // namespace Variadic
-} // namespace Templates
-} // namespace CppVerseHub
+// ===== Showcase =====
 
-#endif // VARIADIC_TEMPLATES_HPP
+/**
+ * @brief Exercise the variadic utilities.
+ * @param out destination stream
+ */
+inline void demonstrate_variadic_templates(std::ostream& out = std::cout) {
+    out << "--- Variadic templates ---\n";
+    print(out, "print:", 1, 2.5, 'c', std::string("str"));
+    out << "print_recursive:    ";
+    print_recursive(out, 1, 2, 3);
+    out << "sum(1,2,3,4)        = " << sum(1, 2, 3, 4) << '\n';
+    out << "product(2,3,4)      = " << product(2, 3, 4) << '\n';
+    out << "min_fold(5,2.5,9)   = " << min_fold(5, 2.5, 9) << '\n';
+    out << "join                = " << join(", ", "a", 1, 'b') << '\n';
+    out << "format_string       = " << format_string("{} + {} = {}", 2, 3, 5) << '\n';
+
+    auto tuple = make_recursive_tuple(1, std::string("two"), 3.0);
+    out << "RecursiveTuple<1>   = " << get<1>(tuple) << '\n';
+
+    const std::variant<int, std::string> var = std::string("variant");
+    out << "visit_variant       = "
+        << visit_variant(
+               var, [](int i) { return "int " + std::to_string(i); },
+               [](const std::string& s) { return "string " + s; })
+        << '\n';
+
+    const auto inc_then_double = compose([](int x) { return x * 2; }, [](int x) { return x + 1; });
+    out << "compose(x*2, x+1)(4)= " << inc_then_double(4) << '\n';
+
+    const auto words = make_builder<std::string>().with(std::size_t{3}).with('z').build();
+    out << "Builder<string>     = " << words << '\n';
+
+    const auto result = optional_chain(
+        std::optional<int>(16), [](int v) { return v > 0 ? std::optional<int>(v / 2) : std::nullopt; },
+        [](int v) { return std::optional<std::string>(std::to_string(v)); });
+    out << "optional_chain      = " << result.value_or("empty") << '\n';
+
+    auto square = memoize<long(int)>([](int v) { return static_cast<long>(v) * v; });
+    out << "memoized square(12) = " << square(12) << " (again: " << square(12) << ", hits " << square.hits()
+        << ")\n";
+}
+
+} // namespace CppVerseHub::Templates::Variadic
+
+#endif // CPPVERSEHUB_TEMPLATES_VARIADIC_TEMPLATES_HPP
