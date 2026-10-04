@@ -19,6 +19,15 @@
 #ifndef CPPVERSEHUB_TEMPLATES_META_PROGRAMMING_HPP
 #define CPPVERSEHUB_TEMPLATES_META_PROGRAMMING_HPP
 
+/// Portable `[[no_unique_address]]`: MSVC ignores the standard spelling and needs its own attribute.
+#ifndef CPPVERSEHUB_NO_UNIQUE_ADDRESS
+#if defined(_MSC_VER) && !defined(__clang__)
+#define CPPVERSEHUB_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+#define CPPVERSEHUB_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
+#endif
+
 #include <array>
 #include <cassert>
 #include <concepts>
@@ -884,7 +893,7 @@ public:
 private:
     typename expression_storage<E1>::type lhs_;
     typename expression_storage<E2>::type rhs_;
-    [[no_unique_address]] Op op_;
+    CPPVERSEHUB_NO_UNIQUE_ADDRESS Op op_;
 };
 
 /**

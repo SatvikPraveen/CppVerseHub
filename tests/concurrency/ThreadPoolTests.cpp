@@ -288,6 +288,9 @@ TEST_CASE("WorkStealingThreadPool supports tasks spawning subtasks", "[concurren
     }
     // sum over p<8, c<16 of (100p + c) = 100*16*28 + 8*120
     CHECK(total == 100LL * 16 * 28 + 8 * 120);
+    // A worker bumps the counter just after fulfilling a task's promise, so the count may briefly
+    // lag behind future readiness. Joining the workers makes it exact.
+    pool.shutdown();
     CHECK(pool.completed_tasks() == 8 + 8 * 16);
 }
 

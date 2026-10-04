@@ -403,7 +403,8 @@ namespace CppVerseHub::Concurrency {
         [[nodiscard]] std::size_t pending_tasks() const { return core_.pending(); }
         /** @brief @return true once shutdown has been initiated. */
         [[nodiscard]] bool is_shutdown() const { return core_.is_shutdown(); }
-        /** @brief @return Number of finished tasks. */
+        /** @brief @return Number of finished tasks. Updated just after a task's result is published, so it
+         *         may briefly lag behind future readiness; it is exact after wait_idle() or shutdown(). */
         [[nodiscard]] std::uint64_t completed_tasks() const noexcept { return core_.completed(); }
 
     private:
@@ -468,7 +469,8 @@ namespace CppVerseHub::Concurrency {
         [[nodiscard]] std::uint64_t steal_count() const noexcept {
             return steals_.load(std::memory_order_relaxed);
         }
-        /** @brief @return Number of finished tasks. */
+        /** @brief @return Number of finished tasks. Updated just after a task's result is published, so it
+         *         may briefly lag behind future readiness; it is exact after wait_idle() or shutdown(). */
         [[nodiscard]] std::uint64_t completed_tasks() const noexcept {
             return completed_.load(std::memory_order_relaxed);
         }

@@ -19,6 +19,15 @@
 #ifndef CPPVERSEHUB_TEMPLATES_GENERIC_CONTAINERS_HPP
 #define CPPVERSEHUB_TEMPLATES_GENERIC_CONTAINERS_HPP
 
+/// Portable `[[no_unique_address]]`: MSVC ignores the standard spelling and needs its own attribute.
+#ifndef CPPVERSEHUB_NO_UNIQUE_ADDRESS
+#if defined(_MSC_VER) && !defined(__clang__)
+#define CPPVERSEHUB_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+#define CPPVERSEHUB_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -693,7 +702,7 @@ private:
     T* data_ = nullptr;
     size_type size_ = 0;
     size_type capacity_ = 0;
-    [[no_unique_address]] Allocator alloc_{};
+    CPPVERSEHUB_NO_UNIQUE_ADDRESS Allocator alloc_{};
 };
 
 // =====================================================================================================
@@ -801,7 +810,7 @@ public:
 
 private:
     pointer ptr_ = nullptr;
-    [[no_unique_address]] Deleter deleter_{};
+    CPPVERSEHUB_NO_UNIQUE_ADDRESS Deleter deleter_{};
 };
 
 /**
@@ -855,7 +864,7 @@ public:
 
 private:
     pointer ptr_ = nullptr;
-    [[no_unique_address]] Deleter deleter_{};
+    CPPVERSEHUB_NO_UNIQUE_ADDRESS Deleter deleter_{};
 };
 
 /**
@@ -957,7 +966,7 @@ protected:
 
 private:
     U* ptr_;
-    [[no_unique_address]] Deleter deleter_;
+    CPPVERSEHUB_NO_UNIQUE_ADDRESS Deleter deleter_;
 };
 
 /** @brief Control block that stores the object inline (single allocation for make_shared_ptr). */
