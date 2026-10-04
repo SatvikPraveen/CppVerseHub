@@ -917,6 +917,8 @@ struct ParallelMergeSortFn : detail::SortRangeAdaptor<ParallelMergeSortFn> {
     I operator()(I first, S last, Comp comp = {}, Proj proj = {}) const {
         I end = std::ranges::next(first, last);
         const unsigned hw = std::max(1U, std::thread::hardware_concurrency());
+        // std::bit_width returns int after LWG 3656 but unsigned in older libraries; keep the cast portable.
+        // NOLINTNEXTLINE(readability-redundant-casting)
         const int depth = static_cast<int>(std::bit_width(hw));
         sort_impl(first, end, comp, proj, depth);
         return end;
