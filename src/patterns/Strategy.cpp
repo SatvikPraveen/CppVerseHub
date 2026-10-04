@@ -1,467 +1,254 @@
-// File: src/patterns/Strategy.cpp
-// CppVerseHub - Strategy Pattern Implementation for Fleet Routing Strategies
+/**
+ * @file Strategy.cpp
+ * @brief Routing strategies, router, target selectors and the strategy showcase.
+ */
 
-#include "Strategy.hpp"
+#include "patterns/Strategy.hpp"
+
 #include <algorithm>
-#include <numeric>
-#include <cmath>
-#include <sstream>
-#include <iomanip>
+#include <limits>
+#include <stdexcept>
+#include <utility>
 
 namespace CppVerseHub::Patterns {
 
-// Base Strategy Implementation
-RouteInfo IRoutingStrategy::calculateMultiWaypointRoute(
-    const std::vector<Coordinate3D>& waypoints,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    if (waypoints.size() < 2) {
-        return RouteInfo{};
-    }
-    
-    RouteInfo combined_route;
-    combined_route.waypoints = waypoints;
-    combined_route.route_description = getStrategyName() + " multi-waypoint route";
-    
-    for (size_t i = 0; i < waypoints.size() - 1; ++i) {
-        RouteInfo segment = calculateRoute(waypoints[i], waypoints[i + 1], fleet_speed, fleet_capacity);
-        combined_route.total_distance += segment.total_distance;
-        combined_route.estimated_time += segment.estimated_time;
-        combined_route.fuel_cost += segment.fuel_cost;
-        combined_route.risk_factor = std::max(combined_route.risk_factor, segment.risk_factor);
-    }
-    
-    return combined_route;
+double score(const Route& route, const RouteWeights& weights) noexcept {
+    return weights.time * route.time + weights.fuel * route.fuel + weights.risk * route.risk;
 }
 
-// Direct Line Strategy Implementation
-RouteInfo DirectLineStrategy::calculateRoute(
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    RouteInfo route;
-    route.waypoints = {start, destination};
-    route.total_distance = start.distanceTo(destination);
-    route.estimated_time = route.total_distance / fleet_speed;
-    route.fuel_cost = route.total_distance * 1.0; // Base fuel consumption
-    route.risk_factor = 0.1; // Low risk for direct routes
-    
-    std::ostringstream desc;
-    desc << std::fixed << std::setprecision(2)
-         << "Direct line route: " << route.total_distance << " units, "
-         << route.estimated_time << " time units";
-    route.route_description = desc.str();
-    
-    return route;
-}
-
-// Fuel Optimized Strategy Implementation
-RouteInfo FuelOptimizedStrategy::calculateRoute(
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    RouteInfo route;
-    
-    // Calculate direct distance
-    double direct_distance = start.distanceTo(destination);
-    
-    // For fuel optimization, we might add intermediate waypoints
-    // to take advantage of gravitational assists or optimal acceleration curves
-    std::vector<Coordinate3D> optimized_waypoints;
-    optimized_waypoints.push_back(start);
-    
-    // Add intermediate waypoint for fuel efficiency (simplified approach)
-    if (direct_distance > 50.0) { // Only for longer routes
-        Coordinate3D midpoint{
-            (start.x + destination.x) / 2.0,
-            (start.y + destination.y) / 2.0,
-            (start.z + destination.z) / 2.0 + 5.0 // Slight detour for efficiency
-        };
-        optimized_waypoints.push_back(midpoint);
+namespace {
+/// Closest point on segment [a,b] to p.
+Coordinate3D closestPointOnSegment(const Coordinate3D& a, const Coordinate3D& b, const Coordinate3D& p) noexcept {
+    const Coordinate3D ab = b - a;
+    const double len2 = ab.dot(ab);
+    if (len2 == 0.0) {
+        return a;
     }
-    
-    optimized_waypoints.push_back(destination);
-    route.waypoints = optimized_waypoints;
-    
-    // Calculate total distance
-    route.total_distance = 0.0;
-    for (size_t i = 0; i < optimized_waypoints.size() - 1; ++i) {
-        route.total_distance += optimized_waypoints[i].distanceTo(optimized_waypoints[i + 1]);
+    const double t = std::clamp((p - a).dot(ab) / len2, 0.0, 1.0);
+    return a + ab * t;
+}
+
+bool contains(const Hazard& h, const Coordinate3D& p) noexcept { return p.distanceTo(h.center) < h.radius; }
+}  // namespace
+
+bool segmentIntersects(const Coordinate3D& a, const Coordinate3D& b, const Hazard& hazard) noexcept {
+    return closestPointOnSegment(a, b, hazard.center).distanceTo(hazard.center) < hazard.radius;
+}
+
+Route evaluateRoute(std::vector<Coordinate3D> waypoints, double throttle, const NavigationContext& ctx,
+                    std::string strategy) {
+    Route r;
+    r.waypoints = std::move(waypoints);
+    r.strategy = std::move(strategy);
+    throttle = std::clamp(throttle, 0.01, 1.0);
+    for (std::size_t i = 1; i < r.waypoints.size(); ++i) {
+        const auto& a = r.waypoints[i - 1];
+        const auto& b = r.waypoints[i];
+        r.distance += a.distanceTo(b);
+        for (const auto& h : ctx.hazards) {
+            if (segmentIntersects(a, b, h)) {
+                r.risk += h.risk;
+            }
+        }
     }
-    
-    route.estimated_time = route.total_distance / fleet_speed * 0.9; // 10% time savings from optimization
-    route.fuel_cost = calculateFuelCost(start, destination, fleet_speed, fleet_capacity);
-    route.risk_factor = 0.15;
-    
-    std::ostringstream desc;
-    desc << std::fixed << std::setprecision(2)
-         << "Fuel optimized route: " << route.total_distance << " units, "
-         << "fuel cost: " << route.fuel_cost;
-    route.route_description = desc.str();
-    
-    return route;
+    const double speed = ctx.cruiseSpeed * throttle;
+    r.time = speed > 0.0 ? r.distance / speed : std::numeric_limits<double>::infinity();
+    r.fuel = r.distance * ctx.fuelPerUnit * throttle * throttle;
+    return r;
 }
 
-double FuelOptimizedStrategy::calculateFuelCost(
-    const Coordinate3D& start,
-    const Coordinate3D& end,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    double distance = start.distanceTo(end);
-    double base_cost = distance * base_fuel_consumption_;
-    
-    // Factor in fleet capacity (larger fleets use more fuel)
-    double capacity_multiplier = 1.0 + (fleet_capacity - 1.0) * 0.2;
-    
-    // Factor in speed (higher speeds require more fuel for acceleration)
-    double speed_multiplier = 1.0 + (fleet_speed - 1.0) * acceleration_factor_;
-    
-    return base_cost * capacity_multiplier * speed_multiplier * 0.8; // 20% fuel savings
+Route DirectLineStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+    return evaluateRoute({from, to}, 1.0, ctx, std::string(name()));
 }
 
-// Safe Route Strategy Implementation
-RouteInfo SafeRouteStrategy::calculateRoute(
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    RouteInfo route;
-    std::vector<Coordinate3D> safe_waypoints;
-    safe_waypoints.push_back(start);
-    
-    // Calculate risk factor for direct path
-    double direct_risk = calculateRiskFactor(start, destination);
-    
-    if (direct_risk > risk_threshold_) {
-        // Need to find safer path by avoiding hazardous regions
-        // Simplified approach: add waypoints that go around dangerous areas
-        
-        // Find the most dangerous region that intersects with direct path
-        double max_detour = 0.0;
-        Coordinate3D detour_point = destination;
-        
-        for (const auto& hazard : hazardous_regions_) {
-            // Calculate if direct path intersects with hazardous region
-            double distance_to_hazard = hazard.center.distanceTo(start);
-            if (distance_to_hazard < hazard.radius + safety_margin_) {
-                // Calculate detour point
-                double detour_distance = hazard.radius + safety_margin_;
-                if (detour_distance > max_detour) {
-                    max_detour = detour_distance;
-                    
-                    // Simple detour calculation (perpendicular to hazard center)
-                    double dx = destination.x - start.x;
-                    double dy = destination.y - start.y;
-                    double dz = destination.z - start.z;
-                    double length = std::sqrt(dx*dx + dy*dy + dz*dz);
-                    
-                    if (length > 0) {
-                        detour_point = Coordinate3D{
-                            hazard.center.x + (dy / length) * detour_distance,
-                            hazard.center.y - (dx / length) * detour_distance,
-                            hazard.center.z + (dz / length) * detour_distance * 0.5
-                        };
+FuelOptimizedStrategy::FuelOptimizedStrategy(double throttle) noexcept : throttle_(std::clamp(throttle, 0.05, 1.0)) {}
+
+Route FuelOptimizedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to,
+                                  const NavigationContext& ctx) const {
+    return evaluateRoute({from, to}, throttle_, ctx, std::string(name()));
+}
+
+SafeRouteStrategy::SafeRouteStrategy(double margin) noexcept : margin_(std::max(margin, 1.05)) {}
+
+Route SafeRouteStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+    std::vector<Coordinate3D> path{from, to};
+    constexpr int kMaxRefinements = 32;
+    for (int iter = 0; iter < kMaxRefinements; ++iter) {
+        bool changed = false;
+        for (std::size_t i = 1; i < path.size() && !changed; ++i) {
+            const Coordinate3D a = path[i - 1];
+            const Coordinate3D b = path[i];
+            for (const auto& h : ctx.hazards) {
+                // A hazard containing an endpoint cannot be avoided; skip it rather than loop.
+                if (contains(h, a) || contains(h, b) || !segmentIntersects(a, b, h)) {
+                    continue;
+                }
+                Coordinate3D away = closestPointOnSegment(a, b, h.center) - h.center;
+                if (away.length() < 1e-9) {
+                    // Segment goes through the centre: push perpendicular to the leg.
+                    const Coordinate3D leg = b - a;
+                    away = leg.cross({0.0, 0.0, 1.0});
+                    if (away.length() < 1e-9) {
+                        away = leg.cross({0.0, 1.0, 0.0});
                     }
                 }
+                const Coordinate3D detour = h.center + away * (h.radius * margin_ / away.length());
+                path.insert(path.begin() + static_cast<std::ptrdiff_t>(i), detour);
+                changed = true;
+                break;
             }
         }
-        
-        if (max_detour > 0.0) {
-            safe_waypoints.push_back(detour_point);
+        if (!changed) {
+            break;
         }
     }
-    
-    safe_waypoints.push_back(destination);
-    route.waypoints = safe_waypoints;
-    
-    // Calculate total distance
-    route.total_distance = 0.0;
-    for (size_t i = 0; i < safe_waypoints.size() - 1; ++i) {
-        route.total_distance += safe_waypoints[i].distanceTo(safe_waypoints[i + 1]);
-    }
-    
-    route.estimated_time = route.total_distance / fleet_speed * 1.1; // 10% time penalty for safety
-    route.fuel_cost = route.total_distance * 1.1; // 10% fuel penalty
-    route.risk_factor = std::max(0.05, direct_risk - 0.2); // Reduced risk
-    
-    std::ostringstream desc;
-    desc << std::fixed << std::setprecision(2)
-         << "Safe route: " << route.total_distance << " units, "
-         << "risk factor: " << route.risk_factor;
-    route.route_description = desc.str();
-    
-    return route;
+    return evaluateRoute(std::move(path), 0.9, ctx, std::string(name()));
 }
 
-double SafeRouteStrategy::calculateRiskFactor(const Coordinate3D& start, const Coordinate3D& end) const {
-    double max_risk = 0.0;
-    
-    // Sample points along the route to check for hazards
-    const int samples = 20;
-    for (int i = 0; i <= samples; ++i) {
-        double t = static_cast<double>(i) / samples;
-        Coordinate3D sample_point{
-            start.x + t * (end.x - start.x),
-            start.y + t * (end.y - start.y),
-            start.z + t * (end.z - start.z)
-        };
-        
-        double point_risk = getPointRisk(sample_point);
-        max_risk = std::max(max_risk, point_risk);
-    }
-    
-    return max_risk;
-}
-
-double SafeRouteStrategy::getPointRisk(const Coordinate3D& point) const {
-    double total_risk = 0.0;
-    
-    for (const auto& hazard : hazardous_regions_) {
-        double distance = point.distanceTo(hazard.center);
-        if (distance < hazard.radius) {
-            // Inside hazardous region
-            double proximity_factor = 1.0 - (distance / hazard.radius);
-            total_risk += hazard.risk_level * proximity_factor;
+Route BalancedStrategy::plan(const Coordinate3D& from, const Coordinate3D& to, const NavigationContext& ctx) const {
+    const DirectLineStrategy direct;
+    const FuelOptimizedStrategy fuel;
+    const SafeRouteStrategy safe;
+    const IRoutingStrategy* candidates[] = {&direct, &fuel, &safe};
+    Route best;
+    double bestScore = std::numeric_limits<double>::infinity();
+    for (const auto* s : candidates) {
+        Route r = s->plan(from, to, ctx);
+        const double sc = score(r, weights_);
+        if (sc < bestScore) {
+            bestScore = sc;
+            best = std::move(r);
         }
     }
-    
-    return std::min(total_risk, 1.0); // Cap at maximum risk
+    best.strategy = std::string(name()) + "(" + best.strategy + ")";
+    return best;
 }
 
-// Balanced Strategy Implementation
-RouteInfo BalancedStrategy::calculateRoute(
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    // Generate multiple route options using different approaches
-    DirectLineStrategy direct_strategy;
-    FuelOptimizedStrategy fuel_strategy;
-    SafeRouteStrategy safe_strategy;
-    
-    RouteInfo direct_route = direct_strategy.calculateRoute(start, destination, fleet_speed, fleet_capacity);
-    RouteInfo fuel_route = fuel_strategy.calculateRoute(start, destination, fleet_speed, fleet_capacity);
-    RouteInfo safe_route = safe_strategy.calculateRoute(start, destination, fleet_speed, fleet_capacity);
-    
-    // Calculate weighted scores for each route
-    double direct_score = calculateWeightedScore(direct_route);
-    double fuel_score = calculateWeightedScore(fuel_route);
-    double safe_score = calculateWeightedScore(safe_route);
-    
-    // Select the route with the best (lowest) score
-    RouteInfo best_route;
-    std::string chosen_approach;
-    
-    if (direct_score <= fuel_score && direct_score <= safe_score) {
-        best_route = direct_route;
-        chosen_approach = "direct";
-    } else if (fuel_score <= safe_score) {
-        best_route = fuel_route;
-        chosen_approach = "fuel-optimized";
-    } else {
-        best_route = safe_route;
-        chosen_approach = "safe";
-    }
-    
-    std::ostringstream desc;
-    desc << std::fixed << std::setprecision(2)
-         << "Balanced route (" << chosen_approach << "): " 
-         << best_route.total_distance << " units, "
-         << "score: " << calculateWeightedScore(best_route);
-    best_route.route_description = desc.str();
-    
-    return best_route;
-}
-
-double BalancedStrategy::calculateWeightedScore(const RouteInfo& route) const {
-    // Normalize metrics to similar scales for fair comparison
-    double time_score = route.estimated_time * time_weight_;
-    double fuel_score = route.fuel_cost * fuel_weight_;
-    double safety_score = route.risk_factor * 100.0 * safety_weight_; // Scale risk to similar range
-    
-    return time_score + fuel_score + safety_score;
-}
-
-// Fleet Router Implementation
-FleetRouter::FleetRouter(std::unique_ptr<IRoutingStrategy> default_strategy)
-    : current_strategy_(std::move(default_strategy)) {
-    
-    if (!current_strategy_) {
-        current_strategy_ = std::make_unique<DirectLineStrategy>();
-    }
-}
-
-RouteInfo FleetRouter::calculateRoute(
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    if (!current_strategy_) {
-        return RouteInfo{}; // Return empty route if no strategy set
-    }
-    
-    return current_strategy_->calculateRoute(start, destination, fleet_speed, fleet_capacity);
-}
-
-RouteInfo FleetRouter::calculateMultiWaypointRoute(
-    const std::vector<Coordinate3D>& waypoints,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    if (!current_strategy_) {
-        return RouteInfo{}; // Return empty route if no strategy set
-    }
-    
-    return current_strategy_->calculateMultiWaypointRoute(waypoints, fleet_speed, fleet_capacity);
-}
-
-std::unordered_map<std::string, RouteInfo> FleetRouter::compareStrategies(
-    const std::vector<std::unique_ptr<IRoutingStrategy>>& strategies,
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    std::unordered_map<std::string, RouteInfo> results;
-    
-    for (const auto& strategy : strategies) {
-        if (strategy) {
-            RouteInfo route = strategy->calculateRoute(start, destination, fleet_speed, fleet_capacity);
-            results[strategy->getStrategyName()] = route;
-        }
-    }
-    
-    return results;
-}
-
-std::string FleetRouter::findBestStrategy(
-    const std::vector<std::unique_ptr<IRoutingStrategy>>& strategies,
-    const Coordinate3D& start,
-    const Coordinate3D& destination,
-    std::function<double(const RouteInfo&)> criteria_function,
-    double fleet_speed,
-    double fleet_capacity
-) const {
-    std::string best_strategy_name;
-    double best_score = std::numeric_limits<double>::max();
-    
-    for (const auto& strategy : strategies) {
-        if (strategy) {
-            RouteInfo route = strategy->calculateRoute(start, destination, fleet_speed, fleet_capacity);
-            double score = criteria_function(route);
-            
-            if (score < best_score) {
-                best_score = score;
-                best_strategy_name = strategy->getStrategyName();
-            }
-        }
-    }
-    
-    return best_strategy_name;
-}
-
-// Strategy Factory Implementation
-std::unique_ptr<IRoutingStrategy> RoutingStrategyFactory::createStrategy(
-    StrategyType type,
-    const std::unordered_map<std::string, double>& parameters
-) {
+std::unique_ptr<IRoutingStrategy> makeRoutingStrategy(RoutingStrategyType type) {
     switch (type) {
-        case StrategyType::DirectLine:
-            return std::make_unique<DirectLineStrategy>();
-            
-        case StrategyType::FuelOptimized: {
-            double base_consumption = 1.0;
-            double acceleration_factor = 1.5;
-            
-            auto it = parameters.find("base_consumption");
-            if (it != parameters.end()) {
-                base_consumption = it->second;
-            }
-            
-            it = parameters.find("acceleration_factor");
-            if (it != parameters.end()) {
-                acceleration_factor = it->second;
-            }
-            
-            return std::make_unique<FuelOptimizedStrategy>(base_consumption, acceleration_factor);
-        }
-        
-        case StrategyType::SafeRoute: {
-            double risk_threshold = 0.3;
-            double safety_margin = 10.0;
-            
-            auto it = parameters.find("risk_threshold");
-            if (it != parameters.end()) {
-                risk_threshold = it->second;
-            }
-            
-            it = parameters.find("safety_margin");
-            if (it != parameters.end()) {
-                safety_margin = it->second;
-            }
-            
-            return std::make_unique<SafeRouteStrategy>(risk_threshold, safety_margin);
-        }
-        
-        case StrategyType::Balanced: {
-            double time_weight = 0.4;
-            double fuel_weight = 0.3;
-            double safety_weight = 0.3;
-            
-            auto it = parameters.find("time_weight");
-            if (it != parameters.end()) {
-                time_weight = it->second;
-            }
-            
-            it = parameters.find("fuel_weight");
-            if (it != parameters.end()) {
-                fuel_weight = it->second;
-            }
-            
-            it = parameters.find("safety_weight");
-            if (it != parameters.end()) {
-                safety_weight = it->second;
-            }
-            
-            return std::make_unique<BalancedStrategy>(time_weight, fuel_weight, safety_weight);
-        }
-        
-        default:
-            return std::make_unique<DirectLineStrategy>();
+        case RoutingStrategyType::Direct: return std::make_unique<DirectLineStrategy>();
+        case RoutingStrategyType::FuelOptimized: return std::make_unique<FuelOptimizedStrategy>();
+        case RoutingStrategyType::SafeRoute: return std::make_unique<SafeRouteStrategy>();
+        case RoutingStrategyType::Balanced: return std::make_unique<BalancedStrategy>();
+    }
+    throw std::invalid_argument("unknown RoutingStrategyType");
+}
+
+FleetRouter::FleetRouter(std::unique_ptr<IRoutingStrategy> strategy, NavigationContext ctx)
+    : strategy_(std::move(strategy)), ctx_(std::move(ctx)) {
+    if (!strategy_) {
+        throw std::invalid_argument("FleetRouter requires a strategy");
     }
 }
 
-std::vector<RoutingStrategyFactory::StrategyType> RoutingStrategyFactory::getAvailableStrategies() {
-    return {
-        StrategyType::DirectLine,
-        StrategyType::FuelOptimized,
-        StrategyType::SafeRoute,
-        StrategyType::Balanced
+void FleetRouter::setStrategy(std::unique_ptr<IRoutingStrategy> strategy) {
+    if (!strategy) {
+        throw std::invalid_argument("FleetRouter::setStrategy: null strategy");
+    }
+    strategy_ = std::move(strategy);
+}
+
+Route FleetRouter::plan(const Coordinate3D& from, const Coordinate3D& to) const {
+    return strategy_->plan(from, to, ctx_);
+}
+
+// ---------------------------------------------------------------------------
+// Target selectors
+// ---------------------------------------------------------------------------
+
+namespace {
+template <typename Key>
+std::optional<std::size_t> argBest(std::span<const PlanetTarget> targets, Key key) {
+    if (targets.empty()) {
+        return std::nullopt;
+    }
+    std::size_t best = 0;
+    double bestKey = key(targets[0]);
+    for (std::size_t i = 1; i < targets.size(); ++i) {
+        const double k = key(targets[i]);
+        if (k > bestKey) {  // strict: ties resolve to the first candidate (deterministic)
+            bestKey = k;
+            best = i;
+        }
+    }
+    return best;
+}
+}  // namespace
+
+std::optional<std::size_t> nearestTarget(std::span<const PlanetTarget> targets, const Coordinate3D& origin) {
+    return argBest(targets, [&](const PlanetTarget& t) { return -t.position.distanceTo(origin); });
+}
+
+std::optional<std::size_t> highestValueTarget(std::span<const PlanetTarget> targets, const Coordinate3D&) {
+    return argBest(targets, [](const PlanetTarget& t) { return t.value; });
+}
+
+std::optional<std::size_t> bestValueRatioTarget(std::span<const PlanetTarget> targets, const Coordinate3D& origin) {
+    return argBest(targets, [&](const PlanetTarget& t) {
+        return t.value / (1.0 + t.position.distanceTo(origin) + std::max(0.0, t.defense));
+    });
+}
+
+TargetSelector weakerThan(double maxDefense, TargetSelector inner) {
+    if (!inner) {
+        throw std::invalid_argument("weakerThan: null inner selector");
+    }
+    return [maxDefense, inner = std::move(inner)](std::span<const PlanetTarget> targets,
+                                                  const Coordinate3D& origin) -> std::optional<std::size_t> {
+        std::vector<PlanetTarget> eligible;
+        std::vector<std::size_t> original;
+        for (std::size_t i = 0; i < targets.size(); ++i) {
+            if (targets[i].defense <= maxDefense) {
+                eligible.push_back(targets[i]);
+                original.push_back(i);
+            }
+        }
+        const auto pick = inner(eligible, origin);
+        if (!pick) {
+            return std::nullopt;
+        }
+        return original.at(*pick);
     };
 }
 
-std::string RoutingStrategyFactory::strategyTypeToString(StrategyType type) {
-    switch (type) {
-        case StrategyType::DirectLine:
-            return "DirectLine";
-        case StrategyType::FuelOptimized:
-            return "FuelOptimized";
-        case StrategyType::SafeRoute:
-            return "SafeRoute";
-        case StrategyType::Balanced:
-            return "Balanced";
-        default:
-            return "Unknown";
+// ---------------------------------------------------------------------------
+// Showcase
+// ---------------------------------------------------------------------------
+
+void demonstrateStrategy(std::ostream& out) {
+    out << "=== Strategy pattern ===\n";
+    NavigationContext ctx;
+    ctx.hazards.push_back({{50.0, 0.0, 0.0}, 10.0, 5.0});
+    const Coordinate3D from{0.0, 0.0, 0.0};
+    const Coordinate3D to{100.0, 0.0, 0.0};
+
+    FleetRouter router(makeRoutingStrategy(RoutingStrategyType::Direct), ctx);
+    for (auto type : {RoutingStrategyType::Direct, RoutingStrategyType::FuelOptimized, RoutingStrategyType::SafeRoute,
+                      RoutingStrategyType::Balanced}) {
+        router.setStrategy(makeRoutingStrategy(type));
+        const Route r = router.plan(from, to);
+        out << "  " << r.strategy << ": waypoints " << r.waypoints.size() << ", distance " << r.distance
+            << ", time " << r.time << ", fuel " << r.fuel << ", risk " << r.risk << '\n';
+    }
+
+    const StaticRouter<SafeRouteStrategy> fixed(SafeRouteStrategy{2.0}, ctx);
+    out << "  static SafeRoute(margin 2) distance: " << fixed.plan(from, to).distance << '\n';
+
+    const std::vector<PlanetTarget> targets{
+        {"Ceres", {10.0, 0.0, 0.0}, 20.0, 5.0},
+        {"Titan", {80.0, 0.0, 0.0}, 90.0, 60.0},
+        {"Io", {30.0, 0.0, 0.0}, 60.0, 10.0},
+    };
+    const std::pair<std::string_view, TargetSelector> selectors[] = {
+        {"nearest", nearestTarget},
+        {"highest value", highestValueTarget},
+        {"best ratio", bestValueRatioTarget},
+        {"highest value, defence <= 20", weakerThan(20.0, highestValueTarget)},
+    };
+    for (const auto& [label, select] : selectors) {
+        const auto pick = select(targets, from);
+        out << "  target (" << label << "): " << (pick ? targets[*pick].name : std::string("none")) << '\n';
     }
 }
 
-} // namespace CppVerseHub::Patterns
+}  // namespace CppVerseHub::Patterns
