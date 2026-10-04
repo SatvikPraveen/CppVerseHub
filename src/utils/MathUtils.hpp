@@ -146,26 +146,30 @@ public:
 
     /// @brief Component-wise addition. @param o Other. @return `*this`.
     constexpr Vector& operator+=(const Vector& o) noexcept {
-        for (std::size_t i = 0; i < N; ++i)
+        for (std::size_t i = 0; i < N; ++i) {
             data_[i] += o.data_[i];
+        }
         return *this;
     }
     /// @brief Component-wise subtraction. @param o Other. @return `*this`.
     constexpr Vector& operator-=(const Vector& o) noexcept {
-        for (std::size_t i = 0; i < N; ++i)
+        for (std::size_t i = 0; i < N; ++i) {
             data_[i] -= o.data_[i];
+        }
         return *this;
     }
     /// @brief Scalar multiplication. @param s Scalar. @return `*this`.
     constexpr Vector& operator*=(T s) noexcept {
-        for (auto& v : data_)
+        for (auto& v : data_) {
             v *= s;
+        }
         return *this;
     }
     /// @brief Scalar division. @param s Scalar (non-zero). @return `*this`.
     constexpr Vector& operator/=(T s) noexcept {
-        for (auto& v : data_)
+        for (auto& v : data_) {
             v /= s;
+        }
         return *this;
     }
 
@@ -187,8 +191,9 @@ public:
     /// @brief Dot product. @param o Other. @return Sum of component products.
     [[nodiscard]] constexpr T dot(const Vector& o) const noexcept {
         T sum{};
-        for (std::size_t i = 0; i < N; ++i)
+        for (std::size_t i = 0; i < N; ++i) {
             sum += data_[i] * o.data_[i];
+        }
         return sum;
     }
 
@@ -466,15 +471,19 @@ namespace Interpolation {
 namespace NumberTheory {
 /// @brief Deterministic trial-division primality test. @param n Number. @return True if prime.
 [[nodiscard]] constexpr bool isPrime(std::uint64_t n) noexcept {
-    if (n < 2)
+    if (n < 2) {
         return false;
-    if (n % 2 == 0)
+    }
+    if (n % 2 == 0) {
         return n == 2;
-    if (n % 3 == 0)
+    }
+    if (n % 3 == 0) {
         return n == 3;
+    }
     for (std::uint64_t i = 5; i <= n / i; i += 6) {
-        if (n % i == 0 || n % (i + 2) == 0)
+        if (n % i == 0 || n % (i + 2) == 0) {
             return false;
+        }
     }
     return true;
 }
@@ -485,18 +494,21 @@ namespace NumberTheory {
  * @return n!, or `std::nullopt` if it does not fit in 64 bits (n > 20).
  */
 [[nodiscard]] constexpr std::optional<std::uint64_t> factorial(unsigned n) noexcept {
-    if (n > 20)
+    if (n > 20) {
         return std::nullopt;
+    }
     std::uint64_t r = 1;
-    for (unsigned i = 2; i <= n; ++i)
+    for (unsigned i = 2; i <= n; ++i) {
         r *= i;
+    }
     return r;
 }
 
 /// @brief Binomial coefficient C(n, k) computed multiplicatively. @param n n. @param k k. @return C(n,k).
 [[nodiscard]] constexpr std::uint64_t binomial(unsigned n, unsigned k) noexcept {
-    if (k > n)
+    if (k > n) {
         return 0;
+    }
     k = k < n - k ? k : n - k;
     std::uint64_t r = 1;
     for (unsigned i = 1; i <= k; ++i) {
@@ -524,13 +536,15 @@ namespace NumberTheory {
  */
 [[nodiscard]] constexpr std::uint64_t modPow(std::uint64_t base, std::uint64_t exponent,
                                              std::uint64_t modulus) noexcept {
-    if (modulus == 1)
+    if (modulus == 1) {
         return 0;
+    }
     std::uint64_t result = 1;
     base %= modulus;
     while (exponent > 0) {
-        if ((exponent & 1U) != 0U)
+        if ((exponent & 1U) != 0U) {
             result = result * base % modulus;
+        }
         base = base * base % modulus;
         exponent >>= 1U;
     }
@@ -764,8 +778,8 @@ class NBodySimulator {
 public:
     /// @brief A point mass.
     struct Body {
-        Vec3 position{}; ///< Position (m).
-        Vec3 velocity{}; ///< Velocity (m/s).
+        Vec3 position;   ///< Position (m).
+        Vec3 velocity;   ///< Velocity (m/s).
         double mass = 0; ///< Mass (kg).
     };
 

@@ -189,7 +189,7 @@ public:
     [[nodiscard]] const std::vector<Nanoseconds>& laps() const noexcept { return laps_; }
 
 private:
-    SteadyClock::time_point startTime_{};
+    SteadyClock::time_point startTime_;
     Nanoseconds accumulated_{0};
     Nanoseconds lastLapMark_{0};
     std::vector<Nanoseconds> laps_;

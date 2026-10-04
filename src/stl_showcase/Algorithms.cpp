@@ -332,9 +332,9 @@ void demonstrateSetAlgorithms(std::ostream& out) {
 void demonstratePermutationAlgorithms(std::ostream& out) {
     out << "\n=== Permutation Algorithms ===\n";
     printRange(out, "next_permutation of \"aab\"", allPermutations("aab"));
-    out << std::boolalpha << "is_permutation(\"listen\", \"silent\"): " << isAnagram("listen", "silent")
+    out << std::boolalpha << R"(is_permutation("listen", "silent"): )" << isAnagram("listen", "silent")
         << '\n';
-    out << "lexicographical_compare(\"alpha\", \"Beta\") ignoring case: "
+    out << R"(lexicographical_compare("alpha", "Beta") ignoring case: )"
         << caseInsensitiveLess("alpha", "Beta") << '\n';
 }
 

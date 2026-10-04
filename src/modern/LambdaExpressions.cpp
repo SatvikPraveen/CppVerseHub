@@ -209,9 +209,8 @@ void demonstrateStlLambdas(std::ostream& out) {
 void demonstrateGenericLambdas(std::ostream& out) {
     out << "\n--- Generic, template and constexpr lambdas ---\n";
     auto greater = [](const auto& a, const auto& b) { return a > b; };
-    out << std::boolalpha << "greater(5, 3) = " << greater(5, 3)
-        << ", greater(\"zebra\"s, \"apple\"s) = " << greater(std::string("zebra"), std::string("apple"))
-        << '\n';
+    out << std::boolalpha << "greater(5, 3) = " << greater(5, 3) << R"(, greater("zebra"s, "apple"s) = )"
+        << greater(std::string("zebra"), std::string("apple")) << '\n';
 
     auto joinMapped = [](const auto& container, auto fn) {
         std::string s;

@@ -20,7 +20,6 @@ FixedSizePool::FixedSizePool(std::size_t block_size, std::size_t block_alignment
                              std::pmr::memory_resource* upstream)
     : block_size_(block_size)
     , alignment_(std::max(block_alignment, alignof(FreeNode)))
-    , stride_(0)
     , blocks_per_chunk_(blocks_per_chunk)
     , max_chunks_(max_chunks)
     , upstream_(upstream) {
@@ -218,7 +217,8 @@ void demonstrateMemoryPools(std::ostream& out) {
         for (auto& p : live) {
             p->step(0.5);
         }
-        out << "ObjectPool: " << particles.in_use() << "/" << particles.capacity()
+        out << "ObjectPool: " << particles.in_use() << "/"
+            << CppVerseHub::Memory::ObjectPool<CppVerseHub::Memory::Particle, 16>::capacity()
             << " particles live; first at (" << live.front()->x << ", " << live.front()->y << ")\n";
     }
     out << "Handles released: " << particles.available() << " slots free\n";

@@ -121,7 +121,7 @@ private:
 
     std::size_t block_size_;
     std::size_t alignment_;
-    std::size_t stride_;
+    std::size_t stride_{0};
     std::size_t blocks_per_chunk_;
     std::size_t max_chunks_;
     std::pmr::memory_resource* upstream_;

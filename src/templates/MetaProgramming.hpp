@@ -37,6 +37,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -595,9 +596,7 @@ public:
     /** @param radius circle radius */
     constexpr explicit CircleShape(double radius) noexcept : radius_(radius) {}
     /** @return pi * r^2 */
-    [[nodiscard]] constexpr double area_impl() const noexcept {
-        return 3.14159265358979323846 * radius_ * radius_;
-    }
+    [[nodiscard]] constexpr double area_impl() const noexcept { return std::numbers::pi * radius_ * radius_; }
     /** @return "circle" */
     [[nodiscard]] constexpr std::string_view name_impl() const noexcept { return "circle"; }
 

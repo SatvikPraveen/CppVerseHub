@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <iostream>
 #include <map>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -148,8 +149,8 @@ namespace CppVerseHub::Modern::StructuredBindings {
 /// @return {orbital velocity, period, escape velocity}.
 [[nodiscard]] inline std::tuple<double, double, double> orbitParameters(double mass, double distance) {
     const double velocity = std::sqrt(mass / distance);
-    const double period = 2.0 * 3.14159265358979323846 * distance / velocity;
-    const double escape = std::sqrt(2.0) * velocity;
+    const double period = 2.0 * std::numbers::pi * distance / velocity;
+    const double escape = std::numbers::sqrt2 * velocity;
     return {velocity, period, escape};
 }
 

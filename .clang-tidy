@@ -33,6 +33,7 @@ Checks: >
   -misc-include-cleaner,
   modernize-*,
   -modernize-use-trailing-return-type,
+  -performance-enum-size,
   -modernize-use-nodiscard,
   -modernize-avoid-c-arrays,
   performance-*,

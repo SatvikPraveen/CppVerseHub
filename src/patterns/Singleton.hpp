@@ -112,7 +112,7 @@ public:
     /// @brief Whether a key exists. @param key Key. @return Flag.
     [[nodiscard]] bool contains(const std::string& key) const {
         std::shared_lock lock(mutex_);
-        return values_.count(key) != 0;
+        return values_.contains(key);
     }
 
     /// @brief Number of entries. @return Count.

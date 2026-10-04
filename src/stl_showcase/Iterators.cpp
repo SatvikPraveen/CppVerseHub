@@ -9,6 +9,7 @@
 #include <forward_list>
 #include <map>
 #include <numeric>
+#include <ranges>
 #include <sstream>
 
 namespace CppVerseHub::STL {
@@ -80,8 +81,8 @@ void demonstrateIteratorCategories(std::ostream& out) {
     const auto systems = sampleStarSystems();
     std::list<StarSystem> route(systems.begin(), systems.end());
     out << "bidirectional walk backwards:";
-    for (auto it = route.rbegin(); it != route.rend(); ++it) {
-        out << " [" << it->name << ']';
+    for (auto& it : std::ranges::reverse_view(route)) {
+        out << " [" << it.name << ']';
     }
     out << '\n';
     const auto mid = systems.begin() + static_cast<std::ptrdiff_t>(systems.size() / 2);
@@ -159,7 +160,7 @@ void demonstrateIteratorUtilities(std::ostream& out) {
         << " remain\n";
     std::vector<int> grow{1, 2, 3};
     grow.reserve(grow.size() + 1);
-    const auto first_ptr = grow.data();
+    auto* const first_ptr = grow.data();
     grow.push_back(4); // within reserved capacity: no reallocation, iterators remain valid
     out << std::boolalpha << "vector push_back within capacity kept storage: " << (first_ptr == grow.data())
         << '\n';

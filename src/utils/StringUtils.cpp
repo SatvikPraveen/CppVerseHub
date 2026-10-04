@@ -76,26 +76,34 @@ constexpr std::string_view kBase64Alphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 constexpr int base64Value(char c) noexcept {
-    if (isUpper(c))
+    if (isUpper(c)) {
         return c - 'A';
-    if (isLower(c))
+    }
+    if (isLower(c)) {
         return c - 'a' + 26;
-    if (isDigit(c))
+    }
+    if (isDigit(c)) {
         return c - '0' + 52;
-    if (c == '+')
+    }
+    if (c == '+') {
         return 62;
-    if (c == '/')
+    }
+    if (c == '/') {
         return 63;
+    }
     return -1;
 }
 
 constexpr int hexValue(char c) noexcept {
-    if (isDigit(c))
+    if (isDigit(c)) {
         return c - '0';
-    if (c >= 'a' && c <= 'f')
+    }
+    if (c >= 'a' && c <= 'f') {
         return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
+    }
+    if (c >= 'A' && c <= 'F') {
         return c - 'A' + 10;
+    }
     return -1;
 }
 
@@ -601,7 +609,7 @@ std::string formatBytes(std::uint64_t bytes) {
     if (bytes < 1024) {
         return std::to_string(bytes) + " B";
     }
-    double value = static_cast<double>(bytes);
+    auto value = static_cast<double>(bytes);
     std::size_t unit = 0;
     while (value >= 1024.0 && unit + 1 < kUnits.size()) {
         value /= 1024.0;
@@ -915,7 +923,7 @@ void demonstrateStrings(std::ostream& out) {
     out << "withThousandsSeparator      = " << withThousandsSeparator(299792458) << '\n';
     out << "formatBytes(5'000'000)      = " << formatBytes(5'000'000) << '\n';
     out << "parseNumber<int>(\" 42 \")    = " << parseNumber<int>(" 42 ").value_or(-1) << '\n';
-    out << "UTF-8 code points in \"h\\u00e9llo\" = " << Unicode::codePointCount("h\xC3\xA9llo").value_or(0)
+    out << R"(UTF-8 code points in "h\u00e9llo" = )" << Unicode::codePointCount("h\xC3\xA9llo").value_or(0)
         << '\n';
 
     switch (fnv1a("launch")) {

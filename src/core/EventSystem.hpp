@@ -121,7 +121,7 @@ public:
         const std::lock_guard lock(state_->mutex);
         const std::uint64_t token = state_->nextToken++;
         state_->handlers[std::type_index(typeid(E))].push_back({token, std::move(erased)});
-        return Subscription(state_, std::type_index(typeid(E)), token);
+        return {state_, std::type_index(typeid(E)), token};
     }
 
     /**

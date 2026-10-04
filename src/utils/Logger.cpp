@@ -21,20 +21,27 @@ std::optional<LogLevel> parseLogLevel(std::string_view text) noexcept {
             upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
         }
     }
-    if (upper == "TRACE")
+    if (upper == "TRACE") {
         return LogLevel::Trace;
-    if (upper == "DEBUG")
+    }
+    if (upper == "DEBUG") {
         return LogLevel::Debug;
-    if (upper == "INFO")
+    }
+    if (upper == "INFO") {
         return LogLevel::Info;
-    if (upper == "WARN" || upper == "WARNING")
+    }
+    if (upper == "WARN" || upper == "WARNING") {
         return LogLevel::Warn;
-    if (upper == "ERROR")
+    }
+    if (upper == "ERROR") {
         return LogLevel::Error;
-    if (upper == "FATAL" || upper == "CRITICAL")
+    }
+    if (upper == "FATAL" || upper == "CRITICAL") {
         return LogLevel::Fatal;
-    if (upper == "OFF" || upper == "NONE")
+    }
+    if (upper == "OFF" || upper == "NONE") {
         return LogLevel::Off;
+    }
     return std::nullopt;
 }
 
@@ -142,19 +149,19 @@ std::string JsonFormatter::escape(std::string_view text) {
 }
 
 std::string JsonFormatter::format(const LogRecord& record) const {
-    std::string line = "{\"timestamp\":\"";
+    std::string line = R"({"timestamp":")";
     line += Time::formatIso8601(record.timestamp);
-    line += "\",\"level\":\"";
+    line += R"(","level":")";
     line += toString(record.level);
-    line += "\",\"logger\":\"";
+    line += R"(","logger":")";
     line += escape(record.loggerName);
-    line += "\",\"message\":\"";
+    line += R"(","message":")";
     line += escape(record.message);
-    line += "\",\"thread\":\"";
+    line += R"(","thread":")";
     line += escape(threadIdString(record.threadId));
-    line += "\",\"file\":\"";
+    line += R"(","file":")";
     line += escape(baseName(record.location.file_name()));
-    line += "\",\"line\":";
+    line += R"(","line":)";
     line += std::to_string(record.location.line());
     line += '}';
     return line;

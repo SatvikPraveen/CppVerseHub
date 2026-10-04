@@ -8,6 +8,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
@@ -16,6 +17,7 @@
 #include <random>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -505,6 +507,13 @@ TEST_CASE("DisjointSet agrees with naive relabelling", "[ds][union-find][propert
 // ---------------------------------------------------------------------------------------------
 // BloomFilter
 // ---------------------------------------------------------------------------------------------
+
+TEST_CASE("BloomFilter rejects false-positive rates outside (0, 1), including NaN", "[ds][bloom]") {
+    REQUIRE_THROWS_AS(BloomFilter(100, std::numeric_limits<double>::quiet_NaN()), std::invalid_argument);
+    REQUIRE_THROWS_AS(BloomFilter(100, 0.0), std::invalid_argument);
+    REQUIRE_THROWS_AS(BloomFilter(100, 1.0), std::invalid_argument);
+    REQUIRE_NOTHROW(BloomFilter(100, 0.05));
+}
 
 TEST_CASE("BloomFilter has no false negatives and meets its false-positive target", "[ds][bloom][property]") {
     BloomFilter f(2000, 0.01);

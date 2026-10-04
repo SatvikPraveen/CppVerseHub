@@ -6,6 +6,7 @@
 #include "memory/SmartPointers.hpp"
 
 #include <algorithm>
+#include <ranges>
 #include <sstream>
 #include <thread>
 
@@ -172,11 +173,11 @@ std::string TreeNode::path() const {
         parts.push_back(p->label());
     }
     std::string result;
-    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+    for (auto& part : std::ranges::reverse_view(parts)) {
         if (!result.empty()) {
             result += '/';
         }
-        result += *it;
+        result += part;
     }
     return result;
 }

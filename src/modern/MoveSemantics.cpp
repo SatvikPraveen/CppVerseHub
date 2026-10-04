@@ -117,7 +117,7 @@ void Spacecraft::log(std::string entry) {
 // ===== Elision / sinks =====
 
 TrackedResource makeResource(OperationCounts* counts) {
-    return TrackedResource("factory-made", 16, counts); // prvalue: constructed directly in the caller
+    return {"factory-made", 16, counts}; // prvalue: constructed directly in the caller
 }
 
 std::string makeCallSign(std::string name) {

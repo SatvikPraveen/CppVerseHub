@@ -101,7 +101,7 @@ RoundRobinScheduler::~RoundRobinScheduler() {
 void RoundRobinScheduler::spawn(Task<void> task) {
     Driver driver = drive(std::move(task), &failures_);
     drivers_.reserve(drivers_.size() + 1);
-    ready_.push_back(std::coroutine_handle<>{}); // reserve the slot before releasing ownership
+    ready_.emplace_back(); // reserve the slot before releasing ownership
     const std::coroutine_handle<> handle = driver.release();
     drivers_.push_back(handle);
     ready_.back() = handle;

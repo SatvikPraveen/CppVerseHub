@@ -55,7 +55,9 @@ void Fleet::addShip(const Ship& ship) {
     if (!isAlive()) {
         throw InvalidStateException("cannot add ships to a destroyed fleet");
     }
-    if (!(ship.hull > 0.0 && ship.hull <= specOf(ship.type).maxHull)) {
+    // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
+    if (!(ship.hull > 0.0 &&
+          ship.hull <= specOf(ship.type).maxHull)) { // NOLINT(readability-simplify-boolean-expr)
         throw InvalidArgumentException("ship hull must be in (0, maxHull]");
     }
     ships_.push_back(ship);

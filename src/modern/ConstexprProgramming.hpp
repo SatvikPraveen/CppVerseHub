@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <string_view>
 #include <type_traits>
 #include <vector>
@@ -32,7 +33,7 @@ namespace CppVerseHub::Modern::ConstexprProgramming {
 
 // ===== COMPILE-TIME CONSTANTS =====
 
-inline constexpr double PI = 3.14159265358979323846;          ///< pi.
+inline constexpr double PI = std::numbers::pi;                ///< pi.
 inline constexpr double LIGHT_SPEED = 299792458.0;            ///< Speed of light in m/s.
 inline constexpr double EARTH_MASS = 5.972e24;                ///< Earth mass in kg.
 inline constexpr double EARTH_RADIUS = 6.371e6;               ///< Earth mean radius in m.
@@ -642,7 +643,7 @@ static_assert(factorial(0) == 1 && factorial(10) == 3628800 && factorial(20) == 
 static_assert(compileTimeFactorial(12) == 479001600);
 static_assert(compileTimeFibonacci(0) == 0 && compileTimeFibonacci(10) == 55 &&
               compileTimeFibonacci(50) == 12586269025ULL);
-static_assert(approxEqual(sqrtNewton(2.0), 1.4142135623730951) && sqrtNewton(81.0) == 9.0 &&
+static_assert(approxEqual(sqrtNewton(2.0), std::numbers::sqrt2) && sqrtNewton(81.0) == 9.0 &&
               sqrtNewton(0.0) == 0.0);
 static_assert(approxEqual(sqrtNewton(0.25), 0.5));
 static_assert(approxEqual(sinTaylor(PI / 2.0), 1.0) && approxEqual(sinTaylor(0.0), 0.0));

@@ -98,7 +98,7 @@ std::unique_ptr<Galaxy> makeSampleGalaxy(const SampleScenarioOptions& options) {
         if (target == planets.front()) {
             continue; // single-planet galaxy: nowhere to go
         }
-        Planet& targetPlanet = galaxy->get<Planet>(target);
+        auto& targetPlanet = galaxy->get<Planet>(target);
         switch (i % 3) {
             case 0:
                 fleet.addShips(ShipType::Scout, 2);

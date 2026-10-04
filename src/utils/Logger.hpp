@@ -82,12 +82,12 @@ inline constexpr std::size_t kLogLevelCount = 6;
 
 /// @brief One log event, captured at the call site and handed to every sink.
 struct LogRecord {
-    std::chrono::system_clock::time_point timestamp{}; ///< Wall-clock time of the call.
-    LogLevel level{LogLevel::Info};                    ///< Severity.
-    std::string loggerName;                            ///< Name of the emitting logger.
-    std::string message;                               ///< Fully formatted message text.
-    std::source_location location{};                   ///< Call site.
-    std::thread::id threadId{};                        ///< Emitting thread.
+    std::chrono::system_clock::time_point timestamp; ///< Wall-clock time of the call.
+    LogLevel level{LogLevel::Info};                  ///< Severity.
+    std::string loggerName;                          ///< Name of the emitting logger.
+    std::string message;                             ///< Fully formatted message text.
+    std::source_location location;                   ///< Call site.
+    std::thread::id threadId;                        ///< Emitting thread.
 };
 
 // ===================================================================================================

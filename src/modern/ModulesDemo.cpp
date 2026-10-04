@@ -61,8 +61,7 @@ T parseNumber(std::string_view text) {
 
 // ===== Core =====
 
-namespace SpaceGame::Core {
-inline namespace v1 {
+namespace SpaceGame::Core::inline v1 {
 
 double calculateDistance(const Vec3& a, const Vec3& b) noexcept {
     const double dx = b.x - a.x;
@@ -88,8 +87,7 @@ std::string IdGenerator::next() {
     return prefix_ + '-' + std::to_string(++counter_);
 }
 
-} // namespace v1
-} // namespace SpaceGame::Core
+} // namespace SpaceGame::Core::inline v1
 
 // ===== Entities =====
 

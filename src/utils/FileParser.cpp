@@ -1116,14 +1116,18 @@ std::string XmlParser::escape(std::string_view text) {
 
 FileParserUtils::FileFormat FileParserUtils::detectFormat(const std::filesystem::path& path) {
     const std::string ext = String::toLower(path.extension().string());
-    if (ext == ".json")
+    if (ext == ".json") {
         return FileFormat::Json;
-    if (ext == ".csv" || ext == ".tsv")
+    }
+    if (ext == ".csv" || ext == ".tsv") {
         return FileFormat::Csv;
-    if (ext == ".xml")
+    }
+    if (ext == ".xml") {
         return FileFormat::Xml;
-    if (ext == ".ini" || ext == ".cfg" || ext == ".conf")
+    }
+    if (ext == ".ini" || ext == ".cfg" || ext == ".conf") {
         return FileFormat::Ini;
+    }
     return FileFormat::Unknown;
 }
 

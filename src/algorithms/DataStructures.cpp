@@ -9,6 +9,7 @@
 #include <cmath>
 #include <iomanip>
 #include <numbers>
+#include <ranges>
 
 namespace CppVerseHub::Algorithms {
 
@@ -107,8 +108,8 @@ std::vector<std::string> Trie::with_prefix(std::string_view prefix, std::size_t 
         if (n->terminal) {
             out.push_back(word);
         }
-        for (auto it = n->children.rbegin(); it != n->children.rend(); ++it) {
-            stack.emplace_back(it->second.get(), word + static_cast<char>(it->first));
+        for (const auto& it : std::ranges::reverse_view(n->children)) {
+            stack.emplace_back(it.second.get(), word + static_cast<char>(it.first));
         }
     }
     return out;
@@ -222,7 +223,9 @@ std::uint64_t splitmix(std::uint64_t x) noexcept {
 } // namespace
 
 BloomFilter::BloomFilter(std::size_t expected_elements, double false_positive_rate) {
-    if (!(false_positive_rate > 0.0 && false_positive_rate < 1.0)) {
+    // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
+    if (!(false_positive_rate > 0.0 &&
+          false_positive_rate < 1.0)) { // NOLINT(readability-simplify-boolean-expr)
         throw std::invalid_argument("BloomFilter: false_positive_rate must be in (0, 1)");
     }
     const double n = static_cast<double>(std::max<std::size_t>(1, expected_elements));
@@ -238,7 +241,7 @@ void BloomFilter::insert(std::string_view element) {
     const std::uint64_t h1 = fnv1a(element);
     const std::uint64_t h2 = splitmix(h1) | 1U;
     for (std::size_t i = 0; i < hashes_; ++i) {
-        const std::size_t bit = static_cast<std::size_t>((h1 + i * h2) % bits_);
+        const auto bit = static_cast<std::size_t>((h1 + i * h2) % bits_);
         words_[bit / 64] |= std::uint64_t{1} << (bit % 64);
     }
     ++inserted_;
@@ -248,7 +251,7 @@ bool BloomFilter::might_contain(std::string_view element) const {
     const std::uint64_t h1 = fnv1a(element);
     const std::uint64_t h2 = splitmix(h1) | 1U;
     for (std::size_t i = 0; i < hashes_; ++i) {
-        const std::size_t bit = static_cast<std::size_t>((h1 + i * h2) % bits_);
+        const auto bit = static_cast<std::size_t>((h1 + i * h2) % bits_);
         if ((words_[bit / 64] & (std::uint64_t{1} << (bit % 64))) == 0) {
             return false;
         }
@@ -262,9 +265,9 @@ void BloomFilter::clear() noexcept {
 }
 
 double BloomFilter::estimated_false_positive_rate() const {
-    const double k = static_cast<double>(hashes_);
-    const double m = static_cast<double>(bits_);
-    const double n = static_cast<double>(inserted_);
+    const auto k = static_cast<double>(hashes_);
+    const auto m = static_cast<double>(bits_);
+    const auto n = static_cast<double>(inserted_);
     return std::pow(1.0 - std::exp(-k * n / m), k);
 }
 

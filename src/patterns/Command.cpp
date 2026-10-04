@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <ranges>
 #include <utility>
 
 namespace CppVerseHub::Patterns {
@@ -147,8 +148,8 @@ void MacroCommand::execute() {
 }
 
 void MacroCommand::undo() {
-    for (auto it = children_.rbegin(); it != children_.rend(); ++it) {
-        (*it)->undo();
+    for (auto& it : std::ranges::reverse_view(children_)) {
+        it->undo();
     }
 }
 

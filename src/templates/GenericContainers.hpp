@@ -1506,10 +1506,7 @@ inline void demonstrate_generic_containers(std::ostream& out = std::cout) {
 
     auto shared = make_shared_ptr<std::string>("shared");
     WeakPtr<std::string> observer = shared;
-    {
-        const SharedPtr<std::string> copy = shared;
-        out << "SharedPtr use_count = " << shared.use_count() << '\n';
-    }
+    { out << "SharedPtr use_count = " << shared.use_count() << '\n'; }
     out << "after scope         = " << shared.use_count() << ", weak expired: " << std::boolalpha
         << observer.expired() << '\n';
     shared.reset();

@@ -219,3 +219,12 @@ TEST_CASE("Planet and Fleet JSON round-trip losslessly", "[core][entity][json]")
     REQUIRE(f2.ships() == f.ships());
     REQUIRE(f2.destination() == f.destination());
 }
+
+TEST_CASE("Range validation rejects NaN", "[core][entity][validation]") {
+    // Regression guard: these checks are written as negated conjunctions precisely so NaN fails them.
+    constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+    Planet p(EntityId{1}, "Probe", {});
+    REQUIRE_THROWS_AS(p.setHabitability(nan), InvalidArgumentException);
+    REQUIRE_THROWS_AS(p.setHabitability(1.5), InvalidArgumentException);
+    REQUIRE_NOTHROW(p.setHabitability(0.5));
+}

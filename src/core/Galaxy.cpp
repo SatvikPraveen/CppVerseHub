@@ -31,7 +31,9 @@ Galaxy::Galaxy(std::string name, const Vector3D& minCorner, const Vector3D& maxC
     , max_(maxCorner)
     , entityFactory_(makeDefaultEntityFactory())
     , missionFactory_(makeDefaultMissionFactory()) {
-    if (!(min_.x <= max_.x && min_.y <= max_.y && min_.z <= max_.z)) {
+    // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
+    if (!(min_.x <= max_.x && min_.y <= max_.y &&
+          min_.z <= max_.z)) { // NOLINT(readability-simplify-boolean-expr)
         throw InvalidArgumentException("galaxy bounds: minCorner must not exceed maxCorner");
     }
 }

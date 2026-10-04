@@ -26,3 +26,5 @@ arithOperationsOnVoidPointer:src/stl_showcase/Iterators.hpp
 # The code base uses the pass-by-value sink idiom deliberately, and coroutine parameters must be taken by
 # value so they live in the coroutine frame rather than dangling.
 passedByValue
+# cppcheck cannot parse a short-circuiting fold expression with a comma operator inside (internal AST error).
+internalAstError:src/templates/MetaProgramming.hpp

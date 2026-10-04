@@ -37,8 +37,8 @@ namespace CppVerseHub::Modern::Modules {
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.Core" — no imports
 // ======================================================================================
-namespace SpaceGame::Core {
-inline namespace v1 {
+
+namespace SpaceGame::Core::inline v1 {
 
 /// @brief A 3D vector.
 struct Vec3 {
@@ -93,8 +93,7 @@ protected:
     IEntity& operator=(IEntity&&) = default;
 };
 
-} // namespace v1
-} // namespace SpaceGame::Core
+} // namespace SpaceGame::Core::inline v1
 
 // ======================================================================================
 // "module CppVerseHub.SpaceGame.Entities" — import Core;

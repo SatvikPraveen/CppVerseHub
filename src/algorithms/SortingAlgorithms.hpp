@@ -1030,7 +1030,7 @@ struct RadixSortFn {
             order[i] = i;
         }
         for (std::size_t pass = 0; pass < sizeof(U); ++pass) {
-            const unsigned shift = static_cast<unsigned>(pass * 8);
+            const auto shift = static_cast<unsigned>(pass * 8);
             std::array<std::size_t, 257> count{};
             for (U k : keys) {
                 ++count[((k >> shift) & 0xFFU) + 1];

@@ -154,12 +154,12 @@ void Mission::update(MissionContext& ctx, double dt) {
     if (status_ != MissionStatus::Active) {
         return;
     }
-    Fleet* fleet = ctx.galaxy.find<Fleet>(fleet_);
+    auto* fleet = ctx.galaxy.find<Fleet>(fleet_);
     if (fleet == nullptr || !fleet->isAlive()) {
         fail(ctx, "fleet lost");
         return;
     }
-    Planet* planet = ctx.galaxy.find<Planet>(target_);
+    auto* planet = ctx.galaxy.find<Planet>(target_);
     if (planet == nullptr || !planet->isAlive()) {
         fail(ctx, "target lost");
         return;

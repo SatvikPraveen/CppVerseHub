@@ -340,10 +340,12 @@ std::optional<double> Numerical::bisection(const std::function<double(double)>& 
                                            double tolerance) {
     double flo = f(lo);
     const double fhi = f(hi);
-    if (flo == 0.0)
+    if (flo == 0.0) {
         return lo;
-    if (fhi == 0.0)
+    }
+    if (fhi == 0.0) {
         return hi;
+    }
     if ((flo < 0.0) == (fhi < 0.0)) {
         return std::nullopt;
     }
@@ -392,7 +394,7 @@ double Statistics::variance(std::span<const double> data, bool sample) {
         sumSq += (v - m) * (v - m);
         sumDiff += v - m;
     }
-    const double n = static_cast<double>(data.size());
+    const auto n = static_cast<double>(data.size());
     // Corrected two-pass formula (Chan, Golub & LeVeque) compensates for rounding in the mean.
     const double corrected = sumSq - sumDiff * sumDiff / n;
     return corrected / (sample ? n - 1.0 : n);
