@@ -1,0 +1,76 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 110
+AccessModifierOffset: -4
+ContinuationIndentWidth: 4
+NamespaceIndentation: None
+IndentCaseLabels: true
+IndentPPDirectives: None
+IndentRequiresClause: true
+RequiresClausePosition: OwnLine
+
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: NextLine
+BinPackArguments: true
+BinPackParameters: true
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Leave
+SpaceAfterTemplateKeyword: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpacesInAngles: Never
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: Align
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+EmptyLineBeforeAccessModifier: LogicalBlock
+SeparateDefinitionBlocks: Leave
+FixNamespaceComments: true
+ShortNamespaceLines: 1
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"(core|utils|templates|patterns|stl_showcase|memory|concurrency|modern|algorithms)/'
+    Priority: 2
+  - Regex: '^<(catch2|benchmark|nlohmann)/'
+    Priority: 3
+  - Regex: '^<.*\.h>'
+    Priority: 5
+  - Regex: '^<'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 1
+SortUsingDeclarations: LexicographicNumeric
+
+PenaltyBreakAssignment: 40
+PenaltyBreakBeforeFirstCallParameter: 40
+PenaltyReturnTypeOnItsOwnLine: 200
+...

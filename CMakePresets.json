@@ -1,0 +1,134 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "default",
+      "displayName": "Release (default)",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "asan",
+      "displayName": "Debug + ASan/UBSan",
+      "inherits": "debug",
+      "cacheVariables": { "CPPVERSEHUB_ENABLE_SANITIZERS": "ON" }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Debug + ThreadSanitizer",
+      "inherits": "debug",
+      "cacheVariables": { "CPPVERSEHUB_ENABLE_TSAN": "ON" }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Debug + coverage",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CPPVERSEHUB_ENABLE_COVERAGE": "ON",
+        "CPPVERSEHUB_BUILD_BENCHMARKS": "OFF",
+        "CPPVERSEHUB_BUILD_EXAMPLES": "OFF"
+      }
+    },
+    {
+      "name": "strict",
+      "displayName": "Release, warnings as errors",
+      "inherits": "default",
+      "cacheVariables": { "CPPVERSEHUB_WARNINGS_AS_ERRORS": "ON" }
+    },
+    {
+      "name": "tidy",
+      "displayName": "Debug + clang-tidy",
+      "inherits": "debug",
+      "cacheVariables": { "CPPVERSEHUB_ENABLE_CLANG_TIDY": "ON" }
+    },
+    {
+      "name": "ci-gcc",
+      "inherits": "strict",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" }
+    },
+    {
+      "name": "ci-clang",
+      "inherits": "strict",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "clang++" }
+    },
+    {
+      "name": "msvc",
+      "displayName": "Visual Studio 2022",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "architecture": "x64",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default",  "configurePreset": "default" },
+    { "name": "debug",    "configurePreset": "debug" },
+    { "name": "asan",     "configurePreset": "asan" },
+    { "name": "tsan",     "configurePreset": "tsan" },
+    { "name": "coverage", "configurePreset": "coverage" },
+    { "name": "strict",   "configurePreset": "strict" },
+    { "name": "tidy",     "configurePreset": "tidy" },
+    { "name": "ci-gcc",   "configurePreset": "ci-gcc" },
+    { "name": "ci-clang", "configurePreset": "ci-clang" },
+    { "name": "msvc",     "configurePreset": "msvc", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "base-test",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false, "jobs": 4 }
+    },
+    { "name": "default",  "inherits": "base-test", "configurePreset": "default" },
+    { "name": "debug",    "inherits": "base-test", "configurePreset": "debug" },
+    { "name": "asan",     "inherits": "base-test", "configurePreset": "asan" },
+    { "name": "tsan",     "inherits": "base-test", "configurePreset": "tsan" },
+    { "name": "coverage", "inherits": "base-test", "configurePreset": "coverage" },
+    { "name": "strict",   "inherits": "base-test", "configurePreset": "strict" },
+    { "name": "ci-gcc",   "inherits": "base-test", "configurePreset": "ci-gcc" },
+    { "name": "ci-clang", "inherits": "base-test", "configurePreset": "ci-clang" },
+    { "name": "msvc",     "inherits": "base-test", "configurePreset": "msvc", "configuration": "Release" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "default",
+      "steps": [
+        { "type": "configure", "name": "default" },
+        { "type": "build",     "name": "default" },
+        { "type": "test",      "name": "default" }
+      ]
+    },
+    {
+      "name": "asan",
+      "steps": [
+        { "type": "configure", "name": "asan" },
+        { "type": "build",     "name": "asan" },
+        { "type": "test",      "name": "asan" }
+      ]
+    },
+    {
+      "name": "tsan",
+      "steps": [
+        { "type": "configure", "name": "tsan" },
+        { "type": "build",     "name": "tsan" },
+        { "type": "test",      "name": "tsan" }
+      ]
+    }
+  ]
+}
