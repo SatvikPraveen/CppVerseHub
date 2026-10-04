@@ -492,7 +492,8 @@ public:
     /**
      * @brief Create a pool with @p initial_size pre-built resources.
      * @param initial_size Resources created eagerly.
-     * @param factory Creates new resources (default: std::make_unique<Resource>()).
+     * @param factory Creates new resources (default: std::make_unique<Resource>()). acquire() calls it
+     *                without holding the pool lock, so it must be safe to call from several threads.
      */
     explicit ResourcePool(std::size_t initial_size = 0, Factory factory = {})
         : factory_(factory ? std::move(factory) : Factory([] { return std::make_unique<Resource>(); })) {

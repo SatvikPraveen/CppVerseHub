@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <filesystem>
 #include <mutex>
 #include <sstream>
@@ -290,8 +291,9 @@ TEST_CASE("ResourcePool leases and recycles resources", "[memory][raii][pool]") 
 }
 
 TEST_CASE("ResourcePool uses a custom factory and is thread safe", "[memory][raii][pool]") {
-    int made = 0;
-    ResourcePool<int> pool(0, [&made] { return std::make_unique<int>(++made); });
+    // acquire() runs the factory outside the pool lock, so the factory itself must be thread-safe.
+    std::atomic<int> made{0};
+    ResourcePool<int> pool(0, [&made] { return std::make_unique<int>(made.fetch_add(1) + 1); });
     {
         auto lease = pool.acquire();
         CHECK(*lease == 1);
