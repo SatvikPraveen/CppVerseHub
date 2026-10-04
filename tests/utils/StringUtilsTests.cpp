@@ -94,9 +94,9 @@ TEST_CASE("Transformations: replaceAll, repeat, padding, reverse, truncate", "[u
     CHECK(padLeft("long", 2) == "long");
     CHECK(center("ab", 7, '*') == "**ab***");
     CHECK(reverse("abc") == "cba");
-    CHECK(truncate("Hello, galaxy", 8) == "Hello...");
-    CHECK(truncate("short", 10) == "short");
-    CHECK(truncate("abcdef", 2) == "..");
+    CHECK(CppVerseHub::Utils::String::truncate("Hello, galaxy", 8) == "Hello...");
+    CHECK(CppVerseHub::Utils::String::truncate("short", 10) == "short");
+    CHECK(CppVerseHub::Utils::String::truncate("abcdef", 2) == "..");
 }
 
 TEST_CASE("wordWrap breaks lines at the requested width", "[utils][string]") {

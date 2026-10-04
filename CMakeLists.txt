@@ -15,6 +15,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# The project uses headers, not C++20 named modules; dependency scanning only adds cost and
+# breaks clang-tidy, which cannot read the generated .modmap response files.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 

@@ -107,6 +107,10 @@ struct Overloaded : Ts... {
     using Ts::operator()...;
 };
 
+/// @brief Deduction guide; C++20 aggregate CTAD makes it redundant, but older Apple Clang still needs it.
+template <typename... Ts>
+Overloaded(Ts...) -> Overloaded<Ts...>;
+
 /// @brief Fixed-point combinator: lets a lambda call itself through its first parameter without the
 ///        overhead (and dangling-reference hazards) of a self-capturing `std::function`.
 /// @tparam F Lambda of the form `[](const auto& self, Args...) -> R`.
@@ -230,7 +234,11 @@ inline constexpr Fix factorialFix{[](const auto& self, unsigned long long n) -> 
 static_assert(compose([](int x) { return x + 1; }, [](int x) { return x * 2; })(5) == 11);
 static_assert(pipeline([](int x) { return x + 1; }, [](int x) { return x * 2; })(5) == 12);
 static_assert(curry([](int a, int b, int c) { return a * 100 + b * 10 + c; })(1)(2)(3) == 123);
+#if !defined(_MSC_VER) || defined(__clang__)
+// MSVC cannot constant-evaluate a lambda that recurses through a deduced `self` parameter (C3615);
+// the runtime tests still cover factorialFix there.
 static_assert(factorialFix(10) == 3628800ULL);
+#endif
 static_assert(sizeInBits(0) == sizeof(int) * 8U);
 static_assert([] {
     auto counter = makeCounter(5);

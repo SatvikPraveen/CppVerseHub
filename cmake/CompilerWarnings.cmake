@@ -18,6 +18,7 @@ function(cppversehub_set_warnings target warnings_as_errors)
         /w14826 # sign-extended conversion
         /w14905 /w14906 # wide/narrow string literal cast
         /w14928 # illegal copy-initialisation
+        /wd4324 # structure padded due to alignment specifier: intentional cache-line padding
         /Zc:__cplusplus
         /utf-8
     )

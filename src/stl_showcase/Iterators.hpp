@@ -499,7 +499,7 @@ public:
      * @param base Underlying view.
      * @param pred Predicate.
      */
-    FilterView(V base, Pred pred) : base_(std::move(base)), pred_(std::move(pred)) {}
+    FilterView(V base, Pred predicate) : base_(std::move(base)), pred_(std::move(predicate)) {}
 
     /// @brief First matching element. @return Iterator (O(n) search).
     [[nodiscard]] iterator begin() { return iterator{this, std::ranges::find_if(base_, std::cref(pred_))}; }

@@ -19,3 +19,10 @@ invalidContainer:src/stl_showcase/Iterators.cpp
 operatorEqVarError:src/utils/ConfigManager.cpp
 # first is 1 only when records is non-empty, so begin() + first never passes end().
 containerOutOfBounds:src/utils/FileParser.cpp
+# `future` is a structured binding, which is not eligible for implicit move on return, so std::move is required.
+returnStdMove:src/concurrency/ThreadPool.hpp
+# data_ is std::unique_ptr<T[]>; cppcheck loses the element type inside the class template.
+arithOperationsOnVoidPointer:src/stl_showcase/Iterators.hpp
+# The code base uses the pass-by-value sink idiom deliberately, and coroutine parameters must be taken by
+# value so they live in the coroutine frame rather than dangling.
+passedByValue
