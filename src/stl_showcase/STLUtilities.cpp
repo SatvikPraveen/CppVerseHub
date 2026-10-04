@@ -1,586 +1,404 @@
 /**
  * @file STLUtilities.cpp
- * @brief Implementation of STL Utilities demonstrations
- * @details File location: src/stl_showcase/STLUtilities.cpp
+ * @brief Implementation of the vocabulary-type showcase.
  */
+#include "stl_showcase/STLUtilities.hpp"
 
-#include "STLUtilities.hpp"
+#include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
-#include <random>
-#include <sstream>
+#include <limits>
+#include <locale>
+#include <numeric>
+#include <system_error>
 
 namespace CppVerseHub::STL {
 
-// Implementation note: Most functionality is implemented in the header file
-// using static methods and lambdas for educational clarity. This file serves
-// as a placeholder for any additional utility functions and provides the
-// main demonstration entry points.
+double NavigationCoordinate::distanceTo(const NavigationCoordinate& other) const noexcept {
+    const double dx = other.x - x;
+    const double dy = other.y - y;
+    const double dz = other.z - z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
 
-/**
- * @brief Advanced utility functions for STL demonstrations
- */
-namespace AdvancedUtilities {
+// --------------------------------------------------------------------------------- pair/tuple
 
-    /**
-     * @brief Create a formatted string representation of a pair
-     */
-    template<typename T1, typename T2>
-    std::string format_pair(const std::pair<T1, T2>& p) {
-        std::stringstream ss;
-        ss << "(" << p.first << ", " << p.second << ")";
-        return ss.str();
-    }
-
-    /**
-     * @brief Create a formatted string representation of a tuple (recursive)
-     */
-    template<std::size_t I = 0, typename... Tp>
-    std::string format_tuple_impl(const std::tuple<Tp...>& t) {
-        std::stringstream ss;
-        if constexpr (I == sizeof...(Tp)) {
-            return "";
-        } else {
-            if constexpr (I != 0) {
-                ss << ", ";
-            }
-            ss << std::get<I>(t);
-            if constexpr (I + 1 < sizeof...(Tp)) {
-                ss << format_tuple_impl<I + 1>(t);
-            }
-        }
-        return ss.str();
-    }
-
-    template<typename... Tp>
-    std::string format_tuple(const std::tuple<Tp...>& t) {
-        std::stringstream ss;
-        ss << "(" << format_tuple_impl(t) << ")";
-        return ss.str();
-    }
-
-    /**
-     * @brief Utility to check if an optional chain would succeed
-     */
-    template<typename T>
-    bool would_optional_chain_succeed(const std::optional<T>& opt) {
-        return opt.has_value();
-    }
-
-    /**
-     * @brief Safe variant getter that returns optional
-     */
-    template<typename T, typename... Types>
-    std::optional<T> safe_variant_get(const std::variant<Types...>& var) {
-        if (std::holds_alternative<T>(var)) {
-            return std::get<T>(var);
-        }
+std::optional<std::pair<std::size_t, std::size_t>> closestPairIndices(std::span<const NavigationCoordinate> points) {
+    if (points.size() < 2) {
         return std::nullopt;
     }
-
-    /**
-     * @brief Generic variant visitor for string conversion
-     */
-    struct ToStringVisitor {
-        template<typename T>
-        std::string operator()(const T& value) const {
-            if constexpr (std::is_same_v<T, std::string>) {
-                return "\"" + value + "\"";
-            }
-            else if constexpr (std::is_same_v<T, NavigationCoordinate>) {
-                std::stringstream ss;
-                ss << value;
-                return ss.str();
-            }
-            else if constexpr (std::is_same_v<T, VesselStatus>) {
-                switch (value) {
-                    case VesselStatus::DOCKED: return "DOCKED";
-                    case VesselStatus::IN_TRANSIT: return "IN_TRANSIT";
-                    case VesselStatus::EXPLORING: return "EXPLORING";
-                    case VesselStatus::COMBAT: return "COMBAT";
-                    case VesselStatus::MAINTENANCE: return "MAINTENANCE";
-                    case VesselStatus::EMERGENCY: return "EMERGENCY";
-                    default: return "UNKNOWN";
-                }
-            }
-            else if constexpr (std::is_arithmetic_v<T>) {
-                return std::to_string(value);
-            }
-            else {
-                return "[complex type]";
+    std::pair<std::size_t, std::size_t> best{0, 1};
+    double best_distance = points[0].distanceTo(points[1]);
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        for (std::size_t j = i + 1; j < points.size(); ++j) {
+            if (const double d = points[i].distanceTo(points[j]); d < best_distance) {
+                best_distance = d;
+                best = {i, j};
             }
         }
+    }
+    return best;
+}
+
+std::optional<std::pair<double, double>> distanceRangeFromOrigin(std::span<const NavigationCoordinate> points) {
+    if (points.empty()) {
+        return std::nullopt;
+    }
+    constexpr NavigationCoordinate origin{};
+    const auto [nearest, farthest] = std::ranges::minmax_element(
+        points, {}, [&origin](const NavigationCoordinate& p) { return p.distanceTo(origin); });
+    return std::pair{nearest->distanceTo(origin), farthest->distanceTo(origin)};
+}
+
+std::optional<CoordinateStats> coordinateStatistics(std::span<const NavigationCoordinate> points) {
+    if (points.empty()) {
+        return std::nullopt;
+    }
+    const auto sum = std::accumulate(points.begin(), points.end(), NavigationCoordinate{},
+                                     [](NavigationCoordinate acc, const NavigationCoordinate& p) {
+                                         return NavigationCoordinate{acc.x + p.x, acc.y + p.y, acc.z + p.z};
+                                     });
+    const auto n = static_cast<double>(points.size());
+    const NavigationCoordinate centroid{sum.x / n, sum.y / n, sum.z / n};
+    double spread = 0.0;
+    for (const auto& p : points) {
+        spread = std::max(spread, p.distanceTo(centroid));
+    }
+    return CoordinateStats{centroid, spread, points.size()};
+}
+
+void sortVesselRecords(std::vector<VesselRecord>& records) {
+    std::ranges::sort(records, [](const VesselRecord& lhs, const VesselRecord& rhs) {
+        // rhs.priority on the left side yields descending priority within each status.
+        return std::tie(lhs.status, rhs.priority, lhs.name) < std::tie(rhs.status, lhs.priority, rhs.name);
+    });
+}
+
+// ----------------------------------------------------------------------------------- optional
+
+std::optional<int> parseInt(std::string_view text) noexcept {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    const char* first = text.data();
+    const char* last = text.data() + text.size();
+    if (*first == '+') {  // from_chars rejects a leading '+'; accept it for friendliness
+        ++first;
+        if (first == last || *first == '-') {
+            return std::nullopt;
+        }
+    }
+    int value = 0;
+    const auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::optional<VesselStatus> findVesselStatus(const std::map<std::string, VesselStatus, std::less<>>& registry,
+                                             std::string_view name) {
+    const auto it = registry.find(name);
+    if (it == registry.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+// ------------------------------------------------------------------------------------ variant
+
+std::string describeCommand(const Command& command) {
+    return std::visit(
+        Overloaded{
+            [](const MoveCommand& c) {
+                std::ostringstream os;
+                os << "Move to (" << c.destination.x << ", " << c.destination.y << ", " << c.destination.z << ")";
+                return os.str();
+            },
+            [](const AttackCommand& c) {
+                return "Attack " + c.target + " at intensity " + std::to_string(c.intensity);
+            },
+            [](const ScanCommand& c) {
+                std::ostringstream os;
+                os << "Scan radius " << c.radius;
+                return os.str();
+            },
+            [](const DockCommand& c) { return "Dock at " + c.station; },
+        },
+        command);
+}
+
+VesselStatus statusAfter(const Command& command) noexcept {
+    // std::visit throws std::bad_variant_access only for a valueless variant, excluded here.
+    if (command.valueless_by_exception()) {
+        return VesselStatus::Maintenance;
+    }
+    return std::visit(Overloaded{
+                          [](const MoveCommand&) noexcept { return VesselStatus::InTransit; },
+                          [](const AttackCommand&) noexcept { return VesselStatus::Combat; },
+                          [](const ScanCommand&) noexcept { return VesselStatus::Exploring; },
+                          [](const DockCommand&) noexcept { return VesselStatus::Docked; },
+                      },
+                      command);
+}
+
+namespace {
+
+std::optional<double> parseDouble(std::string_view token) {
+    // Stream-based parsing is portable; floating-point std::from_chars is not universally available.
+    std::istringstream stream{std::string(token)};
+    stream.imbue(std::locale::classic());
+    double value = 0.0;
+    if (!(stream >> value) || !stream.eof() || !std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::vector<std::string_view> tokenize(std::string_view text) {
+    std::vector<std::string_view> tokens;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const auto start = text.find_first_not_of(" \t", pos);
+        if (start == std::string_view::npos) {
+            break;
+        }
+        const auto end = text.find_first_of(" \t", start);
+        tokens.push_back(text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+        pos = end == std::string_view::npos ? text.size() : end;
+    }
+    return tokens;
+}
+
+}  // namespace
+
+CommandParseResult parseCommand(std::string_view text) {
+    const auto tokens = tokenize(text);
+    if (tokens.empty()) {
+        return ParseError{"empty command", 0};
+    }
+    const auto expect = [&tokens](std::size_t count) -> std::optional<ParseError> {
+        if (tokens.size() != count) {
+            return ParseError{"expected " + std::to_string(count - 1) + " argument(s)",
+                              std::min(tokens.size(), count)};
+        }
+        return std::nullopt;
     };
-
-    /**
-     * @brief Performance comparison between different utility types
-     */
-    class UtilityPerformanceTest {
-    public:
-        static void compareContainerAccess() {
-            std::cout << "\n=== Utility Performance Comparison ===\n";
-            
-            constexpr size_t iterations = 100000;
-            
-            // Test pair vs tuple performance
-            auto test_pair_access = [iterations]() {
-                std::vector<std::pair<int, double>> pairs;
-                pairs.reserve(iterations);
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    pairs.emplace_back(static_cast<int>(i), static_cast<double>(i) * 1.5);
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                double sum = 0.0;
-                for (const auto& p : pairs) {
-                    sum += p.first + p.second;
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Pair access time: " << duration.count() << " microseconds (sum: " << sum << ")\n";
-            };
-            
-            auto test_tuple_access = [iterations]() {
-                std::vector<std::tuple<int, double>> tuples;
-                tuples.reserve(iterations);
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    tuples.emplace_back(static_cast<int>(i), static_cast<double>(i) * 1.5);
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                double sum = 0.0;
-                for (const auto& t : tuples) {
-                    sum += std::get<0>(t) + std::get<1>(t);
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Tuple access time: " << duration.count() << " microseconds (sum: " << sum << ")\n";
-            };
-            
-            test_pair_access();
-            test_tuple_access();
-            
-            // Test optional vs pointer performance
-            auto test_optional_access = [iterations]() {
-                std::vector<std::optional<int>> optionals;
-                optionals.reserve(iterations);
-                
-                std::random_device rd;
-                std::mt19937 gen(rd());
-                std::bernoulli_distribution dist(0.8); // 80% have values
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    if (dist(gen)) {
-                        optionals.emplace_back(static_cast<int>(i));
-                    } else {
-                        optionals.emplace_back(std::nullopt);
-                    }
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                int sum = 0;
-                for (const auto& opt : optionals) {
-                    if (opt.has_value()) {
-                        sum += *opt;
-                    }
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Optional access time: " << duration.count() << " microseconds (sum: " << sum << ")\n";
-            };
-            
-            auto test_pointer_access = [iterations]() {
-                std::vector<std::unique_ptr<int>> pointers;
-                pointers.reserve(iterations);
-                
-                std::random_device rd;
-                std::mt19937 gen(rd());
-                std::bernoulli_distribution dist(0.8); // 80% have values
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    if (dist(gen)) {
-                        pointers.emplace_back(std::make_unique<int>(static_cast<int>(i)));
-                    } else {
-                        pointers.emplace_back(nullptr);
-                    }
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                int sum = 0;
-                for (const auto& ptr : pointers) {
-                    if (ptr) {
-                        sum += *ptr;
-                    }
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Pointer access time: " << duration.count() << " microseconds (sum: " << sum << ")\n";
-            };
-            
-            test_optional_access();
-            test_pointer_access();
+    const std::string_view verb = tokens[0];
+    if (verb == "move") {
+        if (auto error = expect(4)) {
+            return *std::move(error);
         }
-        
-        static void compareVariantVsAny() {
-            std::cout << "\n=== Variant vs Any Performance ===\n";
-            
-            constexpr size_t iterations = 50000;
-            
-            // Test variant performance
-            auto test_variant_performance = [iterations]() {
-                using TestVariant = std::variant<int, double, std::string>;
-                std::vector<TestVariant> variants;
-                variants.reserve(iterations);
-                
-                std::random_device rd;
-                std::mt19937 gen(rd());
-                std::uniform_int_distribution<> type_dist(0, 2);
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    switch (type_dist(gen)) {
-                        case 0: variants.emplace_back(static_cast<int>(i)); break;
-                        case 1: variants.emplace_back(static_cast<double>(i) * 1.5); break;
-                        case 2: variants.emplace_back("Value-" + std::to_string(i)); break;
-                    }
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                size_t processed = 0;
-                for (const auto& var : variants) {
-                    std::visit([&processed](const auto& value) {
-                        processed += 1;
-                        // Simulate some work
-                        [[maybe_unused]] volatile auto temp = value;
-                    }, var);
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Variant processing time: " << duration.count() 
-                          << " microseconds (processed: " << processed << ")\n";
-            };
-            
-            // Test any performance
-            auto test_any_performance = [iterations]() {
-                std::vector<std::any> anys;
-                anys.reserve(iterations);
-                
-                std::random_device rd;
-                std::mt19937 gen(rd());
-                std::uniform_int_distribution<> type_dist(0, 2);
-                
-                for (size_t i = 0; i < iterations; ++i) {
-                    switch (type_dist(gen)) {
-                        case 0: anys.emplace_back(static_cast<int>(i)); break;
-                        case 1: anys.emplace_back(static_cast<double>(i) * 1.5); break;
-                        case 2: anys.emplace_back("Value-" + std::to_string(i)); break;
-                    }
-                }
-                
-                auto start = std::chrono::high_resolution_clock::now();
-                
-                size_t processed = 0;
-                for (const auto& any_val : anys) {
-                    if (any_val.type() == typeid(int)) {
-                        [[maybe_unused]] volatile auto temp = std::any_cast<int>(any_val);
-                        processed++;
-                    } else if (any_val.type() == typeid(double)) {
-                        [[maybe_unused]] volatile auto temp = std::any_cast<double>(any_val);
-                        processed++;
-                    } else if (any_val.type() == typeid(std::string)) {
-                        [[maybe_unused]] volatile auto temp = std::any_cast<std::string>(any_val);
-                        processed++;
-                    }
-                }
-                
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                
-                std::cout << "Any processing time: " << duration.count() 
-                          << " microseconds (processed: " << processed << ")\n";
-            };
-            
-            test_variant_performance();
-            test_any_performance();
+        std::array<double, 3> xyz{};
+        for (std::size_t i = 0; i < 3; ++i) {
+            const auto value = parseDouble(tokens[i + 1]);
+            if (!value) {
+                return ParseError{"invalid coordinate", i + 1};
+            }
+            xyz[i] = *value;
         }
-    };
-
-    /**
-     * @brief Real-world scenario combining all utilities
-     */
-    class SpaceStationDataSystem {
-    public:
-        // Complex data structure representing a space station's systems
-        struct SystemStatus {
-            std::string system_name;
-            std::optional<double> efficiency_rating;
-            std::variant<std::string, int, bool> current_status;
-            std::vector<std::pair<std::string, std::any>> diagnostics;
-            std::tuple<double, double, double> resource_usage; // power, fuel, coolant
-        };
-        
-        static void demonstrateComplexScenario() {
-            std::cout << "\n=== Complex Space Station Data System ===\n";
-            
-            std::vector<SystemStatus> station_systems{
-                {
-                    "Life Support",
-                    98.5,
-                    std::string("Nominal"),
-                    {
-                        {"oxygen_level", 21.2},
-                        {"temperature", 22.5},
-                        {"humidity", 45.0},
-                        {"air_recycling_rate", std::string("Optimal")},
-                        {"backup_systems", true}
-                    },
-                    {15.2, 5.1, 8.7}
-                },
-                {
-                    "Propulsion",
-                    std::nullopt, // Under maintenance, efficiency unknown
-                    false, // Offline
-                    {
-                        {"thrust_capacity", 0.0},
-                        {"fuel_injection_rate", 0.0},
-                        {"engine_temperature", 15.0}, // Cold
-                        {"maintenance_crew", std::string("Engineering Team Alpha")},
-                        {"estimated_repair_time", 24.5}
-                    },
-                    {0.0, 0.0, 2.1} // Minimal power for monitoring
-                },
-                {
-                    "Communications",
-                    87.3,
-                    42, // Signal strength percentage
-                    {
-                        {"transmission_power", 75.0},
-                        {"receiver_sensitivity", -95.5},
-                        {"active_channels", 12},
-                        {"encryption_status", std::string("Active")},
-                        {"last_contact_earth", std::string("2024-03-15 14:30:00")}
-                    },
-                    {8.9, 0.0, 3.2}
-                }
-            };
-            
-            // Comprehensive system analysis
-            std::cout << "SPACE STATION SYSTEM STATUS REPORT\n";
-            std::cout << std::string(50, '=') << "\n";
-            
-            double total_power = 0.0, total_fuel = 0.0, total_coolant = 0.0;
-            int operational_systems = 0;
-            std::vector<std::string> critical_issues;
-            
-            for (const auto& system : station_systems) {
-                std::cout << "\nSYSTEM: " << system.system_name << "\n";
-                std::cout << std::string(system.system_name.length() + 8, '-') << "\n";
-                
-                // Efficiency analysis
-                if (system.efficiency_rating) {
-                    std::cout << "Efficiency: " << *system.efficiency_rating << "%";
-                    if (*system.efficiency_rating > 95.0) {
-                        std::cout << " (Excellent)";
-                    } else if (*system.efficiency_rating > 80.0) {
-                        std::cout << " (Good)";
-                    } else {
-                        std::cout << " (Needs attention)";
-                        critical_issues.push_back(system.system_name + " low efficiency");
-                    }
-                    std::cout << "\n";
-                    operational_systems++;
-                } else {
-                    std::cout << "Efficiency: Unknown (System offline/maintenance)\n";
-                    critical_issues.push_back(system.system_name + " offline");
-                }
-                
-                // Status analysis using variant visitor
-                std::cout << "Status: ";
-                std::visit([&system, &critical_issues](const auto& status) {
-                    using T = std::decay_t<decltype(status)>;
-                    if constexpr (std::is_same_v<T, std::string>) {
-                        std::cout << status;
-                        if (status != "Nominal" && status != "Optimal") {
-                            critical_issues.push_back(system.system_name + " status: " + status);
-                        }
-                    } else if constexpr (std::is_same_v<T, int>) {
-                        std::cout << status << "% signal strength";
-                        if (status < 50) {
-                            critical_issues.push_back(system.system_name + " signal weak");
-                        }
-                    } else if constexpr (std::is_same_v<T, bool>) {
-                        std::cout << (status ? "Online" : "Offline");
-                        if (!status) {
-                            critical_issues.push_back(system.system_name + " offline");
-                        }
-                    }
-                }, system.current_status);
-                std::cout << "\n";
-                
-                // Resource usage analysis
-                const auto& [power, fuel, coolant] = system.resource_usage;
-                std::cout << "Resource Usage:\n";
-                std::cout << "  Power: " << power << " kW\n";
-                std::cout << "  Fuel: " << fuel << " units/hour\n";
-                std::cout << "  Coolant: " << coolant << " liters/minute\n";
-                
-                total_power += power;
-                total_fuel += fuel;
-                total_coolant += coolant;
-                
-                // Diagnostic data analysis
-                std::cout << "Diagnostics:\n";
-                for (const auto& [param_name, value] : system.diagnostics) {
-                    std::cout << "  " << param_name << ": ";
-                    
-                    if (value.type() == typeid(double)) {
-                        std::cout << std::any_cast<double>(value);
-                    } else if (value.type() == typeid(int)) {
-                        std::cout << std::any_cast<int>(value);
-                    } else if (value.type() == typeid(std::string)) {
-                        std::cout << "\"" << std::any_cast<std::string>(value) << "\"";
-                    } else if (value.type() == typeid(bool)) {
-                        std::cout << (std::any_cast<bool>(value) ? "Enabled" : "Disabled");
-                    } else {
-                        std::cout << "[Unknown type]";
-                    }
-                    std::cout << "\n";
-                }
-            }
-            
-            // Summary report
-            std::cout << "\n" << std::string(50, '=') << "\n";
-            std::cout << "STATION SUMMARY\n";
-            std::cout << std::string(50, '=') << "\n";
-            std::cout << "Operational systems: " << operational_systems << "/" << station_systems.size() << "\n";
-            std::cout << "Total power consumption: " << total_power << " kW\n";
-            std::cout << "Total fuel consumption: " << total_fuel << " units/hour\n";
-            std::cout << "Total coolant consumption: " << total_coolant << " liters/minute\n";
-            
-            if (!critical_issues.empty()) {
-                std::cout << "\nCRITICAL ISSUES (" << critical_issues.size() << "):\n";
-                for (size_t i = 0; i < critical_issues.size(); ++i) {
-                    std::cout << i + 1 << ". " << critical_issues[i] << "\n";
-                }
-            } else {
-                std::cout << "\nNo critical issues detected. Station operating normally.\n";
-            }
-            
-            // Calculate overall station health
-            double health_score = 0.0;
-            int scored_systems = 0;
-            
-            for (const auto& system : station_systems) {
-                if (system.efficiency_rating) {
-                    health_score += *system.efficiency_rating;
-                    scored_systems++;
-                }
-            }
-            
-            if (scored_systems > 0) {
-                health_score /= scored_systems;
-                std::cout << "\nOverall station health: " << std::fixed << std::setprecision(1) 
-                          << health_score << "%";
-                
-                if (health_score > 90.0) {
-                    std::cout << " (Excellent condition)";
-                } else if (health_score > 75.0) {
-                    std::cout << " (Good condition)";
-                } else if (health_score > 50.0) {
-                    std::cout << " (Fair condition - maintenance recommended)";
-                } else {
-                    std::cout << " (Poor condition - immediate attention required)";
-                }
-                std::cout << "\n";
-            }
+        return Command{MoveCommand{{xyz[0], xyz[1], xyz[2]}}};
+    }
+    if (verb == "attack") {
+        if (auto error = expect(3)) {
+            return *std::move(error);
         }
-    };
+        const auto intensity = parseInt(tokens[2]);
+        if (!intensity || *intensity < 1 || *intensity > 10) {
+            return ParseError{"intensity must be an integer in [1, 10]", 2};
+        }
+        return Command{AttackCommand{std::string(tokens[1]), *intensity}};
+    }
+    if (verb == "scan") {
+        if (auto error = expect(2)) {
+            return *std::move(error);
+        }
+        const auto radius = parseDouble(tokens[1]);
+        if (!radius || *radius <= 0.0) {
+            return ParseError{"radius must be a positive number", 1};
+        }
+        return Command{ScanCommand{*radius}};
+    }
+    if (verb == "dock") {
+        if (auto error = expect(2)) {
+            return *std::move(error);
+        }
+        return Command{DockCommand{std::string(tokens[1])}};
+    }
+    return ParseError{"unknown command '" + std::string(verb) + "'", 0};
 }
 
-// Explicit instantiation of template functions for common types
-template std::string AdvancedUtilities::format_pair<int, std::string>(const std::pair<int, std::string>&);
-template std::string AdvancedUtilities::format_pair<std::string, double>(const std::pair<std::string, double>&);
+// ---------------------------------------------------------------------------------------- any
 
-// Main demonstration functions
-void runSTLUtilitiesDemo() {
-    STLUtilitiesDemo::runAllDemonstrations();
+bool PropertyBag::erase(std::string_view key) {
+    const auto it = properties_.find(key);
+    if (it == properties_.end()) {
+        return false;
+    }
+    properties_.erase(it);
+    return true;
 }
 
-void runAdvancedUtilitiesDemo() {
-    std::cout << "\n========== ADVANCED STL UTILITIES DEMONSTRATION ==========\n";
-    
-    AdvancedUtilities::UtilityPerformanceTest::compareContainerAccess();
-    AdvancedUtilities::UtilityPerformanceTest::compareVariantVsAny();
-    AdvancedUtilities::SpaceStationDataSystem::demonstrateComplexScenario();
-    
-    std::cout << "\n========== ADVANCED DEMONSTRATION COMPLETE ==========\n";
+std::vector<std::string> PropertyBag::keys() const {
+    std::vector<std::string> result;
+    result.reserve(properties_.size());
+    for (const auto& [key, value] : properties_) {
+        result.push_back(key);
+    }
+    return result;
 }
 
-void demonstrateUtilityBestPractices() {
-    std::cout << "\n========== STL UTILITIES BEST PRACTICES ==========\n";
-    
-    std::cout << "\n=== Best Practices Summary ===\n";
-    
-    std::cout << "\n1. std::pair:\n";
-    std::cout << "   - Use for simple two-element associations\n";
-    std::cout << "   - Prefer structured bindings (C++17) for access\n";
-    std::cout << "   - Consider std::tuple for more than two elements\n";
-    std::cout << "   - Use make_pair for type deduction when needed\n";
-    
-    std::cout << "\n2. std::tuple:\n";
-    std::cout << "   - Use for multiple return values from functions\n";
-    std::cout << "   - Structured bindings make access more readable\n";
-    std::cout << "   - Consider named structs for better readability in complex cases\n";
-    std::cout << "   - Use tuple_cat for combining tuples\n";
-    
-    std::cout << "\n3. std::optional:\n";
-    std::cout << "   - Use instead of pointers for nullable values\n";
-    std::cout << "   - Always check has_value() or use implicit bool conversion\n";
-    std::cout << "   - Use value_or() for default values\n";
-    std::cout << "   - Prefer optional over exceptions for expected failures\n";
-    
-    std::cout << "\n4. std::variant:\n";
-    std::cout << "   - Use for type-safe unions\n";
-    std::cout << "   - Prefer std::visit with generic lambdas\n";
-    std::cout << "   - Consider std::holds_alternative for type checking\n";
-    std::cout << "   - Use get_if for safe access without exceptions\n";
-    
-    std::cout << "\n5. std::any:\n";
-    std::cout << "   - Use sparingly, prefer variant when types are known\n";
-    std::cout << "   - Always check type() before any_cast\n";
-    std::cout << "   - Use any_cast with pointers for safe casting\n";
-    std::cout << "   - Consider performance implications of type erasure\n";
-    
-    std::cout << "\n=== Performance Considerations ===\n";
-    std::cout << "- pair: Zero overhead, optimal performance\n";
-    std::cout << "- tuple: Near-zero overhead with good compilers\n";
-    std::cout << "- optional: Minimal overhead, better than pointers\n";
-    std::cout << "- variant: Union-like storage, visitor pattern efficient\n";
-    std::cout << "- any: Type erasure overhead, use judiciously\n";
-    
-    std::cout << "\n=== When to Use Each Utility ===\n";
-    std::cout << "- pair: Key-value pairs, coordinate pairs, simple associations\n";
-    std::cout << "- tuple: Multiple return values, heterogeneous data groups\n";
-    std::cout << "- optional: Nullable values, optional function parameters\n";
-    std::cout << "- variant: Sum types, state machines, error handling\n";
-    std::cout << "- any: Configuration systems, plugin architectures\n";
-    
-    std::cout << "\n========== BEST PRACTICES SUMMARY COMPLETE ==========\n";
+// --------------------------------------------------------------------------- string_view/span
+
+std::vector<std::string_view> splitView(std::string_view text, char delimiter) {
+    std::vector<std::string_view> fields;
+    std::size_t start = 0;
+    while (true) {
+        const auto end = text.find(delimiter, start);
+        if (end == std::string_view::npos) {
+            fields.push_back(text.substr(start));
+            return fields;
+        }
+        fields.push_back(text.substr(start, end - start));
+        start = end + 1;
+    }
 }
 
-} // namespace CppVerseHub::STL
+std::optional<double> mean(std::span<const double> values) noexcept {
+    if (values.empty()) {
+        return std::nullopt;
+    }
+    return std::accumulate(values.begin(), values.end(), 0.0) / static_cast<double>(values.size());
+}
+
+// ------------------------------------------------------------------------------ demonstrations
+
+void demonstratePairs(std::ostream& out) {
+    out << "\n=== std::pair ===\n";
+    const std::pair<std::string, VesselStatus> vessel{"Rocinante", VesselStatus::InTransit};
+    const auto& [name, status] = vessel;
+    out << "structured binding: " << name << " is " << toString(status) << '\n';
+
+    const std::vector<NavigationCoordinate> beacons{{0, 0, 0}, {10, 0, 0}, {10, 1, 0}, {-5, -5, -5}};
+    if (const auto closest = closestPairIndices(beacons)) {
+        out << "closest beacons: #" << closest->first << " and #" << closest->second << '\n';
+    }
+    if (const auto range = distanceRangeFromOrigin(beacons)) {
+        out << "distance range from origin: [" << range->first << ", " << range->second << "]\n";
+    }
+    std::map<std::string, int> docking_bays;
+    const auto [where, inserted] = docking_bays.insert({"Bay 1", 4});
+    const auto [again, inserted_again] = docking_bays.insert({"Bay 1", 9});
+    out << std::boolalpha << "map::insert returns pair<iterator,bool>: " << inserted << " then " << inserted_again
+        << " (value stays " << again->second << ", same node: " << (where == again) << ")\n";
+}
+
+void demonstrateTuples(std::ostream& out) {
+    out << "\n=== std::tuple ===\n";
+    const std::vector<NavigationCoordinate> cloud{{1, 1, 1}, {3, 1, 1}, {2, 4, 1}};
+    if (const auto stats = coordinateStatistics(cloud)) {
+        const auto& [centroid, spread, count] = *stats;
+        out << "centroid (" << centroid.x << ", " << centroid.y << ", " << centroid.z << "), spread " << spread
+            << ", " << count << " points\n";
+    }
+    const auto record = std::make_tuple(std::string("Tycho"), 42, 3.5);
+    out << "formatTuple via std::apply: " << formatTuple(record) << '\n';
+    const auto doubled = transformTuple(std::make_tuple(1, 2.5, 4L), [](auto v) { return v * 2; });
+    out << "transformTuple: " << formatTuple(doubled) << '\n';
+    std::size_t elements = 0;
+    forEachElement(record, [&elements](const auto&) { ++elements; });
+    out << "forEachElement visited " << elements << " elements; tuple_size = "
+        << std::tuple_size_v<decltype(record)> << '\n';
+
+    std::vector<VesselRecord> fleet{{"Canterbury", VesselStatus::InTransit, 2},
+                                    {"Donnager", VesselStatus::Combat, 9},
+                                    {"Razorback", VesselStatus::InTransit, 7},
+                                    {"Agatha King", VesselStatus::Docked, 5}};
+    sortVesselRecords(fleet);
+    out << "std::tie multi-key sort:";
+    for (const auto& v : fleet) {
+        out << ' ' << v.name;
+    }
+    out << '\n';
+}
+
+void demonstrateOptional(std::ostream& out) {
+    out << "\n=== std::optional ===\n";
+    for (const std::string_view input : {"42", "-7", "12abc", ""}) {
+        const auto parsed = parseInt(input);
+        out << "parseInt(\"" << input << "\") -> " << (parsed ? std::to_string(*parsed) : std::string("nullopt"))
+            << '\n';
+    }
+    out << "safeDivide(1, 0).value_or(-1) = " << safeDivide(1.0, 0.0).value_or(-1.0) << '\n';
+    const auto fuel_per_jump = andThen(parseInt("120"), [](int fuel) { return safeDivide(fuel, 8.0); });
+    out << "andThen(parseInt, safeDivide) = " << fuel_per_jump.value_or(0.0) << '\n';
+    const auto label = transformOptional(parseInt("3"), [](int n) { return "warp " + std::to_string(n); });
+    out << "transformOptional -> " << label.value_or("none") << '\n';
+    const std::map<std::string, VesselStatus, std::less<>> registry{{"Nauvoo", VesselStatus::Maintenance}};
+    const auto status = findVesselStatus(registry, "Nauvoo");
+    out << "registry lookup: " << (status ? toString(*status) : std::string_view{"unknown"}) << '\n';
+}
+
+void demonstrateVariant(std::ostream& out) {
+    out << "\n=== std::variant ===\n";
+    const std::vector<Command> orders{MoveCommand{{1, 2, 3}}, AttackCommand{"Pirate", 7}, ScanCommand{250.0},
+                                      DockCommand{"Tycho Station"}};
+    for (const auto& order : orders) {
+        out << "visit: " << describeCommand(order) << " -> status " << toString(statusAfter(order)) << '\n';
+    }
+    for (const std::string_view text : {"scan 12.5", "attack Drone 11", "warp 9"}) {
+        const auto result = parseCommand(text);
+        if (const auto* command = std::get_if<Command>(&result)) {
+            out << "parsed \"" << text << "\": " << describeCommand(*command) << '\n';
+        } else {
+            const auto& error = std::get<ParseError>(result);
+            out << "error in \"" << text << "\" at token " << error.token << ": " << error.message << '\n';
+        }
+    }
+    out << "holds_alternative<ScanCommand>(orders[2]) = " << std::boolalpha
+        << std::holds_alternative<ScanCommand>(orders[2]) << ", index = " << orders[2].index() << '\n';
+}
+
+void demonstrateAny(std::ostream& out) {
+    out << "\n=== std::any ===\n";
+    PropertyBag config;
+    config.set("callsign", std::string("Roci"));
+    config.set("max_warp", 9.2);
+    config.set("crew", 4);
+    out << "PropertyBag holds " << config.size() << " properties\n";
+    out << std::boolalpha << "get<int>(\"crew\") = " << config.get<int>("crew").value_or(-1)
+        << ", get<long>(\"crew\") engaged? " << config.get<long>("crew").has_value() << '\n';
+    out << "holds<double>(\"max_warp\") = " << config.holds<double>("max_warp") << '\n';
+    std::any scratch = 5;
+    scratch = std::string("now a string");
+    try {
+        (void)std::any_cast<int>(scratch);
+    } catch (const std::bad_any_cast&) {
+        out << "any_cast<int> on a string threw std::bad_any_cast as expected\n";
+    }
+}
+
+void demonstrateViews(std::ostream& out) {
+    out << "\n=== std::string_view and std::span ===\n";
+    constexpr std::string_view manifest = "fuel,water,,ammo";
+    const auto fields = splitView(manifest, ',');
+    out << "splitView produced " << fields.size() << " non-owning fields:";
+    for (const auto field : fields) {
+        out << " [" << field << ']';
+    }
+    out << '\n';
+    const std::array<double, 4> readings{2.0, 4.0, 6.0, 8.0};
+    out << "mean over std::span of first 3 readings: " << mean(std::span(readings).first(3)).value_or(0.0) << '\n';
+}
+
+void runSTLUtilitiesDemo(std::ostream& out) {
+    demonstratePairs(out);
+    demonstrateTuples(out);
+    demonstrateOptional(out);
+    demonstrateVariant(out);
+    demonstrateAny(out);
+    demonstrateViews(out);
+}
+
+}  // namespace CppVerseHub::STL
