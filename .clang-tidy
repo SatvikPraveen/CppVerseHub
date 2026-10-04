@@ -33,10 +33,10 @@ Checks: >
   -misc-include-cleaner,
   modernize-*,
   -modernize-use-trailing-return-type,
-  -performance-enum-size,
   -modernize-use-nodiscard,
   -modernize-avoid-c-arrays,
   performance-*,
+  -performance-enum-size,
   portability-*,
   readability-avoid-const-params-in-decls,
   readability-braces-around-statements,
@@ -61,7 +61,7 @@ Checks: >
   readability-uniqueptr-delete-release,
   readability-use-anyofallof
 
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
 HeaderFilterRegex: '^.*/src/.*\.hpp$'
 FormatStyle: file
 

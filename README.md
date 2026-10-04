@@ -37,7 +37,7 @@ A deterministic space-fleet simulation ties them together as a shared domain.
 The project is built to be read, reused and checked:
 
 - **Every technique is library code.** Each component has a documented interface, stated complexity and explicit thread-safety and exception-safety guarantees.
-- **Every claim is checked.** 832 Catch2 test cases, more than 500 `static_assert` checks and two example smoke tests run in CI on GCC, Clang, Apple Clang and MSVC.
+- **Every claim is checked.** 834 Catch2 test cases, more than 500 `static_assert` checks and two example smoke tests run in CI on GCC, Clang, Apple Clang and MSVC.
 - **Concurrency and memory code is sanitizer-clean.** Tests run under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer.
 - **Performance claims are measured.** Nine Google Benchmark suites compare each custom component with its standard-library counterpart.
 - **The simulation is reproducible.** A seed and a step count fully determine the final state, which is verifiable through a 64-bit state digest.
@@ -132,14 +132,14 @@ See the [architecture overview](docs/design_docs/architecture_overview.md) for t
 
 | Layer | What runs | Where |
 |-------|-----------|-------|
-| Unit and property tests | 832 Catch2 test cases, including sorts checked against `std::sort` on seeded random inputs and graph algorithms checked against brute force | `tests/<module>/` |
+| Unit and property tests | 834 Catch2 test cases, including sorts checked against `std::sort` on seeded random inputs and graph algorithms checked against brute force | `tests/<module>/` |
 | Compile-time checks | More than 500 `static_assert` checks on concepts, traits and `constexpr` results | headers and tests |
 | Sanitizers | ASan with UBSan, and TSan, over the full test suite | `asan` and `tsan` presets |
-| Static analysis | clang-tidy, cppcheck and CodeQL | `.github/workflows/static-analysis.yml` |
+| Static analysis | clang-tidy and cppcheck with zero findings (any new finding fails CI), CodeQL, and an enforced clang-format check | `.github/workflows/static-analysis.yml` |
 | Portability | GCC 13 and 14, Clang 18, Apple Clang 16 and MSVC 2022 | `.github/workflows/ci.yml` |
 | Coverage | gcovr report uploaded as a CI artifact | `coverage` preset |
 
-Every push to `main` builds and tests the project on these toolchains, with warnings treated as errors on all but MSVC:
+Every push to `main` builds and tests the project on these toolchains, with warnings treated as errors on all of them:
 
 | Platform | Compiler | Standard library | Build |
 |----------|----------|------------------|-------|

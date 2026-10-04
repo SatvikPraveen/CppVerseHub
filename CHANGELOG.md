@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Deterministic, seeded space-fleet simulation core with JSON scenario persistence.
 - Continuous integration across GCC 13/14, Clang 18, Apple Clang 16 and MSVC 2022, with sanitizer, coverage, static-analysis and documentation jobs.
 - API documentation published to GitHub Pages.
+- Zero-finding clang-tidy and cppcheck baselines, enforced in CI, plus an enforced clang-format check.
+- Warnings are errors on every CI toolchain, including MSVC.
 - `CITATION.cff`, contribution guide, code of conduct and security policy.
 
 ### Changed
