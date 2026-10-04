@@ -1,455 +1,344 @@
-// File: src/modern/StructuredBindings.hpp
-// C++17 Structured Bindings (Decomposition Declarations) Demonstration
-
+/**
+ * @file StructuredBindings.hpp
+ * @brief Structured bindings (C++17, extended in C++20): decomposing tuples, pairs, arrays, aggregates
+ *        and user-defined tuple-like types.
+ *
+ * `auto [a, b, c] = expr;` introduces names for the parts of an object. This header demonstrates the
+ * three binding protocols defined by the standard:
+ *  1. arrays (`std::array`, C arrays) — `centerOfMass`;
+ *  2. tuple-like types (`std::tuple`, `std::pair`, and *our own* `ShipRecord`, which opts in through
+ *     `std::tuple_size` / `std::tuple_element` / `get<I>`) — `orbitParameters`, `jumpDistance`;
+ *  3. aggregates with public data members — `SpaceCoordinate`, `FleetStats`, `FuelRange`.
+ * It also shows binding by reference to mutate elements in place, decomposing map entries and
+ * `insert`/`try_emplace` results, and C++20 capture of structured bindings in lambdas.
+ */
 #pragma once
 
-#include <tuple>
-#include <string>
-#include <vector>
-#include <map>
-#include <array>
-#include <utility>
-#include <iostream>
 #include <algorithm>
-#include <numeric>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <iostream>
+#include <map>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Modern::StructuredBindings {
 
-// ===== SPACE GAME DATA STRUCTURES =====
+// ===== AGGREGATES (binding protocol 3) =====
 
+/// @brief A point in 3D space.
 struct SpaceCoordinate {
-    double x, y, z;
-    
-    SpaceCoordinate(double x_val = 0.0, double y_val = 0.0, double z_val = 0.0)
-        : x(x_val), y(y_val), z(z_val) {}
+    double x = 0.0;  ///< X.
+    double y = 0.0;  ///< Y.
+    double z = 0.0;  ///< Z.
 };
 
+/// @brief A planet with a position and mass.
 struct PlanetInfo {
-    int id;
-    std::string name;
-    double mass;
-    bool habitable;
-    std::vector<std::string> resources;
-    
-    PlanetInfo(int planet_id, std::string planet_name, double planet_mass, 
-               bool is_habitable, std::vector<std::string> planet_resources = {})
-        : id(planet_id), name(std::move(planet_name)), mass(planet_mass), 
-          habitable(is_habitable), resources(std::move(planet_resources)) {}
+    std::string name;               ///< Name.
+    double mass = 0.0;              ///< Mass (arbitrary units).
+    SpaceCoordinate position;       ///< Location.
+    bool habitable = false;         ///< Supports life.
 };
 
+/// @brief Fleet statistics.
 struct FleetStats {
-    std::string commander;
-    int ship_count;
-    double fuel_percentage;
-    std::string mission_type;
-    
-    FleetStats(std::string cmd, int ships, double fuel, std::string mission)
-        : commander(std::move(cmd)), ship_count(ships), 
-          fuel_percentage(fuel), mission_type(std::move(mission)) {}
+    std::string commander;          ///< Commanding officer.
+    int shipCount = 0;              ///< Ship count.
+    double fuelPercentage = 0.0;    ///< Fuel 0..100.
+    std::string missionType;        ///< Current mission.
 };
 
+/// @brief A mission report.
 struct MissionReport {
-    int mission_id;
-    std::string type;
-    double completion;
-    int priority;
-    std::vector<int> assigned_fleets;
-    
-    MissionReport(int id, std::string mission_type, double comp, int prio, 
-                  std::vector<int> fleets = {})
-        : mission_id(id), type(std::move(mission_type)), completion(comp), 
-          priority(prio), assigned_fleets(std::move(fleets)) {}
+    int missionId = 0;              ///< Identifier.
+    std::string type;               ///< Mission type.
+    double completion = 0.0;        ///< Completion 0..100.
+    int priority = 0;               ///< Priority.
 };
 
-// ===== TUPLE BASED FUNCTIONS =====
+/// @brief Result of a min/max scan: returning a named struct is often clearer than a tuple.
+struct FuelRange {
+    double minimum = 0.0;  ///< Lowest fuel.
+    double maximum = 0.0;  ///< Highest fuel.
+};
 
-std::tuple<double, double, double> calculateOrbitParameters(double mass, double distance) {
-    const double G = 6.67430e-11; // Gravitational constant (simplified)
-    double velocity = std::sqrt(G * mass / distance);
-    double period = 2 * 3.14159 * distance / velocity;
-    double energy = -G * mass / (2 * distance);
-    
-    return {velocity, period, energy};
+// ===== USER-DEFINED TUPLE-LIKE TYPE (binding protocol 2) =====
+
+/// @brief A class with *private* data that still supports `auto [id, name, crew] = record;` by
+///        implementing the tuple-like protocol (member `get<I>()` plus `std::tuple_size`/`tuple_element`).
+class ShipRecord {
+public:
+    /// @brief Creates a record. @param id Id. @param name Name. @param crew Crew size.
+    ShipRecord(int id, std::string name, int crew) : id_(id), name_(std::move(name)), crew_(crew) {}
+
+    /// @brief Tuple-like accessor (const lvalue). @return Element I.
+    template <std::size_t I>
+    [[nodiscard]] const auto& get() const& noexcept {
+        static_assert(I < 3, "ShipRecord has three elements");
+        if constexpr (I == 0) {
+            return id_;
+        } else if constexpr (I == 1) {
+            return name_;
+        } else {
+            return crew_;
+        }
+    }
+
+    /// @brief Tuple-like accessor (mutable lvalue). @return Element I.
+    template <std::size_t I>
+    [[nodiscard]] auto& get() & noexcept {
+        static_assert(I < 3, "ShipRecord has three elements");
+        if constexpr (I == 0) {
+            return id_;
+        } else if constexpr (I == 1) {
+            return name_;
+        } else {
+            return crew_;
+        }
+    }
+
+    /// @brief Tuple-like accessor (rvalue): moves the element out. @return Element I.
+    template <std::size_t I>
+    [[nodiscard]] auto&& get() && noexcept {
+        return std::move(get<I>());
+    }
+
+    /// @brief Crew size. @return Crew.
+    [[nodiscard]] int crew() const noexcept { return crew_; }
+
+private:
+    int id_;
+    std::string name_;
+    int crew_;
+};
+
+}  // namespace CppVerseHub::Modern::StructuredBindings
+
+/// @cond
+namespace std {
+template <>
+struct tuple_size<CppVerseHub::Modern::StructuredBindings::ShipRecord> : integral_constant<size_t, 3> {};
+template <>
+struct tuple_element<0, CppVerseHub::Modern::StructuredBindings::ShipRecord> {
+    using type = int;
+};
+template <>
+struct tuple_element<1, CppVerseHub::Modern::StructuredBindings::ShipRecord> {
+    using type = string;
+};
+template <>
+struct tuple_element<2, CppVerseHub::Modern::StructuredBindings::ShipRecord> {
+    using type = int;
+};
+}  // namespace std
+/// @endcond
+
+namespace CppVerseHub::Modern::StructuredBindings {
+
+// ===== FUNCTIONS WHOSE RESULTS ARE MEANT TO BE DECOMPOSED =====
+
+/// @brief Circular-orbit parameters around a body (G = 1 units).
+/// @param mass Central mass (> 0). @param distance Orbit radius (> 0).
+/// @return {orbital velocity, period, escape velocity}.
+[[nodiscard]] inline std::tuple<double, double, double> orbitParameters(double mass, double distance) {
+    const double velocity = std::sqrt(mass / distance);
+    const double period = 2.0 * 3.14159265358979323846 * distance / velocity;
+    const double escape = std::sqrt(2.0) * velocity;
+    return {velocity, period, escape};
 }
 
-std::tuple<int, std::string, double> findBestFleet(const std::vector<FleetStats>& fleets) {
+/// @brief Distance between two coordinates and a jump classification.
+/// @param from Origin. @param to Destination.
+/// @return {distance, "short"/"medium"/"long"}.
+[[nodiscard]] inline std::pair<double, std::string> jumpDistance(const SpaceCoordinate& from,
+                                                                 const SpaceCoordinate& to) {
+    const auto& [x1, y1, z1] = from;
+    const auto& [x2, y2, z2] = to;
+    const double d = std::sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) + (z2 - z1) * (z2 - z1));
+    const char* category = d < 10.0 ? "short" : (d < 100.0 ? "medium" : "long");
+    return {d, category};
+}
+
+/// @brief Fleet with the best ships x fuel score.
+/// @param fleets Candidates. @return {commander, score}, or nullopt if `fleets` is empty.
+[[nodiscard]] inline std::optional<std::pair<std::string, double>> findBestFleet(
+    const std::vector<FleetStats>& fleets) {
+    std::optional<std::pair<std::string, double>> best;
+    for (const auto& [commander, ships, fuel, mission] : fleets) {
+        const double score = static_cast<double>(ships) * fuel / 100.0;
+        if (!best || score > best->second) {
+            best = std::pair{commander, score};
+        }
+    }
+    return best;
+}
+
+/// @brief Completed-mission count and mean completion.
+/// @param missions Reports. @return {missions at 100%, mean completion (0 if empty)}.
+[[nodiscard]] inline std::pair<int, double> missionStats(const std::vector<MissionReport>& missions) {
+    int completed = 0;
+    double total = 0.0;
+    for (const auto& [id, type, completion, priority] : missions) {
+        completed += completion >= 100.0 ? 1 : 0;
+        total += completion;
+    }
+    return {completed, missions.empty() ? 0.0 : total / static_cast<double>(missions.size())};
+}
+
+/// @brief Mass-weighted centre of a set of planets.
+/// @param planets Input. @return {x, y, z}; all zero if total mass is zero.
+[[nodiscard]] inline std::array<double, 3> centerOfMass(const std::vector<PlanetInfo>& planets) {
+    std::array<double, 3> c{0.0, 0.0, 0.0};
+    double totalMass = 0.0;
+    for (const auto& [name, mass, pos, habitable] : planets) {
+        c[0] += pos.x * mass;
+        c[1] += pos.y * mass;
+        c[2] += pos.z * mass;
+        totalMass += mass;
+    }
+    if (totalMass > 0.0) {
+        for (double& v : c) {
+            v /= totalMass;
+        }
+    }
+    return c;
+}
+
+/// @brief Lowest and highest fuel across fleets.
+/// @param fleets Input (non-empty for a meaningful result). @return {min, max}; {0, 0} if empty.
+[[nodiscard]] inline FuelRange fuelRange(const std::vector<FleetStats>& fleets) {
     if (fleets.empty()) {
-        return {-1, "None", 0.0};
+        return {};
     }
-    
-    auto best_fleet = std::max_element(fleets.begin(), fleets.end(),
-        [](const FleetStats& a, const FleetStats& b) {
-            return (a.ship_count * a.fuel_percentage) < (b.ship_count * b.fuel_percentage);
-        });
-    
-    int index = static_cast<int>(std::distance(fleets.begin(), best_fleet));
-    return {index, best_fleet->commander, best_fleet->fuel_percentage};
+    FuelRange r{fleets.front().fuelPercentage, fleets.front().fuelPercentage};
+    for (const auto& f : fleets) {
+        r.minimum = std::min(r.minimum, f.fuelPercentage);
+        r.maximum = std::max(r.maximum, f.fuelPercentage);
+    }
+    return r;
 }
 
-std::tuple<std::string, int, std::vector<std::string>> 
-analyzePlanet(const PlanetInfo& planet) {
-    std::string status = planet.habitable ? "Habitable" : "Uninhabitable";
-    int resource_count = static_cast<int>(planet.resources.size());
-    
-    std::vector<std::string> rare_resources;
-    for (const auto& resource : planet.resources) {
-        if (resource.find("Rare") != std::string::npos || 
-            resource.find("Exotic") != std::string::npos) {
-            rare_resources.push_back(resource);
+/// @brief Refuels every fleet below `threshold` to 100% by binding *references* to members.
+/// @param fleets Fleets (modified). @param threshold Fuel threshold. @return Number refuelled.
+inline int refuelBelow(std::vector<FleetStats>& fleets, double threshold) {
+    int refuelled = 0;
+    for (auto& [commander, ships, fuel, mission] : fleets) {
+        if (fuel < threshold) {
+            fuel = 100.0;
+            ++refuelled;
         }
     }
-    
-    return {status, resource_count, rare_resources};
+    return refuelled;
 }
 
-// ===== PAIR BASED FUNCTIONS =====
-
-std::pair<double, std::string> calculateJumpDistance(const SpaceCoordinate& from, 
-                                                     const SpaceCoordinate& to) {
-    double dx = to.x - from.x;
-    double dy = to.y - from.y;
-    double dz = to.z - from.z;
-    double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
-    
-    std::string classification;
-    if (distance < 1.0) classification = "Local";
-    else if (distance < 10.0) classification = "System";
-    else if (distance < 100.0) classification = "Sector";
-    else classification = "Long Range";
-    
-    return {distance, classification};
-}
-
-std::pair<int, double> getMissionStats(const std::vector<MissionReport>& missions) {
-    if (missions.empty()) {
-        return {0, 0.0};
+/// @brief Total ships per mission type, built by decomposing `try_emplace`'s result.
+/// @param fleets Input. @return mission type -> ship count.
+[[nodiscard]] inline std::map<std::string, int> shipsByMission(const std::vector<FleetStats>& fleets) {
+    std::map<std::string, int> totals;
+    for (const auto& [commander, ships, fuel, mission] : fleets) {
+        auto [it, inserted] = totals.try_emplace(mission, 0);
+        it->second += ships;
     }
-    
-    int total_missions = static_cast<int>(missions.size());
-    double avg_completion = std::accumulate(missions.begin(), missions.end(), 0.0,
-        [](double sum, const MissionReport& mission) {
-            return sum + mission.completion;
-        }) / total_missions;
-    
-    return {total_missions, avg_completion};
+    return totals;
 }
 
-// ===== ARRAY BASED FUNCTIONS =====
-
-std::array<double, 3> calculateCenterOfMass(const std::vector<PlanetInfo>& planets) {
-    if (planets.empty()) {
-        return {0.0, 0.0, 0.0};
-    }
-    
-    double total_mass = 0.0;
-    std::array<double, 3> center = {0.0, 0.0, 0.0};
-    
-    // For simplicity, assume planets are at their ID positions
-    for (const auto& planet : planets) {
-        total_mass += planet.mass;
-        center[0] += planet.mass * planet.id;  // x-coordinate
-        center[1] += planet.mass * (planet.id * 0.5);  // y-coordinate
-        center[2] += planet.mass * (planet.id * 0.25); // z-coordinate
-    }
-    
-    if (total_mass > 0) {
-        center[0] /= total_mass;
-        center[1] /= total_mass;
-        center[2] /= total_mass;
-    }
-    
-    return center;
-}
-
-// ===== STRUCTURED BINDINGS DEMONSTRATIONS =====
-
-void demonstrate_tuple_bindings() {
-    std::cout << "\n=== Tuple Structured Bindings ===" << std::endl;
-    
-    // Basic tuple decomposition
-    auto planet_orbit = calculateOrbitParameters(1.989e30, 1.496e11); // Sun-Earth system
-    auto [orbital_velocity, orbital_period, binding_energy] = planet_orbit;
-    
-    std::cout << "Orbital Parameters:" << std::endl;
-    std::cout << "  Velocity: " << orbital_velocity << " m/s" << std::endl;
-    std::cout << "  Period: " << orbital_period << " seconds" << std::endl;
-    std::cout << "  Binding Energy: " << binding_energy << " J" << std::endl;
-    
-    // Fleet analysis with tuple binding
-    std::vector<FleetStats> fleets = {
-        {"Admiral Zhang", 25, 85.5, "Exploration"},
-        {"Commander Rodriguez", 12, 92.0, "Combat"},
-        {"Captain Singh", 8, 45.2, "Colonization"},
-        {"Admiral Thompson", 30, 76.8, "Trade"}
-    };
-    
-    auto [best_index, best_commander, best_fuel] = findBestFleet(fleets);
-    std::cout << "\nBest Fleet Analysis:" << std::endl;
-    std::cout << "  Index: " << best_index << std::endl;
-    std::cout << "  Commander: " << best_commander << std::endl;
-    std::cout << "  Fuel Level: " << best_fuel << "%" << std::endl;
-    
-    // Planet analysis
-    PlanetInfo kepler442b(5, "Kepler-442b", 4.34e24, true, 
-                         {"Water", "Oxygen", "Rare_Metals", "Exotic_Matter"});
-    
-    auto [habitability_status, resource_count, rare_resources] = analyzePlanet(kepler442b);
-    std::cout << "\nPlanet Analysis for " << kepler442b.name << ":" << std::endl;
-    std::cout << "  Status: " << habitability_status << std::endl;
-    std::cout << "  Resources: " << resource_count << " types" << std::endl;
-    std::cout << "  Rare Resources: ";
-    for (const auto& resource : rare_resources) {
-        std::cout << resource << " ";
-    }
-    std::cout << std::endl;
-}
-
-void demonstrate_pair_bindings() {
-    std::cout << "\n=== Pair Structured Bindings ===" << std::endl;
-    
-    // Distance calculations
-    SpaceCoordinate earth(0.0, 0.0, 0.0);
-    SpaceCoordinate mars(5.2, 2.8, 1.1);
-    SpaceCoordinate proxima_centauri(42000.0, 15000.0, 8500.0);
-    
-    auto [distance_to_mars, mars_classification] = calculateJumpDistance(earth, mars);
-    std::cout << "Jump to Mars:" << std::endl;
-    std::cout << "  Distance: " << distance_to_mars << " AU" << std::endl;
-    std::cout << "  Classification: " << mars_classification << std::endl;
-    
-    auto [distance_to_proxima, proxima_classification] = calculateJumpDistance(earth, proxima_centauri);
-    std::cout << "Jump to Proxima Centauri:" << std::endl;
-    std::cout << "  Distance: " << distance_to_proxima << " AU" << std::endl;
-    std::cout << "  Classification: " << proxima_classification << std::endl;
-    
-    // Mission statistics
-    std::vector<MissionReport> missions = {
-        {101, "Exploration", 75.5, 2},
-        {102, "Combat", 100.0, 5},
-        {103, "Colonization", 45.0, 1},
-        {104, "Trade", 90.0, 3},
-        {105, "Rescue", 10.0, 5}
-    };
-    
-    auto [total_missions, avg_completion] = getMissionStats(missions);
-    std::cout << "\nMission Statistics:" << std::endl;
-    std::cout << "  Total Missions: " << total_missions << std::endl;
-    std::cout << "  Average Completion: " << avg_completion << "%" << std::endl;
-}
-
-void demonstrate_array_bindings() {
-    std::cout << "\n=== Array Structured Bindings ===" << std::endl;
-    
-    // Coordinate array binding
-    std::array<double, 3> ship_position = {12.5, 8.3, -4.7};
-    auto [ship_x, ship_y, ship_z] = ship_position;
-    
-    std::cout << "Ship Position:" << std::endl;
-    std::cout << "  X: " << ship_x << " AU" << std::endl;
-    std::cout << "  Y: " << ship_y << " AU" << std::endl;
-    std::cout << "  Z: " << ship_z << " AU" << std::endl;
-    
-    // Center of mass calculation
-    std::vector<PlanetInfo> solar_system = {
-        {1, "Mercury", 3.301e23, false, {"Iron", "Silicon"}},
-        {2, "Venus", 4.867e24, false, {"Carbon", "Sulfur"}},
-        {3, "Earth", 5.972e24, true, {"Water", "Oxygen", "Iron"}},
-        {4, "Mars", 6.417e23, false, {"Iron", "Silicon", "Ice"}}
-    };
-    
-    auto [center_x, center_y, center_z] = calculateCenterOfMass(solar_system);
-    std::cout << "\nCenter of Mass (Solar System):" << std::endl;
-    std::cout << "  X: " << center_x << std::endl;
-    std::cout << "  Y: " << center_y << std::endl;
-    std::cout << "  Z: " << center_z << std::endl;
-    
-    // RGB color array (space theme)
-    std::array<int, 3> nebula_color = {138, 43, 226}; // Blue-violet
-    auto [red, green, blue] = nebula_color;
-    
-    std::cout << "\nNebula Color (RGB):" << std::endl;
-    std::cout << "  Red: " << red << std::endl;
-    std::cout << "  Green: " << green << std::endl;
-    std::cout << "  Blue: " << blue << std::endl;
-}
-
-void demonstrate_map_bindings() {
-    std::cout << "\n=== Map/Container Structured Bindings ===" << std::endl;
-    
-    // Resource inventory
-    std::map<std::string, int> resource_inventory = {
-        {"Water", 1500},
-        {"Oxygen", 800},
-        {"Iron", 2200},
-        {"Rare_Metals", 45},
-        {"Exotic_Matter", 3}
-    };
-    
-    std::cout << "Resource Inventory:" << std::endl;
-    for (const auto& [resource_name, quantity] : resource_inventory) {
-        std::cout << "  " << resource_name << ": " << quantity << " units" << std::endl;
-    }
-    
-    // Find most abundant resource
-    auto most_abundant = std::max_element(resource_inventory.begin(), resource_inventory.end(),
-        [](const auto& a, const auto& b) {
-            return a.second < b.second;
-        });
-    
-    auto [abundant_resource, abundant_quantity] = *most_abundant;
-    std::cout << "\nMost Abundant Resource: " << abundant_resource 
-              << " (" << abundant_quantity << " units)" << std::endl;
-    
-    // Fleet commanders and their ratings
-    std::map<std::string, double> commander_ratings = {
-        {"Admiral Zhang", 9.2},
-        {"Commander Rodriguez", 8.7},
-        {"Captain Singh", 7.8},
-        {"Admiral Thompson", 9.5},
-        {"Commander Chen", 8.1}
-    };
-    
-    std::cout << "\nCommander Ratings:" << std::endl;
-    for (const auto& [commander, rating] : commander_ratings) {
-        std::cout << "  " << commander << ": " << rating << "/10" << std::endl;
-    }
-}
-
-void demonstrate_struct_bindings() {
-    std::cout << "\n=== Struct Structured Bindings ===" << std::endl;
-    
-    // Note: Structured bindings work with structs/classes with public members
-    struct SimpleFleet {
-        std::string name;
-        int ships;
-        double fuel;
-    };
-    
-    SimpleFleet alpha_fleet{"Alpha Squadron", 12, 87.5};
-    auto [fleet_name, ship_count, fuel_level] = alpha_fleet;
-    
-    std::cout << "Fleet Information:" << std::endl;
-    std::cout << "  Name: " << fleet_name << std::endl;
-    std::cout << "  Ships: " << ship_count << std::endl;
-    std::cout << "  Fuel: " << fuel_level << "%" << std::endl;
-    
-    // Multiple struct decomposition
-    struct PlanetarySystem {
-        std::string star_name;
-        int planet_count;
-        bool has_habitable_zone;
-        double distance_from_earth;
-    };
-    
-    std::vector<PlanetarySystem> star_systems = {
-        {"Alpha Centauri", 3, true, 4.37},
-        {"Wolf 359", 2, false, 7.86},
-        {"Barnard's Star", 1, false, 5.96},
-        {"TRAPPIST-1", 7, true, 40.7}
-    };
-    
-    std::cout << "\nPlanetary Systems:" << std::endl;
-    for (const auto& [star, planets, habitable, distance] : star_systems) {
-        std::cout << "  " << star << ": " << planets << " planets, " 
-                  << distance << " ly away";
-        if (habitable) {
-            std::cout << " (has habitable zone)";
+/// @brief Mission type with the most ships (ties: lexicographically first).
+/// @param totals Output of `shipsByMission`. @return {type, ships}, or nullopt if empty.
+[[nodiscard]] inline std::optional<std::pair<std::string, int>> busiestMission(
+    const std::map<std::string, int>& totals) {
+    std::optional<std::pair<std::string, int>> best;
+    for (const auto& [type, ships] : totals) {
+        if (!best || ships > best->second) {
+            best = std::pair{type, ships};
         }
-        std::cout << std::endl;
     }
+    return best;
 }
 
-void demonstrate_function_return_bindings() {
-    std::cout << "\n=== Function Return Structured Bindings ===" << std::endl;
-    
-    // Lambda returning multiple values
-    auto analyze_fleet_composition = [](const std::vector<FleetStats>& fleets) {
-        int exploration_count = 0;
-        int combat_count = 0;
-        int other_count = 0;
-        double total_fuel = 0.0;
-        
-        for (const auto& fleet : fleets) {
-            total_fuel += fleet.fuel_percentage;
-            
-            if (fleet.mission_type == "Exploration") {
-                exploration_count++;
-            } else if (fleet.mission_type == "Combat") {
-                combat_count++;
-            } else {
-                other_count++;
-            }
-        }
-        
-        double avg_fuel = fleets.empty() ? 0.0 : total_fuel / fleets.size();
-        
-        return std::make_tuple(exploration_count, combat_count, other_count, avg_fuel);
-    };
-    
-    std::vector<FleetStats> empire_fleets = {
-        {"Admiral Zhang", 25, 85.5, "Exploration"},
-        {"Commander Rodriguez", 12, 92.0, "Combat"},
-        {"Captain Singh", 8, 45.2, "Colonization"},
-        {"Admiral Thompson", 30, 76.8, "Trade"},
-        {"Commander Chen", 15, 20.1, "Exploration"},
-        {"Captain Johnson", 18, 88.9, "Combat"}
-    };
-    
-    auto [exploration_fleets, combat_fleets, other_fleets, average_fuel] = 
-        analyze_fleet_composition(empire_fleets);
-    
-    std::cout << "Fleet Composition Analysis:" << std::endl;
-    std::cout << "  Exploration Fleets: " << exploration_fleets << std::endl;
-    std::cout << "  Combat Fleets: " << combat_fleets << std::endl;
-    std::cout << "  Other Mission Fleets: " << other_fleets << std::endl;
-    std::cout << "  Average Fuel Level: " << average_fuel << "%" << std::endl;
-}
-
-void demonstrate_nested_bindings() {
-    std::cout << "\n=== Nested Structured Bindings ===" << std::endl;
-    
-    // Map of planets with their coordinate tuples
-    std::map<std::string, std::tuple<double, double, double, bool>> planetary_data = {
-        {"Earth", {0.0, 0.0, 0.0, true}},
-        {"Mars", {1.52, 0.0, 0.0, false}},
-        {"Jupiter", {5.20, 0.0, 0.0, false}},
-        {"Kepler-452b", {1400.0, 500.0, 200.0, true}}
-    };
-    
-    std::cout << "Planetary Data Analysis:" << std::endl;
-    for (const auto& [planet_name, data] : planetary_data) {
-        auto [x, y, z, habitable] = data;
-        
-        double distance_from_origin = std::sqrt(x*x + y*y + z*z);
-        
-        std::cout << "  " << planet_name << ":" << std::endl;
-        std::cout << "    Position: (" << x << ", " << y << ", " << z << ")" << std::endl;
-        std::cout << "    Distance from origin: " << distance_from_origin << " AU" << std::endl;
-        std::cout << "    Habitable: " << (habitable ? "Yes" : "No") << std::endl;
+/// @brief Sum of crews of the records (each decomposed through the tuple-like protocol).
+/// @param records Input. @return Total crew.
+[[nodiscard]] inline int totalCrew(const std::vector<ShipRecord>& records) {
+    int total = 0;
+    for (const auto& [id, name, crew] : records) {
+        total += crew;
     }
+    return total;
 }
 
-// ===== MAIN DEMONSTRATION FUNCTION =====
-
-void demonstrate_all_structured_bindings() {
-    std::cout << "\n🔗 C++17 Structured Bindings Demonstration 🔗" << std::endl;
-    std::cout << "=============================================" << std::endl;
-    
-    demonstrate_tuple_bindings();
-    demonstrate_pair_bindings();
-    demonstrate_array_bindings();
-    demonstrate_map_bindings();
-    demonstrate_struct_bindings();
-    demonstrate_function_return_bindings();
-    demonstrate_nested_bindings();
-    
-    std::cout << "\n✨ Structured bindings demonstration complete! ✨" << std::endl;
-    std::cout << "\nKey Benefits:" << std::endl;
-    std::cout << "• Cleaner, more readable code" << std::endl;
-    std::cout << "• Automatic type deduction" << std::endl;
-    std::cout << "• Works with tuples, pairs, arrays, and structs" << std::endl;
-    std::cout << "• Eliminates need for std::tie or std::get" << std::endl;
-    std::cout << "• Improves maintainability" << std::endl;
+/// @brief C++20: structured bindings may be captured by lambdas.
+/// @param coordinate Point to scale. @param factor Multiplier.
+/// @return A callable returning the point scaled by `factor` and offset by its argument.
+[[nodiscard]] inline auto makeScaledOffset(const SpaceCoordinate& coordinate, double factor) {
+    const auto [x, y, z] = coordinate;
+    return [x, y, z, factor](double offset) {
+        return SpaceCoordinate{x * factor + offset, y * factor + offset, z * factor + offset};
+    };
 }
 
-} // namespace CppVerseHub::Modern::StructuredBindings
+/// @brief Sample fleets. @return Four fleets.
+[[nodiscard]] inline std::vector<FleetStats> sampleFleets() {
+    return {{"Zhang", 12, 85.0, "Exploration"},
+            {"Okafor", 20, 45.0, "Combat"},
+            {"Ivanova", 8, 92.5, "Exploration"},
+            {"Reyes", 15, 30.0, "Trade"}};
+}
+
+/// @brief Showcase of every structured-binding form. @param out Destination stream.
+inline void demonstrateStructuredBindings(std::ostream& out = std::cout) {
+    out << "\n=== Structured Bindings ===\n";
+
+    const auto [velocity, period, escape] = orbitParameters(1000.0, 10.0);
+    out << "tuple:  velocity=" << velocity << " period=" << period << " escape=" << escape << '\n';
+
+    const auto [distance, category] = jumpDistance({0, 0, 0}, {30, 40, 0});
+    out << "pair:   distance=" << distance << " (" << category << " jump)\n";
+
+    const std::vector<PlanetInfo> planets{{"Alpha", 2.0, {0, 0, 0}, true}, {"Beta", 1.0, {3, 6, 9}, false}};
+    const auto [cx, cy, cz] = centerOfMass(planets);
+    out << "array:  center of mass=(" << cx << ", " << cy << ", " << cz << ")\n";
+
+    auto fleets = sampleFleets();
+    const auto [lowest, highest] = fuelRange(fleets);
+    out << "struct: fuel range " << lowest << "%.." << highest << "%\n";
+
+    const int refuelled = refuelBelow(fleets, 50.0);
+    out << "by reference: refuelled " << refuelled << " fleets; now";
+    for (const auto& [commander, ships, fuel, mission] : fleets) {
+        out << ' ' << commander << '=' << fuel;
+    }
+    out << '\n';
+
+    const auto totals = shipsByMission(fleets);
+    for (const auto& [type, ships] : totals) {
+        out << "map:    " << type << " -> " << ships << " ships\n";
+    }
+    if (const auto busiest = busiestMission(totals)) {
+        const auto& [type, ships] = *busiest;
+        out << "busiest mission: " << type << " (" << ships << ")\n";
+    }
+    if (auto best = findBestFleet(fleets)) {
+        const auto& [commander, score] = *best;
+        out << "best fleet: " << commander << " score " << score << '\n';
+    }
+
+    std::vector<ShipRecord> records{{1, "Explorer", 150}, {2, "Guardian", 300}};
+    auto& [firstId, firstName, firstCrew] = records.front();
+    firstCrew += 10;  // binds to the private member through get<2>() &
+    out << "tuple-like class: " << firstName << " (#" << firstId << ") crew " << records.front().crew()
+        << ", total crew " << totalCrew(records) << '\n';
+
+    const auto scaled = makeScaledOffset({1.0, 2.0, 3.0}, 2.0)(0.5);
+    out << "lambda-captured bindings: (" << scaled.x << ", " << scaled.y << ", " << scaled.z << ")\n";
+
+    const auto [stats_completed, stats_mean] =
+        missionStats({{1, "Scan", 100.0, 1}, {2, "Mine", 50.0, 2}, {3, "Escort", 100.0, 3}});
+    out << "missions: " << stats_completed << " complete, mean " << stats_mean << "%\n";
+}
+
+}  // namespace CppVerseHub::Modern::StructuredBindings

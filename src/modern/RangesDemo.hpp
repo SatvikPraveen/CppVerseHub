@@ -1,421 +1,247 @@
-// File: src/modern/RangesDemo.hpp
-// C++20 Ranges Pipelines and Algorithms Demonstration
-
+/**
+ * @file RangesDemo.hpp
+ * @brief C++20 ranges: lazy view pipelines, range algorithms with projections, and a custom view.
+ *
+ * The ranges library replaces iterator pairs with composable, lazily evaluated *views*. This module
+ * demonstrates:
+ *  - pipelines built with `|` from standard adaptors (`filter`, `transform`, `take`, `drop`,
+ *    `take_while`, `drop_while`, `reverse`, `iota`, `keys`, `values`, `elements`, `split`, `join`);
+ *  - range algorithms with projections (`std::ranges::sort(v, {}, &Planet::population)`);
+ *  - laziness: elements are computed only when a view is iterated (`countEvaluationsForFirst`);
+ *  - writing a custom view (`EveryNthView`) with its own iterator/sentinel and a pipeable adaptor
+ *    (`everyNth(n)`), i.e. the machinery behind C++23's `std::views::stride`.
+ *
+ * Only C++20 adaptors are used (no `zip`, `chunk`, `stride` or `std::ranges::to`, which are C++23), so
+ * the code builds with libc++ and libstdc++ alike. `toVector` stands in for `std::ranges::to`.
+ */
 #pragma once
 
-#include <ranges>
-#include <algorithm>
-#include <vector>
-#include <string>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
-#include <functional>
-#include <numeric>
-#include <random>
+#include <iterator>
 #include <map>
-#include <set>
+#include <ranges>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Modern::Ranges {
 
-namespace rng = std::ranges;
-namespace views = std::views;
+// ===== DATA =====
 
-// ===== SPACE GAME DATA STRUCTURES =====
-
+/// @brief A planet in the sample galaxy.
 struct Planet {
-    int id;
-    std::string name;
-    double distance_from_sun;
-    int population;
-    bool habitable;
-    std::vector<std::string> resources;
-    
-    Planet(int i, std::string n, double d, int p, bool h, std::vector<std::string> r = {})
-        : id(i), name(std::move(n)), distance_from_sun(d), population(p), habitable(h), resources(std::move(r)) {}
-        
-    bool operator<(const Planet& other) const {
-        return distance_from_sun < other.distance_from_sun;
-    }
-    
-    friend std::ostream& operator<<(std::ostream& os, const Planet& p) {
-        return os << "Planet{id=" << p.id << ", name=" << p.name 
-                  << ", distance=" << p.distance_from_sun << ", pop=" << p.population << "}";
-    }
+    int id = 0;                   ///< Identifier.
+    std::string name;             ///< Display name.
+    std::string system;           ///< Star system.
+    double distanceAu = 0.0;      ///< Distance from its star in AU.
+    long long population = 0;     ///< Inhabitants.
+    double resourceValue = 0.0;   ///< Economic value of resources.
+    bool habitable = false;       ///< Supports life.
 };
 
+/// @brief A fleet in the sample galaxy.
 struct Fleet {
-    int fleet_id;
-    std::string commander;
-    int ship_count;
-    double fuel_level;
-    std::string mission_type;
-    bool is_active;
-    
-    Fleet(int id, std::string cmd, int ships, double fuel, std::string mission, bool active = true)
-        : fleet_id(id), commander(std::move(cmd)), ship_count(ships), 
-          fuel_level(fuel), mission_type(std::move(mission)), is_active(active) {}
-          
-    friend std::ostream& operator<<(std::ostream& os, const Fleet& f) {
-        return os << "Fleet{id=" << f.fleet_id << ", commander=" << f.commander 
-                  << ", ships=" << f.ship_count << ", fuel=" << f.fuel_level << "}";
-    }
+    int id = 0;                ///< Identifier.
+    std::string commander;     ///< Commanding officer.
+    int ships = 0;             ///< Ship count.
+    double fuel = 0.0;         ///< Fuel percentage.
+    bool active = true;        ///< Operational flag.
 };
 
+/// @brief A mission in the sample galaxy.
 struct Mission {
-    int mission_id;
-    std::string type;
-    int priority;
-    double completion_percentage;
-    std::vector<int> assigned_fleets;
-    
-    Mission(int id, std::string t, int p, double comp = 0.0)
-        : mission_id(id), type(std::move(t)), priority(p), completion_percentage(comp) {}
-        
-    friend std::ostream& operator<<(std::ostream& os, const Mission& m) {
-        return os << "Mission{id=" << m.mission_id << ", type=" << m.type 
-                  << ", priority=" << m.priority << ", completion=" << m.completion_percentage << "%}";
-    }
+    int id = 0;               ///< Identifier.
+    std::string type;         ///< Mission type.
+    int priority = 0;         ///< 1 (low) .. 5 (critical).
+    double progress = 0.0;    ///< Completion percentage.
 };
 
-// ===== SAMPLE DATA GENERATORS =====
+/// @brief Deterministic sample planets. @return Ten planets across three systems.
+[[nodiscard]] std::vector<Planet> generatePlanets();
+/// @brief Deterministic sample fleets. @return Six fleets.
+[[nodiscard]] std::vector<Fleet> generateFleets();
+/// @brief Deterministic sample missions. @return Eight missions.
+[[nodiscard]] std::vector<Mission> generateMissions();
 
-std::vector<Planet> generate_planets() {
-    return {
-        {1, "Earth", 1.0, 8000000000, true, {"Water", "Oxygen", "Iron"}},
-        {2, "Mars", 1.5, 0, false, {"Iron", "Silicon", "Ice"}},
-        {3, "Venus", 0.7, 0, false, {"Carbon", "Sulfur"}},
-        {4, "Jupiter", 5.2, 0, false, {"Hydrogen", "Helium"}},
-        {5, "Kepler-442b", 1200.0, 50000000, true, {"Water", "Rare_Metals"}},
-        {6, "Proxima-Centauri-b", 4.24, 0, true, {"Unknown"}},
-        {7, "Titan", 9.5, 0, false, {"Methane", "Nitrogen", "Water_Ice"}},
-        {8, "Europa", 5.2, 0, false, {"Water_Ice", "Oxygen"}},
-        {9, "Gliese-667Cc", 22.0, 1000000, true, {"Water", "Minerals"}},
-        {10, "TRAPPIST-1e", 40.0, 200000, true, {"Water", "Atmosphere"}}
-    };
+// ===== GENERIC HELPERS =====
+
+/// @brief Materialises any input range into a `std::vector` (stand-in for C++23 `std::ranges::to`).
+/// @param r Range to copy. @return Vector of the range's values.
+template <std::ranges::input_range R>
+[[nodiscard]] auto toVector(R&& r) {
+    std::vector<std::ranges::range_value_t<R>> out;
+    if constexpr (std::ranges::sized_range<R>) {
+        out.reserve(static_cast<std::size_t>(std::ranges::size(r)));
+    }
+    for (auto&& e : r) {
+        out.push_back(std::forward<decltype(e)>(e));
+    }
+    return out;
 }
 
-std::vector<Fleet> generate_fleets() {
-    return {
-        {101, "Admiral Zhang", 25, 85.5, "Exploration"},
-        {102, "Commander Rodriguez", 12, 92.0, "Combat"},
-        {103, "Captain Singh", 8, 45.2, "Colonization"},
-        {104, "Admiral Thompson", 30, 76.8, "Trade"},
-        {105, "Commander Chen", 15, 20.1, "Rescue"},
-        {106, "Captain Johnson", 18, 88.9, "Exploration"},
-        {107, "Admiral Kim", 22, 95.5, "Combat"},
-        {108, "Commander Wilson", 6, 35.7, "Research"},
-        {109, "Captain Davis", 14, 67.3, "Patrol"},
-        {110, "Admiral Brown", 35, 55.4, "Colonization"}
-    };
-}
+// ===== CUSTOM VIEW =====
 
-std::vector<Mission> generate_missions() {
-    return {
-        {201, "Exploration", 1, 75.5},
-        {202, "Combat", 5, 100.0},
-        {203, "Colonization", 2, 45.0},
-        {204, "Trade", 3, 90.0},
-        {205, "Rescue", 5, 10.0},
-        {206, "Research", 1, 85.0},
-        {207, "Patrol", 4, 60.0},
-        {208, "Diplomacy", 2, 25.0},
-        {209, "Mining", 3, 95.0},
-        {210, "Defense", 5, 40.0}
-    };
-}
-
-// ===== BASIC RANGES OPERATIONS =====
-
-void demonstrate_basic_ranges() {
-    std::cout << "\n=== Basic Ranges Operations ===" << std::endl;
-    
-    std::vector<int> numbers = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    
-    // Simple filter and transform pipeline
-    auto result = numbers 
-        | views::filter([](int n) { return n % 2 == 0; })
-        | views::transform([](int n) { return n * n; })
-        | views::take(3);
-    
-    std::cout << "Even numbers squared (first 3): ";
-    for (auto n : result) {
-        std::cout << n << " ";
-    }
-    std::cout << std::endl;
-    
-    // Reverse and drop
-    auto reversed_dropped = numbers 
-        | views::reverse 
-        | views::drop(3) 
-        | views::take(4);
-    
-    std::cout << "Reversed, drop 3, take 4: ";
-    rng::copy(reversed_dropped, std::ostream_iterator<int>(std::cout, " "));
-    std::cout << std::endl;
-}
-
-// ===== PLANET ANALYSIS WITH RANGES =====
-
-void demonstrate_planet_analysis() {
-    std::cout << "\n=== Planet Analysis with Ranges ===" << std::endl;
-    
-    auto planets = generate_planets();
-    
-    // Find habitable planets within reasonable distance
-    std::cout << "Habitable planets within 50 light-years:" << std::endl;
-    auto close_habitable = planets 
-        | views::filter([](const Planet& p) { return p.habitable && p.distance_from_sun < 50.0; })
-        | views::transform([](const Planet& p) { return p.name; });
-    
-    for (const auto& name : close_habitable) {
-        std::cout << "  - " << name << std::endl;
-    }
-    
-    // Group planets by population ranges
-    std::cout << "\nPlanets with populations over 1 million:" << std::endl;
-    auto populated_planets = planets 
-        | views::filter([](const Planet& p) { return p.population > 1000000; })
-        | views::transform([](const Planet& p) { 
-            return std::make_pair(p.name, p.population); 
-        });
-    
-    for (const auto& [name, population] : populated_planets) {
-        std::cout << "  - " << name << ": " << population << " inhabitants" << std::endl;
-    }
-    
-    // Calculate average distance of habitable planets
-    auto habitable_distances = planets 
-        | views::filter([](const Planet& p) { return p.habitable; })
-        | views::transform([](const Planet& p) { return p.distance_from_sun; });
-    
-    auto avg_distance = std::accumulate(habitable_distances.begin(), habitable_distances.end(), 0.0) 
-                       / std::distance(habitable_distances.begin(), habitable_distances.end());
-    
-    std::cout << "\nAverage distance of habitable planets: " << avg_distance << " AU" << std::endl;
-}
-
-// ===== FLEET MANAGEMENT WITH RANGES =====
-
-void demonstrate_fleet_management() {
-    std::cout << "\n=== Fleet Management with Ranges ===" << std::endl;
-    
-    auto fleets = generate_fleets();
-    
-    // Find fleets needing refueling (fuel < 50%)
-    std::cout << "Fleets needing refueling (fuel < 50%):" << std::endl;
-    auto low_fuel_fleets = fleets 
-        | views::filter([](const Fleet& f) { return f.fuel_level < 50.0; })
-        | views::transform([](const Fleet& f) { 
-            return std::format("Fleet {} ({}): {:.1f}%", f.fleet_id, f.commander, f.fuel_level); 
-        });
-    
-    for (const auto& info : low_fuel_fleets) {
-        std::cout << "  - " << info << std::endl;
-    }
-    
-    // Group fleets by mission type and count
-    std::map<std::string, int> mission_counts;
-    auto mission_types = fleets | views::transform([](const Fleet& f) { return f.mission_type; });
-    
-    for (const auto& mission_type : mission_types) {
-        mission_counts[mission_type]++;
-    }
-    
-    std::cout << "\nFleets by mission type:" << std::endl;
-    for (const auto& [mission, count] : mission_counts) {
-        std::cout << "  - " << mission << ": " << count << " fleets" << std::endl;
-    }
-    
-    // Find the most powerful fleets (ship count > 20)
-    std::cout << "\nMost powerful fleets (20+ ships):" << std::endl;
-    auto powerful_fleets = fleets 
-        | views::filter([](const Fleet& f) { return f.ship_count >= 20; })
-        | views::transform([](const Fleet& f) { 
-            return std::make_tuple(f.commander, f.ship_count, f.mission_type); 
-        });
-    
-    for (const auto& [commander, ships, mission] : powerful_fleets) {
-        std::cout << "  - " << commander << ": " << ships << " ships on " << mission << " mission" << std::endl;
-    }
-}
-
-// ===== MISSION ANALYSIS WITH RANGES =====
-
-void demonstrate_mission_analysis() {
-    std::cout << "\n=== Mission Analysis with Ranges ===" << std::endl;
-    
-    auto missions = generate_missions();
-    
-    // Sort missions by priority and completion
-    rng::sort(missions, [](const Mission& a, const Mission& b) {
-        if (a.priority != b.priority) return a.priority > b.priority;  // Higher priority first
-        return a.completion_percentage < b.completion_percentage;      // Less complete first
-    });
-    
-    std::cout << "Missions sorted by priority and completion:" << std::endl;
-    for (const auto& mission : missions | views::take(5)) {
-        std::cout << "  - " << mission << std::endl;
-    }
-    
-    // Find urgent incomplete missions
-    std::cout << "\nUrgent incomplete missions (priority >= 4, completion < 50%):" << std::endl;
-    auto urgent_missions = missions 
-        | views::filter([](const Mission& m) { 
-            return m.priority >= 4 && m.completion_percentage < 50.0; 
-        });
-    
-    for (const auto& mission : urgent_missions) {
-        std::cout << "  - " << mission << std::endl;
-    }
-    
-    // Calculate completion statistics
-    auto completion_stats = missions 
-        | views::transform([](const Mission& m) { return m.completion_percentage; });
-    
-    auto total_completion = std::accumulate(completion_stats.begin(), completion_stats.end(), 0.0);
-    auto avg_completion = total_completion / std::distance(completion_stats.begin(), completion_stats.end());
-    
-    std::cout << "\nAverage mission completion: " << avg_completion << "%" << std::endl;
-}
-
-// ===== ADVANCED RANGES PATTERNS =====
-
-void demonstrate_advanced_patterns() {
-    std::cout << "\n=== Advanced Ranges Patterns ===" << std::endl;
-    
-    // Generate numbers and create complex pipeline
-    auto numbers = views::iota(1, 100);  // 1 to 99
-    
-    // Complex mathematical operations
-    auto complex_pipeline = numbers
-        | views::filter([](int n) { return n % 3 == 0 || n % 5 == 0; })  // Multiples of 3 or 5
-        | views::transform([](int n) { return n * n; })                   // Square them
-        | views::filter([](int n) { return n < 1000; })                   // Keep under 1000
-        | views::reverse                                                   // Reverse order
-        | views::take(10);                                                // Take first 10
-    
-    std::cout << "Complex pipeline result: ";
-    for (auto n : complex_pipeline) {
-        std::cout << n << " ";
-    }
-    std::cout << std::endl;
-    
-    // String processing pipeline
-    std::vector<std::string> words = {
-        "space", "exploration", "mission", "fleet", "planet", 
-        "galaxy", "universe", "star", "nebula", "asteroid"
-    };
-    
-    auto string_pipeline = words
-        | views::filter([](const std::string& s) { return s.length() > 5; })
-        | views::transform([](const std::string& s) { 
-            std::string upper = s;
-            rng::transform(upper, upper.begin(), ::toupper);
-            return upper;
-        })
-        | views::take(5);
-    
-    std::cout << "Processed strings (length > 5, uppercase): ";
-    for (const auto& s : string_pipeline) {
-        std::cout << s << " ";
-    }
-    std::cout << std::endl;
-}
-
-// ===== CUSTOM RANGE ADAPTERS =====
-
-template<typename Range, typename Predicate>
-class every_nth_view : public std::ranges::view_interface<every_nth_view<Range, Predicate>> {
-private:
-    Range range_;
-    std::size_t n_;
-    
+/// @brief A view over every n-th element of an underlying forward range (elements 0, n, 2n, ...).
+/// @tparam V Underlying view.
+template <std::ranges::view V>
+    requires std::ranges::forward_range<V>
+class EveryNthView : public std::ranges::view_interface<EveryNthView<V>> {
 public:
-    every_nth_view(Range range, std::size_t n) : range_(std::move(range)), n_(n) {}
-    
-    auto begin() const {
-        auto it = std::ranges::begin(range_);
-        return it;
-    }
-    
-    auto end() const {
-        return std::ranges::end(range_);
+    using difference_type = std::ranges::range_difference_t<V>;  ///< Step type.
+
+    /// @brief Forward iterator that advances `n` steps at a time, never past the end.
+    class Iterator {
+    public:
+        using iterator_concept = std::forward_iterator_tag;    ///< Ranges iterator concept.
+        using iterator_category = std::forward_iterator_tag;   ///< Legacy iterator category.
+        using value_type = std::ranges::range_value_t<V>;      ///< Element value type.
+        using difference_type = std::ranges::range_difference_t<V>;  ///< Distance type.
+
+        Iterator() = default;
+        /// @brief Positions the iterator. @param cur Current. @param end End of base. @param step Stride.
+        Iterator(std::ranges::iterator_t<V> cur, std::ranges::sentinel_t<V> end, difference_type step)
+            : cur_(std::move(cur)), end_(std::move(end)), step_(step) {}
+
+        /// @brief Dereference. @return The current element.
+        decltype(auto) operator*() const { return *cur_; }
+        /// @brief Advances by `step` (clamped at the end). @return *this.
+        Iterator& operator++() {
+            std::ranges::advance(cur_, step_, end_);
+            return *this;
+        }
+        /// @brief Post-increment. @return Previous position.
+        Iterator operator++(int) {
+            Iterator tmp = *this;
+            ++*this;
+            return tmp;
+        }
+        /// @brief Iterator equality. @return True if at the same position.
+        friend bool operator==(const Iterator& a, const Iterator& b) { return a.cur_ == b.cur_; }
+        /// @brief Sentinel comparison. @return True if at the end.
+        friend bool operator==(const Iterator& it, std::default_sentinel_t /*unused*/) { return it.cur_ == it.end_; }
+
+    private:
+        std::ranges::iterator_t<V> cur_{};
+        std::ranges::sentinel_t<V> end_{};
+        difference_type step_ = 1;
+    };
+
+    EveryNthView()
+        requires std::default_initializable<V>
+    = default;
+
+    /// @brief Creates the view. @param base Underlying view. @param step Stride (values < 1 become 1).
+    EveryNthView(V base, difference_type step) : base_(std::move(base)), step_(step < 1 ? 1 : step) {}
+
+    /// @brief Start of the view. @return Iterator to the first element.
+    [[nodiscard]] Iterator begin() { return Iterator(std::ranges::begin(base_), std::ranges::end(base_), step_); }
+    /// @brief End of the view. @return `std::default_sentinel`.
+    [[nodiscard]] std::default_sentinel_t end() const noexcept { return std::default_sentinel; }
+    /// @brief The stride. @return n.
+    [[nodiscard]] difference_type step() const noexcept { return step_; }
+
+private:
+    V base_{};
+    difference_type step_ = 1;
+};
+
+/// @brief Deduction guide wrapping ranges in `views::all`.
+template <typename R>
+EveryNthView(R&&, std::ranges::range_difference_t<R>) -> EveryNthView<std::views::all_t<R>>;
+
+/// @brief Pipeable adaptor object produced by `everyNth(n)`.
+struct EveryNthAdaptor {
+    std::ptrdiff_t step;  ///< Stride.
+
+    /// @brief `range | everyNth(n)`. @param r Viewable range. @param a Adaptor. @return The view.
+    template <std::ranges::viewable_range R>
+        requires std::ranges::forward_range<std::views::all_t<R>>
+    friend auto operator|(R&& r, EveryNthAdaptor a) {
+        using View = std::views::all_t<R>;
+        return EveryNthView<View>(std::views::all(std::forward<R>(r)),
+                                  static_cast<std::ranges::range_difference_t<View>>(a.step));
     }
 };
 
-void demonstrate_custom_views() {
-    std::cout << "\n=== Custom Range Views ===" << std::endl;
-    
-    std::vector<int> data = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-    
-    // Every 3rd element
-    auto every_third = data | views::stride(3);
-    
-    std::cout << "Every 3rd element: ";
-    for (auto n : every_third) {
-        std::cout << n << " ";
-    }
-    std::cout << std::endl;
-    
-    // Chunk into groups
-    auto chunks = data | views::chunk(4);
-    
-    std::cout << "Chunked into groups of 4:" << std::endl;
-    for (auto chunk : chunks) {
-        std::cout << "  Chunk: ";
-        for (auto n : chunk) {
-            std::cout << n << " ";
-        }
-        std::cout << std::endl;
-    }
+/// @brief Creates a pipeable every-n-th adaptor. @param n Stride. @return Adaptor.
+[[nodiscard]] constexpr EveryNthAdaptor everyNth(std::ptrdiff_t n) noexcept {
+    return EveryNthAdaptor{n};
 }
 
-// ===== PERFORMANCE OPTIMIZED RANGES =====
+static_assert(std::ranges::forward_range<EveryNthView<std::views::all_t<std::vector<int>&>>>);
+static_assert(std::ranges::view<EveryNthView<std::views::all_t<std::vector<int>&>>>);
 
-void demonstrate_performance_patterns() {
-    std::cout << "\n=== Performance Optimized Ranges ===" << std::endl;
-    
-    // Generate large dataset
-    std::vector<int> large_data;
-    large_data.reserve(10000);
-    
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(1, 1000);
-    
-    std::generate_n(std::back_inserter(large_data), 10000, [&] { return dis(gen); });
-    
-    // Efficient filtering and processing
-    auto processed = large_data
-        | views::filter([](int n) { return n > 500; })     // Filter once
-        | views::transform([](int n) { return n * 2; })    // Transform once
-        | views::take(100);                                 // Limit early
-    
-    std::cout << "Processed " << std::distance(processed.begin(), processed.end()) 
-              << " elements from large dataset" << std::endl;
-    
-    // Demonstrate lazy evaluation
-    std::cout << "First 5 processed values: ";
-    for (auto it = processed.begin(); it != processed.end() && std::distance(processed.begin(), it) < 5; ++it) {
-        std::cout << *it << " ";
-    }
-    std::cout << std::endl;
-}
+// ===== QUERIES (all implemented with views / range algorithms) =====
 
-// ===== MAIN DEMONSTRATION FUNCTION =====
+/// @brief Names of habitable planets, in input order. @param planets Input. @return Names.
+[[nodiscard]] std::vector<std::string> habitablePlanetNames(const std::vector<Planet>& planets);
 
-void demonstrate_all_ranges() {
-    std::cout << "\n🚀 C++20 Ranges Demonstration for Space Game 🚀" << std::endl;
-    std::cout << "=================================================" << std::endl;
-    
-    demonstrate_basic_ranges();
-    demonstrate_planet_analysis();
-    demonstrate_fleet_management();
-    demonstrate_mission_analysis();
-    demonstrate_advanced_patterns();
-    demonstrate_custom_views();
-    demonstrate_performance_patterns();
-    
-    std::cout << "\n✨ Ranges demonstration complete! ✨" << std::endl;
-}
+/// @brief The `n` most populous planets, most populous first. @param planets Input. @param n Count.
+/// @return Names.
+[[nodiscard]] std::vector<std::string> topByPopulation(std::vector<Planet> planets, std::size_t n);
 
-} // namespace CppVerseHub::Modern::Ranges
+/// @brief Sum of all populations. @param planets Input. @return Total population.
+[[nodiscard]] long long totalPopulation(const std::vector<Planet>& planets);
+
+/// @brief Ids of active fleets with at least `minFuel` fuel and `minShips` ships.
+/// @param fleets Input. @param minFuel Fuel threshold. @param minShips Ship threshold. @return Ids.
+[[nodiscard]] std::vector<int> readyFleetIds(const std::vector<Fleet>& fleets, double minFuel, int minShips);
+
+/// @brief Missions sorted by priority (desc), then progress (asc) — projections + stable sort.
+/// @param missions Input (by value). @return Sorted ids.
+[[nodiscard]] std::vector<int> missionIdsByUrgency(std::vector<Mission> missions);
+
+/// @brief Groups planet names by star system. @param planets Input. @return system -> names.
+[[nodiscard]] std::map<std::string, std::vector<std::string>> planetsBySystem(const std::vector<Planet>& planets);
+
+/// @brief Splits text on a delimiter with `views::split`, dropping empty tokens.
+/// @param text Input. @param delimiter Separator. @return Tokens.
+[[nodiscard]] std::vector<std::string> splitWords(std::string_view text, char delimiter);
+
+/// @brief Flattens nested vectors with `views::join`. @param nested Input. @return Flattened values.
+[[nodiscard]] std::vector<int> flatten(const std::vector<std::vector<int>>& nested);
+
+/// @brief First `count` squares of odd numbers, from an infinite `iota` view.
+/// @param count Number of values. @return Squares 1, 9, 25, ...
+[[nodiscard]] std::vector<long long> squaresOfOdds(std::size_t count);
+
+/// @brief Demonstrates laziness: how many times a `transform` runs when only `first` results of a
+///        filtered/transformed view over `data` are consumed.
+/// @param data Input. @param first Elements consumed. @return Number of transform invocations.
+[[nodiscard]] std::size_t countEvaluationsForFirst(const std::vector<int>& data, std::size_t first);
+
+/// @brief Longest prefix of values below `limit` (`take_while`) and the remainder (`drop_while`).
+/// @param data Input. @param limit Threshold. @return {prefix, rest}.
+[[nodiscard]] std::pair<std::vector<int>, std::vector<int>> splitAtFirstNotBelow(const std::vector<int>& data,
+                                                                                 int limit);
+
+/// @brief Deterministic pseudo-random values (for benchmarks). @param n Count. @param seed Seed.
+/// @return Values in [0, 1000).
+[[nodiscard]] std::vector<int> makeRandomValues(std::size_t n, std::uint32_t seed);
+
+/// @brief Sum of squares of even values, as a view pipeline. @param data Input. @return Sum.
+[[nodiscard]] long long sumSquaresOfEvensRanges(const std::vector<int>& data);
+
+/// @brief Same computation with a raw loop (baseline). @param data Input. @return Sum.
+[[nodiscard]] long long sumSquaresOfEvensLoop(const std::vector<int>& data);
+
+// ===== SHOWCASES =====
+
+/// @brief Basic view pipelines over integers. @param out Destination stream.
+void demonstrateBasicRanges(std::ostream& out = std::cout);
+/// @brief Planet/fleet/mission analysis with projections. @param out Destination stream.
+void demonstrateDomainQueries(std::ostream& out = std::cout);
+/// @brief keys/values/elements/split/join/reverse/take_while. @param out Destination stream.
+void demonstrateAdvancedAdaptors(std::ostream& out = std::cout);
+/// @brief The custom `EveryNthView`. @param out Destination stream.
+void demonstrateCustomView(std::ostream& out = std::cout);
+/// @brief Lazy evaluation. @param out Destination stream.
+void demonstrateLaziness(std::ostream& out = std::cout);
+/// @brief Runs every ranges showcase. @param out Destination stream.
+void demonstrateAllRanges(std::ostream& out = std::cout);
+
+}  // namespace CppVerseHub::Modern::Ranges

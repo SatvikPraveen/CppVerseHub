@@ -1,321 +1,239 @@
-// File: src/modern/RangesDemo.cpp
-// C++20 Ranges Pipelines and Algorithms Implementation
+/**
+ * @file RangesDemo.cpp
+ * @brief Implementation of the ranges showcase (see RangesDemo.hpp).
+ */
+#include "modern/RangesDemo.hpp"
 
-#include "RangesDemo.hpp"
-#include <format>
-#include <chrono>
+#include <algorithm>
+#include <functional>
+#include <numeric>
+#include <random>
+#include <tuple>
 
 namespace CppVerseHub::Modern::Ranges {
 
-// ===== SPACE GAME SPECIFIC RANGE UTILITIES =====
+namespace views = std::views;
+namespace rng = std::ranges;
 
-class SpaceGameRangeUtilities {
-public:
-    // Find optimal planets for colonization
-    static auto find_colonization_targets(const std::vector<Planet>& planets) {
-        return planets
-            | views::filter([](const Planet& p) { 
-                return p.habitable && p.distance_from_sun < 100.0 && p.population < 1000000; 
-            })
-            | views::transform([](const Planet& p) { 
-                return std::make_tuple(p.name, p.distance_from_sun, p.resources.size()); 
-            });
-    }
-    
-    // Calculate fleet efficiency scores
-    static auto calculate_fleet_efficiency(const std::vector<Fleet>& fleets) {
-        return fleets
-            | views::filter([](const Fleet& f) { return f.is_active; })
-            | views::transform([](const Fleet& f) {
-                double efficiency = (f.fuel_level / 100.0) * (f.ship_count / 10.0);
-                return std::make_pair(f.fleet_id, efficiency);
-            });
-    }
-    
-    // Group missions by priority levels
-    static auto group_missions_by_priority(const std::vector<Mission>& missions) {
-        std::map<int, std::vector<Mission>> grouped;
-        
-        for (const auto& mission : missions) {
-            grouped[mission.priority].push_back(mission);
-        }
-        
-        return grouped;
-    }
-    
-    // Find resource-rich planets
-    static auto find_resource_rich_planets(const std::vector<Planet>& planets, int min_resources = 2) {
-        return planets
-            | views::filter([min_resources](const Planet& p) { 
-                return p.resources.size() >= static_cast<size_t>(min_resources); 
-            })
-            | views::transform([](const Planet& p) {
-                std::string resource_list;
-                for (size_t i = 0; i < p.resources.size(); ++i) {
-                    if (i > 0) resource_list += ", ";
-                    resource_list += p.resources[i];
-                }
-                return std::make_tuple(p.name, p.resources.size(), resource_list);
-            });
-    }
-};
-
-// ===== ADVANCED FILTERING AND SEARCHING =====
-
-void demonstrate_advanced_filtering() {
-    std::cout << "\n=== Advanced Filtering and Searching ===" << std::endl;
-    
-    auto planets = generate_planets();
-    auto fleets = generate_fleets();
-    auto missions = generate_missions();
-    
-    // Find colonization targets
-    std::cout << "Optimal colonization targets:" << std::endl;
-    auto colonization_targets = SpaceGameRangeUtilities::find_colonization_targets(planets);
-    
-    for (const auto& [name, distance, resource_count] : colonization_targets) {
-        std::cout << std::format("  - {}: {:.1f} AU, {} resources", name, distance, resource_count) << std::endl;
-    }
-    
-    // Calculate fleet efficiencies
-    std::cout << "\nFleet efficiency scores:" << std::endl;
-    auto fleet_efficiencies = SpaceGameRangeUtilities::calculate_fleet_efficiency(fleets);
-    
-    std::vector<std::pair<int, double>> efficiency_vec(fleet_efficiencies.begin(), fleet_efficiencies.end());
-    rng::sort(efficiency_vec, [](const auto& a, const auto& b) { return a.second > b.second; });
-    
-    for (const auto& [fleet_id, efficiency] : efficiency_vec | views::take(5)) {
-        std::cout << std::format("  - Fleet {}: {:.2f} efficiency", fleet_id, efficiency) << std::endl;
-    }
-    
-    // Find resource-rich planets
-    std::cout << "\nResource-rich planets (3+ resources):" << std::endl;
-    auto resource_rich = SpaceGameRangeUtilities::find_resource_rich_planets(planets, 3);
-    
-    for (const auto& [name, count, resources] : resource_rich) {
-        std::cout << std::format("  - {}: {} resources ({})", name, count, resources) << std::endl;
-    }
-}
-
-// ===== PERFORMANCE BENCHMARKING =====
-
-void benchmark_ranges_vs_traditional() {
-    std::cout << "\n=== Performance Benchmark: Ranges vs Traditional ===" << std::endl;
-    
-    // Generate large dataset
-    const size_t data_size = 100000;
-    std::vector<int> large_data;
-    large_data.reserve(data_size);
-    
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(1, 10000);
-    
-    std::generate_n(std::back_inserter(large_data), data_size, [&] { return dis(gen); });
-    
-    // Traditional approach
-    auto start_traditional = std::chrono::high_resolution_clock::now();
-    
-    std::vector<int> filtered_traditional;
-    for (int n : large_data) {
-        if (n > 5000 && n % 2 == 0) {
-            filtered_traditional.push_back(n * 2);
-        }
-    }
-    
-    auto end_traditional = std::chrono::high_resolution_clock::now();
-    auto duration_traditional = std::chrono::duration_cast<std::chrono::microseconds>(end_traditional - start_traditional);
-    
-    // Ranges approach
-    auto start_ranges = std::chrono::high_resolution_clock::now();
-    
-    auto ranges_result = large_data
-        | views::filter([](int n) { return n > 5000 && n % 2 == 0; })
-        | views::transform([](int n) { return n * 2; });
-    
-    std::vector<int> filtered_ranges(ranges_result.begin(), ranges_result.end());
-    
-    auto end_ranges = std::chrono::high_resolution_clock::now();
-    auto duration_ranges = std::chrono::duration_cast<std::chrono::microseconds>(end_ranges - start_ranges);
-    
-    std::cout << std::format("Dataset size: {}", data_size) << std::endl;
-    std::cout << std::format("Traditional approach: {} μs", duration_traditional.count()) << std::endl;
-    std::cout << std::format("Ranges approach: {} μs", duration_ranges.count()) << std::endl;
-    std::cout << std::format("Results match: {}", filtered_traditional.size() == filtered_ranges.size()) << std::endl;
-    
-    double speedup = static_cast<double>(duration_traditional.count()) / duration_ranges.count();
-    std::cout << std::format("Speedup: {:.2f}x", speedup) << std::endl;
-}
-
-// ===== COMPLEX DATA TRANSFORMATIONS =====
-
-void demonstrate_complex_transformations() {
-    std::cout << "\n=== Complex Data Transformations ===" << std::endl;
-    
-    auto planets = generate_planets();
-    auto fleets = generate_fleets();
-    
-    // Create a comprehensive space empire report
-    struct EmpireStats {
-        int total_planets;
-        int habitable_planets;
-        long long total_population;
-        int active_fleets;
-        double average_fuel_level;
-        std::vector<std::string> all_resources;
+std::vector<Planet> generatePlanets() {
+    return {
+        {1, "Mercury", "Sol", 0.39, 0, 120.0, false},
+        {2, "Venus", "Sol", 0.72, 0, 200.0, false},
+        {3, "Earth", "Sol", 1.00, 8'000'000'000LL, 950.0, true},
+        {4, "Mars", "Sol", 1.52, 2'000'000LL, 410.0, true},
+        {5, "Jupiter", "Sol", 5.20, 0, 780.0, false},
+        {6, "Proxima-b", "Alpha Centauri", 0.05, 15'000'000LL, 520.0, true},
+        {7, "Proxima-d", "Alpha Centauri", 0.03, 0, 90.0, false},
+        {8, "Kepler-442b", "Kepler-442", 0.41, 50'000'000LL, 640.0, true},
+        {9, "Kepler-442c", "Kepler-442", 1.20, 0, 300.0, false},
+        {10, "Kepler-442d", "Kepler-442", 2.10, 1'000LL, 150.0, false},
     };
-    
-    // Calculate empire statistics using ranges
-    auto habitable_count = rng::count_if(planets, [](const Planet& p) { return p.habitable; });
-    
-    auto total_pop = planets
-        | views::transform([](const Planet& p) { return static_cast<long long>(p.population); })
-        | views::common;
-    long long population_sum = std::accumulate(total_pop.begin(), total_pop.end(), 0LL);
-    
-    auto active_fleet_count = rng::count_if(fleets, [](const Fleet& f) { return f.is_active; });
-    
-    auto fuel_levels = fleets
-        | views::filter([](const Fleet& f) { return f.is_active; })
-        | views::transform([](const Fleet& f) { return f.fuel_level; })
-        | views::common;
-    double avg_fuel = std::accumulate(fuel_levels.begin(), fuel_levels.end(), 0.0) / std::distance(fuel_levels.begin(), fuel_levels.end());
-    
-    // Collect all unique resources
-    std::set<std::string> unique_resources;
-    for (const auto& planet : planets) {
-        for (const auto& resource : planet.resources) {
-            unique_resources.insert(resource);
-        }
-    }
-    
-    EmpireStats stats{
-        static_cast<int>(planets.size()),
-        static_cast<int>(habitable_count),
-        population_sum,
-        static_cast<int>(active_fleet_count),
-        avg_fuel,
-        std::vector<std::string>(unique_resources.begin(), unique_resources.end())
+}
+
+std::vector<Fleet> generateFleets() {
+    return {
+        {1, "Zhang", 12, 85.0, true}, {2, "Okafor", 4, 95.0, true},  {3, "Ivanova", 20, 30.0, true},
+        {4, "Reyes", 15, 70.0, false}, {5, "Tanaka", 9, 60.0, true}, {6, "Novak", 18, 99.0, true},
     };
-    
-    // Display comprehensive report
-    std::cout << "\n🌌 SPACE EMPIRE STATUS REPORT 🌌" << std::endl;
-    std::cout << "=================================" << std::endl;
-    std::cout << std::format("Total Planets: {}", stats.total_planets) << std::endl;
-    std::cout << std::format("Habitable Planets: {}", stats.habitable_planets) << std::endl;
-    std::cout << std::format("Total Population: {:L}", stats.total_population) << std::endl;
-    std::cout << std::format("Active Fleets: {}", stats.active_fleets) << std::endl;
-    std::cout << std::format("Average Fleet Fuel Level: {:.1f}%", stats.average_fuel_level) << std::endl;
-    
-    std::cout << "Available Resources: ";
-    for (size_t i = 0; i < stats.all_resources.size(); ++i) {
-        if (i > 0) std::cout << ", ";
-        std::cout << stats.all_resources[i];
-    }
-    std::cout << std::endl;
 }
 
-// ===== RANGE COMPOSITION PATTERNS =====
-
-void demonstrate_range_composition() {
-    std::cout << "\n=== Range Composition Patterns ===" << std::endl;
-    
-    // Create a complex pipeline that combines multiple data sources
-    auto planets = generate_planets();
-    auto fleets = generate_fleets();
-    auto missions = generate_missions();
-    
-    // Multi-step analysis pipeline
-    auto analysis_pipeline = [&]() {
-        // Step 1: Find active exploration fleets
-        auto exploration_fleets = fleets
-            | views::filter([](const Fleet& f) { 
-                return f.is_active && f.mission_type == "Exploration" && f.fuel_level > 60.0; 
-            });
-        
-        // Step 2: Find suitable target planets
-        auto target_planets = planets
-            | views::filter([](const Planet& p) { 
-                return p.distance_from_sun < 50.0 && !p.resources.empty(); 
-            });
-        
-        // Step 3: Create fleet-planet pairs for optimal assignments
-        std::vector<std::pair<std::string, std::string>> assignments;
-        
-        auto fleet_names = exploration_fleets 
-            | views::transform([](const Fleet& f) { return f.commander; });
-        auto planet_names = target_planets 
-            | views::transform([](const Planet& p) { return p.name; });
-        
-        // Simple pairing (in real scenario, would use more complex assignment logic)
-        auto fleet_it = fleet_names.begin();
-        auto planet_it = planet_names.begin();
-        
-        while (fleet_it != fleet_names.end() && planet_it != planet_names.end()) {
-            assignments.emplace_back(*fleet_it, *planet_it);
-            ++fleet_it;
-            ++planet_it;
-        }
-        
-        return assignments;
+std::vector<Mission> generateMissions() {
+    return {
+        {1, "Exploration", 2, 40.0}, {2, "Combat", 5, 10.0}, {3, "Trade", 1, 90.0},  {4, "Rescue", 5, 70.0},
+        {5, "Research", 3, 0.0},     {6, "Patrol", 2, 15.0}, {7, "Colonize", 4, 55.0}, {8, "Combat", 5, 10.0},
     };
-    
-    auto assignments = analysis_pipeline();
-    
-    std::cout << "Optimal Fleet-Planet Assignments:" << std::endl;
-    for (const auto& [commander, planet] : assignments) {
-        std::cout << std::format("  - {} → {}", commander, planet) << std::endl;
-    }
-    
-    // Demonstrate range adaptors chaining
-    std::cout << "\nComplex Range Adaptor Chain:" << std::endl;
-    auto complex_chain = views::iota(1, 50)  // Numbers 1-49
-        | views::filter([](int n) { return n % 2 == 1; })     // Odd numbers
-        | views::transform([](int n) { return n * n; })       // Square them
-        | views::filter([](int n) { return n < 500; })        // Keep under 500
-        | views::reverse                                       // Reverse order
-        | views::chunk(3)                                      // Group in chunks of 3
-        | views::take(3);                                      // Take first 3 chunks
-    
-    for (auto chunk : complex_chain) {
-        std::cout << "Chunk: ";
-        for (auto n : chunk) {
-            std::cout << n << " ";
+}
+
+std::vector<std::string> habitablePlanetNames(const std::vector<Planet>& planets) {
+    return toVector(planets | views::filter(&Planet::habitable) | views::transform(&Planet::name));
+}
+
+std::vector<std::string> topByPopulation(std::vector<Planet> planets, std::size_t n) {
+    rng::sort(planets, rng::greater{}, &Planet::population);
+    return toVector(planets | views::take(static_cast<std::ptrdiff_t>(n)) | views::transform(&Planet::name));
+}
+
+long long totalPopulation(const std::vector<Planet>& planets) {
+    auto pops = planets | views::transform(&Planet::population) | views::common;
+    return std::accumulate(pops.begin(), pops.end(), 0LL);
+}
+
+std::vector<int> readyFleetIds(const std::vector<Fleet>& fleets, double minFuel, int minShips) {
+    auto ready = fleets | views::filter([minFuel, minShips](const Fleet& f) {
+                     return f.active && f.fuel >= minFuel && f.ships >= minShips;
+                 }) |
+                 views::transform(&Fleet::id);
+    return toVector(ready);
+}
+
+std::vector<int> missionIdsByUrgency(std::vector<Mission> missions) {
+    // Stable sort by the secondary key, then by the primary key: equal priorities keep progress order.
+    rng::stable_sort(missions, rng::less{}, &Mission::progress);
+    rng::stable_sort(missions, rng::greater{}, &Mission::priority);
+    return toVector(missions | views::transform(&Mission::id));
+}
+
+std::map<std::string, std::vector<std::string>> planetsBySystem(const std::vector<Planet>& planets) {
+    std::map<std::string, std::vector<std::string>> groups;
+    rng::for_each(planets, [&groups](const Planet& p) { groups[p.system].push_back(p.name); });
+    return groups;
+}
+
+std::vector<std::string> splitWords(std::string_view text, char delimiter) {
+    std::vector<std::string> words;
+    for (auto token : text | views::split(delimiter)) {
+        if (!rng::empty(token)) {
+            words.emplace_back(rng::begin(token), rng::end(token));
         }
-        std::cout << std::endl;
     }
+    return words;
 }
 
-// ===== INTEGRATION WITH STL ALGORITHMS =====
-
-void demonstrate_stl_integration() {
-    std::cout << "\n=== STL Algorithms Integration with Ranges ===" << std::endl;
-    
-    auto planets = generate_planets();
-    
-    // Use ranges with STL algorithms
-    std::vector<double> distances;
-    rng::transform(planets, std::back_inserter(distances), 
-                   [](const Planet& p) { return p.distance_from_sun; });
-    
-    // Sort distances
-    rng::sort(distances);
-    
-    std::cout << "Sorted planet distances: ";
-    for (size_t i = 0; i < std::min(distances.size(), size_t{5}); ++i) {
-        std::cout << distances[i] << " ";
-    }
-    std::cout << std::endl;
-    
-    // Find median distance
-    auto median_it = distances.begin() + distances.size() / 2;
-    std::nth_element(distances.begin(), median_it, distances.end());
-    std::cout << std::format("Median distance: {:.1f} AU", *median_it) << std::endl;
-    
-    // Use binary search on sorted data
-    double search_distance = 5.0;
-    bool found = std::binary_search(distances.begin(), distances.end(), search_distance);
-    std::cout << std::format("Distance {:.1f} AU found: {}", search_distance, found ? "Yes" : "No") << std::endl;
+std::vector<int> flatten(const std::vector<std::vector<int>>& nested) {
+    return toVector(nested | views::join);
 }
 
-} // namespace CppVerseHub::Modern::Ranges
+std::vector<long long> squaresOfOdds(std::size_t count) {
+    auto odds = views::iota(1LL) | views::filter([](long long x) { return x % 2 != 0; }) |
+                views::transform([](long long x) { return x * x; }) |
+                views::take(static_cast<std::ptrdiff_t>(count));
+    return toVector(odds);
+}
+
+std::size_t countEvaluationsForFirst(const std::vector<int>& data, std::size_t first) {
+    std::size_t evaluations = 0;
+    auto pipeline = data | views::transform([&evaluations](int x) {
+                        ++evaluations;
+                        return x * 10;
+                    }) |
+                    views::take(static_cast<std::ptrdiff_t>(first));
+    for (int v : pipeline) {
+        (void)v;
+    }
+    return evaluations;
+}
+
+std::pair<std::vector<int>, std::vector<int>> splitAtFirstNotBelow(const std::vector<int>& data, int limit) {
+    auto below = [limit](int x) { return x < limit; };
+    return {toVector(data | views::take_while(below)), toVector(data | views::drop_while(below))};
+}
+
+std::vector<int> makeRandomValues(std::size_t n, std::uint32_t seed) {
+    std::mt19937 gen(seed);
+    std::uniform_int_distribution<int> dist(0, 999);
+    std::vector<int> values(n);
+    rng::generate(values, [&] { return dist(gen); });
+    return values;
+}
+
+long long sumSquaresOfEvensRanges(const std::vector<int>& data) {
+    auto squares = data | views::filter([](int x) { return x % 2 == 0; }) |
+                   views::transform([](int x) { return static_cast<long long>(x) * x; }) | views::common;
+    return std::accumulate(squares.begin(), squares.end(), 0LL);
+}
+
+long long sumSquaresOfEvensLoop(const std::vector<int>& data) {
+    long long sum = 0;
+    for (int x : data) {
+        if (x % 2 == 0) {
+            sum += static_cast<long long>(x) * x;
+        }
+    }
+    return sum;
+}
+
+// ===== SHOWCASES =====
+
+namespace {
+
+template <typename R>
+void printRange(std::ostream& out, std::string_view label, R&& r) {
+    out << "  " << label << ':';
+    for (auto&& v : r) {
+        out << ' ' << v;
+    }
+    out << '\n';
+}
+
+}  // namespace
+
+void demonstrateBasicRanges(std::ostream& out) {
+    out << "\n--- Basic view pipelines ---\n";
+    const std::vector<int> numbers{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    printRange(out, "evens", numbers | views::filter([](int x) { return x % 2 == 0; }));
+    printRange(out, "squares", numbers | views::transform([](int x) { return x * x; }));
+    printRange(out, "evens squared, first 3",
+               numbers | views::filter([](int x) { return x % 2 == 0; }) |
+                   views::transform([](int x) { return x * x; }) | views::take(3));
+    printRange(out, "drop 9", numbers | views::drop(9));
+    printRange(out, "reversed", numbers | views::reverse | views::take(4));
+    printRange(out, "iota(10, 15)", views::iota(10, 15));
+    printRange(out, "squares of odds", squaresOfOdds(5));
+    out << "  ranges::count_if(> 6) = " << rng::count_if(numbers, [](int x) { return x > 6; })
+        << ", ranges::max = " << rng::max(numbers) << '\n';
+}
+
+void demonstrateDomainQueries(std::ostream& out) {
+    out << "\n--- Domain queries with projections ---\n";
+    const auto planets = generatePlanets();
+    printRange(out, "habitable", habitablePlanetNames(planets));
+    printRange(out, "top 3 by population", topByPopulation(planets, 3));
+    out << "  total population: " << totalPopulation(planets) << '\n';
+    const auto richest = rng::max_element(planets, {}, &Planet::resourceValue);
+    out << "  richest (max_element with projection): " << richest->name << '\n';
+    out << "  any planet beyond 5 AU? " << std::boolalpha
+        << rng::any_of(planets, [](double d) { return d > 5.0; }, &Planet::distanceAu) << std::noboolalpha
+        << '\n';
+    for (const auto& [system, names] : planetsBySystem(planets)) {
+        out << "  " << system << ": " << names.size() << " planets\n";
+    }
+    printRange(out, "fleets ready (fuel>=60, ships>=10)", readyFleetIds(generateFleets(), 60.0, 10));
+    printRange(out, "missions by urgency", missionIdsByUrgency(generateMissions()));
+}
+
+void demonstrateAdvancedAdaptors(std::ostream& out) {
+    out << "\n--- keys / values / elements / split / join / take_while ---\n";
+    const std::map<std::string, int> shipsPerSector{{"Alpha", 12}, {"Beta", 7}, {"Gamma", 3}};
+    printRange(out, "keys", shipsPerSector | views::keys);
+    printRange(out, "values", shipsPerSector | views::values);
+    const std::vector<std::tuple<int, std::string, double>> logs{{1, "warp", 0.9}, {2, "dock", 0.4}};
+    printRange(out, "elements<1>", logs | views::elements<1>);
+    printRange(out, "split", splitWords("scan,,mine,trade,colonize", ','));
+    printRange(out, "join", flatten({{1, 2}, {}, {3}, {4, 5, 6}}));
+    const auto [prefix, rest] = splitAtFirstNotBelow({1, 3, 5, 8, 2, 9}, 6);
+    printRange(out, "take_while(<6)", prefix);
+    printRange(out, "drop_while(<6)", rest);
+}
+
+void demonstrateCustomView(std::ostream& out) {
+    out << "\n--- Custom view: EveryNthView ---\n";
+    std::vector<int> data(12);
+    std::iota(data.begin(), data.end(), 1);
+    printRange(out, "every 3rd", data | everyNth(3));
+    printRange(out, "every 5th of iota(0,20)", views::iota(0, 20) | everyNth(5));
+    printRange(out, "every 2nd, squared",
+               data | everyNth(2) | views::transform([](int x) { return x * x; }));
+    auto planets = generatePlanets();
+    printRange(out, "every 4th planet", planets | everyNth(4) | views::transform(&Planet::name));
+}
+
+void demonstrateLaziness(std::ostream& out) {
+    out << "\n--- Lazy evaluation ---\n";
+    const std::vector<int> data(1000, 1);
+    out << "  take(3) over a transform of 1000 elements evaluated the transform "
+        << countEvaluationsForFirst(data, 3) << " times\n";
+    const auto values = makeRandomValues(10'000, 42);
+    out << "  sum of squares of evens (ranges) = " << sumSquaresOfEvensRanges(values)
+        << ", (loop) = " << sumSquaresOfEvensLoop(values) << '\n';
+}
+
+void demonstrateAllRanges(std::ostream& out) {
+    out << "\n=== C++20 Ranges ===\n";
+    demonstrateBasicRanges(out);
+    demonstrateDomainQueries(out);
+    demonstrateAdvancedAdaptors(out);
+    demonstrateCustomView(out);
+    demonstrateLaziness(out);
+}
+
+}  // namespace CppVerseHub::Modern::Ranges

@@ -1,402 +1,353 @@
-// File: src/modern/LambdaExpressions.cpp
-// Advanced Lambda Expressions Implementation
+/**
+ * @file LambdaExpressions.cpp
+ * @brief Implementation of the lambda showcase (see LambdaExpressions.hpp).
+ */
+#include "modern/LambdaExpressions.hpp"
 
-#include "LambdaExpressions.hpp"
-#include <thread>
-#include <chrono>
-#include <random>
-#include <iomanip>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <future>
+#include <iterator>
+#include <numeric>
+#include <set>
+#include <string_view>
+#include <variant>
 
 namespace CppVerseHub::Modern::LambdaExpressions {
 
-// ===== LAMBDA PERFORMANCE BENCHMARKING =====
-
-void benchmark_lambda_vs_function() {
-    std::cout << "\n=== Lambda vs Function Performance ===" << std::endl;
-    
-    const size_t iterations = 1000000;
-    std::vector<int> test_data;
-    test_data.reserve(iterations);
-    
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(1, 1000);
-    
-    for (size_t i = 0; i < iterations; ++i) {
-        test_data.push_back(dis(gen));
-    }
-    
-    // Lambda version
-    auto lambda_processor = [](int x) { return x * x + 2 * x + 1; };
-    
-    auto start = std::chrono::high_resolution_clock::now();
-    long long lambda_sum = 0;
-    for (const auto& val : test_data) {
-        lambda_sum += lambda_processor(val);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto lambda_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    
-    // Function pointer version
-    auto function_processor = [](int x) { return x * x + 2 * x + 1; };
-    std::function<int(int)> func_ptr = function_processor;
-    
-    start = std::chrono::high_resolution_clock::now();
-    long long function_sum = 0;
-    for (const auto& val : test_data) {
-        function_sum += func_ptr(val);
-    }
-    end = std::chrono::high_resolution_clock::now();
-    auto function_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    
-    std::cout << "Processing " << iterations << " elements:" << std::endl;
-    std::cout << "  Lambda time: " << lambda_duration.count() << " μs" << std::endl;
-    std::cout << "  std::function time: " << function_duration.count() << " μs" << std::endl;
-    std::cout << "  Results match: " << (lambda_sum == function_sum ? "Yes" : "No") << std::endl;
-    
-    double speedup = static_cast<double>(function_duration.count()) / lambda_duration.count();
-    std::cout << "  Lambda speedup: " << std::fixed << std::setprecision(2) << speedup << "x" << std::endl;
+std::vector<SpaceShip> sampleFleet() {
+    return {
+        {1, "USS Explorer", "Science", 85.5, 150, true},
+        {2, "USS Guardian", "Battleship", 92.0, 300, true},
+        {3, "USS Voyager", "Scout", 23.1, 50, false},
+        {4, "USS Defender", "Destroyer", 67.8, 200, true},
+        {5, "USS Discovery", "Research", 41.2, 180, true},
+    };
 }
 
-// ===== COMPLEX LAMBDA PATTERNS =====
-
-void demonstrate_lambda_patterns() {
-    std::cout << "\n=== Advanced Lambda Patterns ===" << std::endl;
-    
-    // Builder pattern with lambdas
-    auto fleet_builder = []() {
-        struct FleetBuilder {
-            std::vector<SpaceShip> ships;
-            
-            FleetBuilder& add_ship(int id, const std::string& name, const std::string& type, double fuel, int crew) {
-                ships.emplace_back(id, name, type, fuel, crew);
-                return *this;
-            }
-            
-            FleetBuilder& set_all_active(bool active) {
-                std::for_each(ships.begin(), ships.end(), 
-                    [active](SpaceShip& ship) { ship.is_active = active; });
-                return *this;
-            }
-            
-            FleetBuilder& refuel_all(double fuel_level) {
-                std::for_each(ships.begin(), ships.end(), 
-                    [fuel_level](SpaceShip& ship) { ship.fuel_level = fuel_level; });
-                return *this;
-            }
-            
-            std::vector<SpaceShip> build() { return std::move(ships); }
-        };
-        return FleetBuilder{};
+std::vector<Planet> samplePlanets() {
+    return {
+        {1, "Mercury", 0.39, 0, false},
+        {2, "Venus", 0.72, 0, false},
+        {3, "Earth", 1.0, 8'000'000'000LL, true},
+        {4, "Mars", 1.52, 0, false},
+        {5, "Jupiter", 5.20, 0, false},
+        {6, "Kepler-442b", 112.0, 50'000'000LL, true},
+        {7, "Proxima-b", 42400.0, 0, true},
     };
-    
-    auto battle_fleet = fleet_builder()
-        .add_ship(101, "USS Destroyer", "Combat", 95.0, 250)
-        .add_ship(102, "USS Cruiser", "Combat", 87.5, 300)
-        .add_ship(103, "USS Frigate", "Combat", 92.3, 180)
-        .set_all_active(true)
-        .build();
-    
-    std::cout << "Built battle fleet:" << std::endl;
-    for (const auto& ship : battle_fleet) {
-        std::cout << "  " << ship << std::endl;
-    }
-    
-    // Strategy pattern with lambdas
-    using NavigationStrategy = std::function<double(double, double, double, double)>;
-    
-    std::map<std::string, NavigationStrategy> navigation_strategies = {
-        {"Direct", [](double x1, double y1, double x2, double y2) {
-            return std::sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
-        }},
-        {"Manhattan", [](double x1, double y1, double x2, double y2) {
-            return std::abs(x2-x1) + std::abs(y2-y1);
-        }},
-        {"Hyperspace", [](double x1, double y1, double x2, double y2) {
-            double direct = std::sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
-            return direct * 0.1; // Hyperspace is 10x faster
-        }}
-    };
-    
-    std::cout << "\nNavigation strategies from (0,0) to (10,10):" << std::endl;
-    for (const auto& [strategy_name, strategy_func] : navigation_strategies) {
-        double distance = strategy_func(0, 0, 10, 10);
-        std::cout << "  " << strategy_name << ": " << distance << " units" << std::endl;
-    }
 }
 
-// ===== LAMBDA COMPOSITION =====
+// ===== EventBus =====
 
-void demonstrate_lambda_composition() {
-    std::cout << "\n=== Lambda Composition ===" << std::endl;
-    
-    // Function composition utility
-    template<typename F, typename G>
-    auto compose(F&& f, G&& g) {
-        return [f = std::forward<F>(f), g = std::forward<G>(g)](auto&& x) {
-            return f(g(std::forward<decltype(x)>(x)));
-        };
+EventBus::SubscriptionId EventBus::subscribe(const std::string& event, Handler handler) {
+    const SubscriptionId id = nextId_++;
+    handlers_[event].push_back(Entry{id, std::move(handler)});
+    return id;
+}
+
+bool EventBus::unsubscribe(SubscriptionId id) {
+    for (auto& [event, entries] : handlers_) {
+        auto it = std::find_if(entries.begin(), entries.end(), [id](const Entry& e) { return e.id == id; });
+        if (it != entries.end()) {
+            entries.erase(it);
+            return true;
+        }
     }
-    
-    // Basic mathematical functions
+    return false;
+}
+
+std::size_t EventBus::emit(const std::string& event, const std::string& payload) const {
+    auto it = handlers_.find(event);
+    if (it == handlers_.end()) {
+        return 0;
+    }
+    for (const auto& entry : it->second) {
+        entry.handler(payload);
+    }
+    return it->second.size();
+}
+
+std::size_t EventBus::handlerCount(const std::string& event) const {
+    auto it = handlers_.find(event);
+    return it == handlers_.end() ? 0 : it->second.size();
+}
+
+// ===== parallelSum =====
+
+long long parallelSum(const std::vector<int>& data, std::size_t chunks) {
+    if (data.empty()) {
+        return 0;
+    }
+    chunks = std::clamp<std::size_t>(chunks, 1, data.size());
+    const std::size_t chunkSize = (data.size() + chunks - 1) / chunks;
+
+    std::vector<std::future<long long>> futures;
+    futures.reserve(chunks);
+    for (std::size_t begin = 0; begin < data.size(); begin += chunkSize) {
+        const std::size_t end = std::min(begin + chunkSize, data.size());
+        // The lambda captures the bounds by value and the data by reference; the futures are joined
+        // before `data` can go out of scope, so the reference never dangles.
+        futures.push_back(std::async(std::launch::async, [&data, begin, end] {
+            return std::accumulate(data.begin() + static_cast<std::ptrdiff_t>(begin),
+                                   data.begin() + static_cast<std::ptrdiff_t>(end), 0LL);
+        }));
+    }
+    long long total = 0;
+    for (auto& f : futures) {
+        total += f.get();
+    }
+    return total;
+}
+
+// ===== summarizeFleet =====
+
+FleetSummary summarizeFleet(const std::vector<SpaceShip>& fleet) {
+    FleetSummary summary;
+
+    std::vector<SpaceShip> operational;
+    std::copy_if(fleet.begin(), fleet.end(), std::back_inserter(operational),
+                 [](const SpaceShip& s) { return s.isActive && s.fuelLevel > 50.0; });
+    std::sort(operational.begin(), operational.end(),
+              [](const SpaceShip& a, const SpaceShip& b) { return a.fuelLevel > b.fuelLevel; });
+    std::transform(operational.begin(), operational.end(), std::back_inserter(summary.operationalNames),
+                   [](const SpaceShip& s) { return s.name; });
+
+    summary.activeCrew = std::accumulate(fleet.begin(), fleet.end(), 0, [](int sum, const SpaceShip& s) {
+        return s.isActive ? sum + s.crewSize : sum;
+    });
+    if (!fleet.empty()) {
+        const double totalFuel = std::accumulate(fleet.begin(), fleet.end(), 0.0,
+                                                 [](double acc, const SpaceShip& s) { return acc + s.fuelLevel; });
+        summary.meanFuel = totalFuel / static_cast<double>(fleet.size());
+    }
+    return summary;
+}
+
+// ===== SHOWCASES =====
+
+void demonstrateBasicLambdas(std::ostream& out) {
+    out << "\n--- Basic lambdas ---\n";
+    auto greet = [] { return std::string_view{"Welcome to CppVerseHub!"}; };
+    out << greet() << '\n';
+
+    auto distance = [](double x1, double y1, double x2, double y2) {
+        return std::hypot(x2 - x1, y2 - y1);
+    };
+    out << "distance((0,0),(3,4)) = " << distance(0.0, 0.0, 3.0, 4.0) << '\n';
+
+    auto clampPercent = [](double v) -> int {  // explicit trailing return type
+        return static_cast<int>(std::clamp(v, 0.0, 100.0));
+    };
+    out << "clampPercent(140.7) = " << clampPercent(140.7) << '\n';
+
+    int totalScore = 0;
+    auto addScore = [&totalScore](int points) { totalScore += points; };
+    for (int p : {150, 200, 75}) {
+        addScore(p);
+    }
+    out << "score after three additions: " << totalScore << '\n';
+
+    int (*fnPtr)(int) = [](int x) { return x * 3; };  // capture-less lambdas convert to function pointers
+    out << "function-pointer conversion: fnPtr(7) = " << fnPtr(7) << '\n';
+}
+
+void demonstrateCaptureModes(std::ostream& out) {
+    out << "\n--- Capture modes ---\n";
+    int fleetCount = 5;
+    double fuelReserve = 1000.0;
+    const std::string commander = "Admiral Zhang";
+
+    auto byValue = [=] { return fleetCount * 10; };          // copies taken now
+    auto byReference = [&] { fuelReserve -= 150.0; ++fleetCount; };
+    auto mixed = [=, &fuelReserve](double cost) {            // everything by value except fuelReserve
+        fuelReserve -= cost;
+        return commander + " has " + std::to_string(static_cast<int>(fuelReserve)) + " fuel";
+    };
+    byReference();
+    out << "[=] saw fleetCount when created: " << byValue() << " (now " << fleetCount * 10 << ")\n";
+    out << "[=, &fuelReserve]: " << mixed(200.0) << '\n';
+
+    auto reporter = makeOwningReporter(std::make_unique<std::string>("cargo manifest"));
+    out << "init-capture moved a unique_ptr in; reporter() = " << reporter() << '\n';
+
+    Beacon beacon("Alpha");
+    auto live = beacon.liveReporter();
+    auto snapshot = beacon.snapshotReporter();
+    beacon.relabel("Omega");
+    out << "[this] sees '" << live() << "', [*this] kept '" << snapshot() << "'\n";
+}
+
+void demonstrateStlLambdas(std::ostream& out) {
+    out << "\n--- Lambdas with STL algorithms ---\n";
+    const auto fleet = sampleFleet();
+    const auto summary = summarizeFleet(fleet);
+    out << "Operational (>50% fuel, by fuel):";
+    for (const auto& n : summary.operationalNames) {
+        out << ' ' << n << ';';
+    }
+    out << "\nActive crew: " << summary.activeCrew << ", mean fuel: " << summary.meanFuel << "%\n";
+
+    auto upper = mapTo(fleet, [](const SpaceShip& s) {
+        std::string name = s.name;
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        return name;
+    });
+    out << "Upper-cased first ship: " << upper.front() << '\n';
+
+    const auto planets = samplePlanets();
+    const auto habitable = filterBy(planets, [](const Planet& p) { return p.habitable; });
+    out << "Habitable planets:";
+    for (const auto& p : habitable) {
+        out << ' ' << p.name;
+    }
+    out << '\n';
+    const double limitAu = 10.0;
+    const auto nearby = std::count_if(planets.begin(), planets.end(),
+                                      [limitAu](const Planet& p) { return p.distanceAu <= limitAu; });
+    out << "Planets within " << limitAu << " AU: " << nearby << '\n';
+}
+
+void demonstrateGenericLambdas(std::ostream& out) {
+    out << "\n--- Generic, template and constexpr lambdas ---\n";
+    auto greater = [](const auto& a, const auto& b) { return a > b; };
+    out << std::boolalpha << "greater(5, 3) = " << greater(5, 3)
+        << ", greater(\"zebra\"s, \"apple\"s) = " << greater(std::string("zebra"), std::string("apple")) << '\n';
+
+    auto joinMapped = [](const auto& container, auto fn) {
+        std::string s;
+        for (const auto& item : container) {
+            s += std::to_string(fn(item)) + ' ';
+        }
+        return s;
+    };
+    out << "squares: " << joinMapped(std::vector{1, 2, 3, 4}, [](int n) { return n * n; }) << '\n';
+    out << "lengths: "
+        << joinMapped(std::vector<std::string>{"space", "game", "lambda"}, [](const std::string& w) {
+               return w.size();
+           })
+        << '\n';
+
+    // Template lambda: the explicit type parameter lets us name the element type.
+    auto sumAs = []<typename T>(const std::vector<T>& v) {
+        return std::accumulate(v.begin(), v.end(), T{});
+    };
+    out << "sumAs<double>({0.5, 1.5, 2.0}) = " << sumAs(std::vector{0.5, 1.5, 2.0}) << '\n';
+    out << "sizeInBits(double) = " << sizeInBits(1.0) << '\n';
+
+    constexpr auto hypotSq = [](auto a, auto b) constexpr { return a * a + b * b; };
+    constexpr auto r = hypotSq(3, 4);
+    static_assert(r == 25);
+    out << "constexpr lambda hypotSq(3, 4) = " << r << '\n';
+
+    // C++20: stateless lambdas are default-constructible and may appear in unevaluated contexts.
+    std::set<int, decltype([](int a, int b) { return a > b; })> descending{3, 1, 4, 1, 5, 9};
+    out << "set ordered by a decltype(lambda) comparator:";
+    for (int v : descending) {
+        out << ' ' << v;
+    }
+    out << '\n' << std::noboolalpha;
+}
+
+void demonstrateStatefulLambdas(std::ostream& out) {
+    out << "\n--- Stateful (mutable) lambdas ---\n";
+    auto missionId = makeCounter(1);
+    for (const char* type : {"Exploration", "Combat", "Trade"}) {
+        out << "  Mission-" << missionId() << '-' << type << '\n';
+    }
+
+    auto average = makeRunningAverage();
+    out << "Running average of fuel readings:";
+    for (double reading : {85.5, 92.0, 23.1, 67.8}) {
+        out << ' ' << average(reading);
+    }
+    out << '\n';
+
+    auto fuelOk = makeRangeValidator(20.0, 100.0);
+    auto crewOk = makeRangeValidator(10, 500);
+    out << std::boolalpha << "fuelOk(75.5)=" << fuelOk(75.5) << " fuelOk(15.2)=" << fuelOk(15.2)
+        << " crewOk(150)=" << crewOk(150) << " crewOk(600)=" << crewOk(600) << std::noboolalpha << '\n';
+}
+
+void demonstrateFunctionalUtilities(std::ostream& out) {
+    out << "\n--- Functional utilities ---\n";
     auto square = [](double x) { return x * x; };
-    auto add_ten = [](double x) { return x + 10; };
-    auto halve = [](double x) { return x / 2; };
-    
-    // Compose functions
-    auto complex_operation = compose(square, compose(add_ten, halve));
-    
-    std::cout << "Function composition example:" << std::endl;
-    double input = 20.0;
-    std::cout << "  Input: " << input << std::endl;
-    std::cout << "  halve(20) = " << halve(input) << std::endl;
-    std::cout << "  add_ten(halve(20)) = " << add_ten(halve(input)) << std::endl;
-    std::cout << "  square(add_ten(halve(20))) = " << complex_operation(input) << std::endl;
-    
-    // Pipeline of data transformations
-    auto create_pipeline = [](auto... transforms) {
-        return [transforms...](auto input) {
-            return (transforms(input), ...); // C++17 fold expression - applies each transform
-        };
-    };
-    
-    std::vector<SpaceShip> fleet = {
-        {1, "USS Alpha", "Explorer", 45.2, 100, false},
-        {2, "USS Beta", "Combat", 78.5, 200, true},
-        {3, "USS Gamma", "Research", 91.0, 150, true}
-    };
-    
-    // Create processing pipeline
-    auto activate_ships = [](std::vector<SpaceShip>& ships) {
-        std::for_each(ships.begin(), ships.end(), [](SpaceShip& ship) { ship.is_active = true; });
-    };
-    
-    auto refuel_ships = [](std::vector<SpaceShip>& ships) {
-        std::for_each(ships.begin(), ships.end(), [](SpaceShip& ship) { ship.fuel_level = 100.0; });
-    };
-    
-    auto add_equipment = [](std::vector<SpaceShip>& ships) {
-        std::for_each(ships.begin(), ships.end(), [](SpaceShip& ship) { 
-            ship.equipment.push_back("Standard Equipment"); 
-        });
-    };
-    
-    std::cout << "\nFleet before processing:" << std::endl;
-    for (const auto& ship : fleet) {
-        std::cout << "  " << ship << " (Active: " << ship.is_active << ")" << std::endl;
+    auto addTen = [](double x) { return x + 10.0; };
+    auto halve = [](double x) { return x / 2.0; };
+    out << "compose(square, addTen, halve)(8) = " << compose(square, addTen, halve)(8.0) << '\n';
+    out << "pipeline(square, addTen, halve)(8) = " << pipeline(square, addTen, halve)(8.0) << '\n';
+
+    auto add3 = [](int a, int b, int c) { return a + b + c; };
+    auto add5 = curry(add3)(5);
+    out << "curry(add3)(5)(10)(20) = " << add5(10)(20) << ", curry(add3)(5)(10, 20) = " << add5(10, 20) << '\n';
+
+    using Reading = std::variant<int, double, std::string>;
+    const std::vector<Reading> readings{42, 3.5, std::string{"offline"}};
+    for (const auto& r : readings) {
+        out << "  visit: "
+            << std::visit(Overloaded{[](int i) { return "int " + std::to_string(i); },
+                                     [](double d) { return "double " + std::to_string(d); },
+                                     [](const std::string& s) { return "string " + s; }},
+                          r)
+            << '\n';
     }
-    
-    // Apply pipeline
-    create_pipeline(activate_ships, refuel_ships, add_equipment)(fleet);
-    
-    std::cout << "Fleet after processing:" << std::endl;
-    for (const auto& ship : fleet) {
-        std::cout << "  " << ship << " (Active: " << ship.is_active 
-                  << ", Equipment: " << ship.equipment.size() << " items)" << std::endl;
+
+    const Fix fib{[](const auto& self, int n) -> long long { return n < 2 ? n : self(n - 1) + self(n - 2); }};
+    out << "Fix (Y-combinator) fib(20) = " << fib(20) << ", factorialFix(15) = " << factorialFix(15) << '\n';
+
+    Memoized<int, long long> slowSquare([](const int& n) { return static_cast<long long>(n) * n; });
+    for (int n : {12, 7, 12, 12, 7}) {
+        (void)slowSquare(n);
     }
+    out << "Memoized: " << slowSquare.misses() << " computations, " << slowSquare.hits() << " cache hits\n";
 }
 
-// ===== LAMBDA-BASED EVENT SYSTEM =====
+void demonstrateEventSystem(std::ostream& out) {
+    out << "\n--- Event system with std::function ---\n";
+    EventBus bus;
+    std::vector<std::string> log;
+    int resourceTotal = 0;
 
-class EventSystem {
-private:
-    std::map<std::string, std::vector<std::function<void(const std::string&)>>> event_handlers_;
-    
-public:
-    template<typename Handler>
-    void subscribe(const std::string& event_type, Handler&& handler) {
-        event_handlers_[event_type].emplace_back(std::forward<Handler>(handler));
-    }
-    
-    void emit(const std::string& event_type, const std::string& data = "") {
-        if (event_handlers_.find(event_type) != event_handlers_.end()) {
-            for (const auto& handler : event_handlers_[event_type]) {
-                handler(data);
-            }
-        }
-    }
-    
-    void clear_handlers(const std::string& event_type) {
-        event_handlers_[event_type].clear();
-    }
-    
-    size_t handler_count(const std::string& event_type) const {
-        auto it = event_handlers_.find(event_type);
-        return (it != event_handlers_.end()) ? it->second.size() : 0;
-    }
-};
+    bus.subscribe("ship_launched", [&log](const std::string& p) { log.push_back("launch:" + p); });
+    const auto alertId = bus.subscribe("ship_launched", [&out](const std::string& p) {
+        out << "  [alert] " << p << " has launched\n";
+    });
+    bus.subscribe("resource_found", [&resourceTotal](const std::string& p) {
+        resourceTotal += static_cast<int>(p.size());
+    });
 
-void demonstrate_lambda_event_system() {
-    std::cout << "\n=== Lambda-based Event System ===" << std::endl;
-    
-    EventSystem game_events;
-    
-    // Subscribe to ship events with lambdas
-    game_events.subscribe("ship_destroyed", [](const std::string& data) {
-        std::cout << "🚨 Alert: Ship " << data << " has been destroyed!" << std::endl;
-    });
-    
-    game_events.subscribe("ship_destroyed", [](const std::string& data) {
-        std::cout << "📊 Updating fleet statistics after loss of " << data << std::endl;
-    });
-    
-    game_events.subscribe("mission_completed", [](const std::string& data) {
-        std::cout << "✅ Mission " << data << " completed successfully!" << std::endl;
-    });
-    
-    game_events.subscribe("mission_completed", [](const std::string& data) {
-        std::cout << "🎖️ Awarding experience points for mission " << data << std::endl;
-    });
-    
-    game_events.subscribe("planet_discovered", [](const std::string& data) {
-        std::cout << "🌍 New planet discovered: " << data << std::endl;
-    });
-    
-    // Stateful lambda for resource tracking
-    int total_resources = 1000;
-    game_events.subscribe("resource_found", [&total_resources](const std::string& data) {
-        int amount = std::stoi(data);
-        total_resources += amount;
-        std::cout << "💎 Found " << amount << " resources. Total: " << total_resources << std::endl;
-    });
-    
-    // Emit various events
-    std::cout << "Event handlers registered:" << std::endl;
-    std::cout << "  ship_destroyed: " << game_events.handler_count("ship_destroyed") << " handlers" << std::endl;
-    std::cout << "  mission_completed: " << game_events.handler_count("mission_completed") << " handlers" << std::endl;
-    
-    std::cout << "\nEmitting events:" << std::endl;
-    game_events.emit("ship_destroyed", "USS Explorer");
-    game_events.emit("mission_completed", "Alpha-7");
-    game_events.emit("planet_discovered", "Kepler-442c");
-    game_events.emit("resource_found", "250");
-    game_events.emit("resource_found", "150");
+    bus.emit("ship_launched", "USS Explorer");
+    bus.unsubscribe(alertId);
+    bus.emit("ship_launched", "USS Guardian");
+    bus.emit("resource_found", "dilithium");
+    const auto unheard = bus.emit("unknown_event", "ignored");
+    out << "Logged " << log.size() << " launches, resource score " << resourceTotal << ", unknown event reached "
+        << unheard << " handlers\n";
 }
 
-// ===== LAMBDA METAPROGRAMMING =====
+void demonstrateAsyncLambdas(std::ostream& out) {
+    out << "\n--- Lambdas with std::async ---\n";
+    std::vector<int> numbers(1000);
+    std::iota(numbers.begin(), numbers.end(), 1);
+    out << "parallelSum(1..1000, 4 tasks) = " << parallelSum(numbers, 4) << '\n';
 
-void demonstrate_lambda_metaprogramming() {
-    std::cout << "\n=== Lambda Metaprogramming ===" << std::endl;
-    
-    // Type-based lambda dispatch
-    auto process_by_type = []<typename T>(const T& value) {
-        if constexpr (std::is_integral_v<T>) {
-            std::cout << "Processing integer: " << value << " (squared = " << value * value << ")" << std::endl;
-        } else if constexpr (std::is_floating_point_v<T>) {
-            std::cout << "Processing float: " << value << " (sqrt = " << std::sqrt(value) << ")" << std::endl;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            std::cout << "Processing string: \"" << value << "\" (length = " << value.length() << ")" << std::endl;
-        } else {
-            std::cout << "Processing unknown type" << std::endl;
-        }
-    };
-    
-    process_by_type(42);
-    process_by_type(3.14159);
-    process_by_type(std::string("CppVerseHub"));
-    
-    // Variadic lambda for processing multiple arguments
-    auto process_all = []<typename... Args>(Args&&... args) {
-        std::cout << "Processing " << sizeof...(args) << " arguments:" << std::endl;
-        ((std::cout << "  " << args << std::endl), ...);
-        
-        if constexpr (sizeof...(args) > 0) {
-            auto sum = (args + ...);
-            std::cout << "  Sum: " << sum << std::endl;
-        }
-    };
-    
-    process_all(1, 2, 3, 4, 5);
-    process_all(1.5, 2.7, 3.14);
-    
-    // Compile-time lambda evaluation
-    auto constexpr_fibonacci = []<int N>() constexpr {
-        if constexpr (N <= 1) {
-            return N;
-        } else {
-            // Note: This would require recursive template instantiation
-            // For demonstration purposes, we'll use a simple iterative approach
-            int a = 0, b = 1;
-            for (int i = 2; i <= N; ++i) {
-                int temp = a + b;
-                a = b;
-                b = temp;
-            }
-            return b;
-        }
-    };
-    
-    std::cout << "\nCompile-time Fibonacci calculations:" << std::endl;
-    std::cout << "  F(10) = " << constexpr_fibonacci.template operator()<10>() << std::endl;
-    std::cout << "  F(15) = " << constexpr_fibonacci.template operator()<15>() << std::endl;
+    auto product = std::async(std::launch::async, [first = numbers.begin(), last = numbers.begin() + 10] {
+        return std::accumulate(first, last, 1LL, std::multiplies<>{});
+    });
+    out << "product of 1..10 on another thread = " << product.get() << '\n';
 }
 
-// ===== LAMBDA UTILITIES AND HELPERS =====
-
-namespace LambdaUtils {
-    
-    // Curry utility for partial application
-    template<typename Func>
-    auto curry(Func&& func) {
-        return [func = std::forward<Func>(func)](auto&&... args1) {
-            if constexpr (std::is_invocable_v<Func, decltype(args1)...>) {
-                return func(std::forward<decltype(args1)>(args1)...);
-            } else {
-                return [func, args1...](auto&&... args2) {
-                    return func(args1..., std::forward<decltype(args2)>(args2)...);
-                };
-            }
-        };
-    }
-    
-    // Memoization utility
-    template<typename Func>
-    auto memoize(Func&& func) {
-        return [func = std::forward<Func>(func), cache = std::map<std::string, decltype(func(std::string{}))>{}]
-               (const auto& arg) mutable {
-            auto key = std::to_string(arg);
-            if (auto it = cache.find(key); it != cache.end()) {
-                return it->second;
-            }
-            auto result = func(arg);
-            cache[key] = result;
-            return result;
-        };
-    }
-    
-} // namespace LambdaUtils
-
-void demonstrate_lambda_utilities() {
-    std::cout << "\n=== Lambda Utilities ===" << std::endl;
-    
-    // Currying demonstration
-    auto add_three = [](int a, int b, int c) { return a + b + c; };
-    auto curried_add = LambdaUtils::curry(add_three);
-    
-    auto add_5_and = curried_add(5);
-    auto add_5_10_and = add_5_and(10);
-    int result = add_5_10_and(15);
-    
-    std::cout << "Curried addition: 5 + 10 + 15 = " << result << std::endl;
-    
-    // Memoization demonstration
-    auto expensive_calculation = [](int n) {
-        std::cout << "    Computing factorial of " << n << "..." << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Simulate work
-        
-        long long result = 1;
-        for (int i = 2; i <= n; ++i) {
-            result *= i;
-        }
-        return result;
-    };
-    
-    auto memoized_factorial = LambdaUtils::memoize(expensive_calculation);
-    
-    std::cout << "\nMemoized factorial calculations:" << std::endl;
-    std::cout << "First call to factorial(8): " << memoized_factorial(8) << std::endl;
-    std::cout << "Second call to factorial(8): " << memoized_factorial(8) << std::endl; // Should be cached
-    std::cout << "First call to factorial(10): " << memoized_factorial(10) << std::endl;
+void demonstrateAllLambdas(std::ostream& out) {
+    out << "\n=== Lambda Expressions ===\n";
+    demonstrateBasicLambdas(out);
+    demonstrateCaptureModes(out);
+    demonstrateStlLambdas(out);
+    demonstrateGenericLambdas(out);
+    demonstrateStatefulLambdas(out);
+    demonstrateFunctionalUtilities(out);
+    demonstrateEventSystem(out);
+    demonstrateAsyncLambdas(out);
 }
 
-} // namespace CppVerseHub::Modern::LambdaExpressions
+}  // namespace CppVerseHub::Modern::LambdaExpressions

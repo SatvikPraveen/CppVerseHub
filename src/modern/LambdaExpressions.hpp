@@ -1,507 +1,340 @@
-// File: src/modern/LambdaExpressions.hpp
-// Advanced Lambda Expressions Demonstration
-
+/**
+ * @file LambdaExpressions.hpp
+ * @brief Lambda expressions from C++11 to C++20: captures, generic/template lambdas, closures as
+ *        state, higher-order utilities and asynchronous work.
+ *
+ * Lambdas are anonymous function objects synthesised by the compiler. This module demonstrates:
+ *  - capture modes (`[=]`, `[&]`, mixed, init-captures that *move* resources in, `[*this]`);
+ *  - `mutable` closures that carry private state (counters, running averages);
+ *  - generic (`auto`) and template-parameter (`[]<typename T>`) lambdas, `constexpr` lambdas;
+ *  - higher-order building blocks: `compose`, `pipeline`, `curry`, `Overloaded` (visitor sets),
+ *    `Fix` (a Y-combinator for recursive lambdas without `std::function`) and `Memoized`;
+ *  - type erasure with `std::function` for heterogeneous callbacks (`EventBus`);
+ *  - lambdas as tasks for `std::async`.
+ *
+ * Everything except the `demonstrate*` functions is silent and returns values, so it can be tested.
+ */
 #pragma once
 
+#include <concepts>
+#include <cstddef>
 #include <functional>
-#include <algorithm>
-#include <vector>
-#include <string>
-#include <memory>
 #include <iostream>
 #include <map>
-#include <numeric>
-#include <future>
+#include <memory>
+#include <string>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Modern::LambdaExpressions {
 
-// ===== SPACE GAME DATA STRUCTURES =====
+// ===== DATA =====
 
+/// @brief A ship used by the lambda examples.
 struct SpaceShip {
-    int id;
-    std::string name;
-    std::string class_type;
-    double fuel_level;
-    int crew_size;
-    bool is_active;
-    std::vector<std::string> equipment;
-    
-    SpaceShip(int ship_id, std::string ship_name, std::string ship_class, 
-              double fuel, int crew, bool active = true)
-        : id(ship_id), name(std::move(ship_name)), class_type(std::move(ship_class)),
-          fuel_level(fuel), crew_size(crew), is_active(active) {}
-          
-    friend std::ostream& operator<<(std::ostream& os, const SpaceShip& ship) {
-        return os << "Ship{id=" << ship.id << ", name=" << ship.name 
-                  << ", fuel=" << ship.fuel_level << "%, crew=" << ship.crew_size << "}";
-    }
+    int id = 0;                 ///< Identifier.
+    std::string name;           ///< Display name.
+    std::string classType;      ///< Ship class.
+    double fuelLevel = 0.0;     ///< Fuel percentage 0..100.
+    int crewSize = 0;           ///< Crew complement.
+    bool isActive = true;       ///< Operational flag.
 };
 
+/// @brief A planet used by the lambda examples.
 struct Planet {
-    int id;
-    std::string name;
-    double distance_from_star;
-    long long population;
-    bool habitable;
-    std::vector<std::string> resources;
-    
-    Planet(int planet_id, std::string planet_name, double distance, 
-           long long pop = 0, bool hab = false)
-        : id(planet_id), name(std::move(planet_name)), distance_from_star(distance),
-          population(pop), habitable(hab) {}
-          
-    friend std::ostream& operator<<(std::ostream& os, const Planet& planet) {
-        return os << "Planet{id=" << planet.id << ", name=" << planet.name 
-                  << ", distance=" << planet.distance_from_star << "AU, pop=" << planet.population << "}";
-    }
+    int id = 0;                    ///< Identifier.
+    std::string name;              ///< Display name.
+    double distanceAu = 0.0;       ///< Distance from its star in AU.
+    long long population = 0;      ///< Inhabitants.
+    bool habitable = false;        ///< Supports life.
 };
 
-struct Mission {
-    int id;
-    std::string type;
-    std::string target;
-    double progress;
-    int priority;
-    bool completed;
-    
-    Mission(int mission_id, std::string mission_type, std::string mission_target, 
-            int mission_priority = 1)
-        : id(mission_id), type(std::move(mission_type)), target(std::move(mission_target)),
-          progress(0.0), priority(mission_priority), completed(false) {}
-          
-    friend std::ostream& operator<<(std::ostream& os, const Mission& mission) {
-        return os << "Mission{id=" << mission.id << ", type=" << mission.type 
-                  << ", progress=" << mission.progress << "%, priority=" << mission.priority << "}";
+/// @brief Deterministic sample fleet of five ships. @return The fleet.
+[[nodiscard]] std::vector<SpaceShip> sampleFleet();
+
+/// @brief Deterministic sample of seven planets. @return The planets.
+[[nodiscard]] std::vector<Planet> samplePlanets();
+
+// ===== GENERIC HIGHER-ORDER UTILITIES =====
+
+/// @brief Mathematical composition: `compose(f, g, h)(x) == f(g(h(x)))`.
+/// @param f Outermost function. @param rest Remaining functions (applied right to left).
+/// @return A callable object.
+template <typename F, typename... Rest>
+[[nodiscard]] constexpr auto compose(F f, Rest... rest) {
+    if constexpr (sizeof...(Rest) == 0) {
+        return f;
+    } else {
+        return [f = std::move(f), inner = compose(std::move(rest)...)](auto&&... args) {
+            return f(inner(std::forward<decltype(args)>(args)...));
+        };
     }
-};
-
-// ===== BASIC LAMBDA DEMONSTRATIONS =====
-
-void demonstrate_basic_lambdas() {
-    std::cout << "\n=== Basic Lambda Expressions ===" << std::endl;
-    
-    // Simple lambda with no captures
-    auto greet = []() {
-        return "Welcome to CppVerseHub Space Game!";
-    };
-    std::cout << greet() << std::endl;
-    
-    // Lambda with parameters
-    auto calculate_distance = [](double x1, double y1, double x2, double y2) {
-        return std::sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
-    };
-    
-    double distance = calculate_distance(0.0, 0.0, 3.0, 4.0);
-    std::cout << "Distance between points: " << distance << " units" << std::endl;
-    
-    // Lambda with capture by value
-    int base_damage = 100;
-    auto calculate_damage = [base_damage](double multiplier) {
-        return base_damage * multiplier;
-    };
-    
-    std::cout << "Weapon damage with 1.5x multiplier: " << calculate_damage(1.5) << std::endl;
-    
-    // Lambda with capture by reference
-    int total_score = 0;
-    auto add_score = [&total_score](int points) {
-        total_score += points;
-        std::cout << "Added " << points << " points. Total: " << total_score << std::endl;
-    };
-    
-    add_score(150);
-    add_score(200);
-    add_score(75);
 }
 
-void demonstrate_capture_modes() {
-    std::cout << "\n=== Lambda Capture Modes ===" << std::endl;
-    
-    int fleet_count = 5;
-    double fuel_reserve = 1000.0;
-    std::string commander_name = "Admiral Zhang";
-    
-    // Capture by value [=]
-    auto fleet_status_value = [=]() {
-        std::cout << "Fleet Status (by value): " << fleet_count << " fleets, " 
-                  << fuel_reserve << " fuel units, Commander: " << commander_name << std::endl;
-    };
-    
-    // Capture by reference [&]
-    auto update_fleet_ref = [&](int new_count, double fuel_consumed) {
-        fleet_count = new_count;
-        fuel_reserve -= fuel_consumed;
-        std::cout << "Fleet updated (by reference): " << fleet_count << " fleets, " 
-                  << fuel_reserve << " fuel remaining" << std::endl;
-    };
-    
-    // Mixed capture [=, &fuel_reserve]
-    auto mixed_capture = [=, &fuel_reserve](double fuel_cost) {
-        fuel_reserve -= fuel_cost;
-        std::cout << "Mission cost: " << fuel_cost << " fuel. Commander " << commander_name 
-                  << " has " << fuel_reserve << " fuel left for " << fleet_count << " fleets" << std::endl;
-    };
-    
-    fleet_status_value();
-    update_fleet_ref(7, 150.0);
-    mixed_capture(200.0);
+/// @brief Left-to-right pipeline: `pipeline(f, g, h)(x) == h(g(f(x)))`.
+/// @param f First stage. @param rest Remaining stages.
+/// @return A callable object.
+template <typename F, typename... Rest>
+[[nodiscard]] constexpr auto pipeline(F f, Rest... rest) {
+    if constexpr (sizeof...(Rest) == 0) {
+        return f;
+    } else {
+        return [f = std::move(f), next = pipeline(std::move(rest)...)](auto&&... args) {
+            return next(f(std::forward<decltype(args)>(args)...));
+        };
+    }
 }
 
-// ===== LAMBDA WITH STL ALGORITHMS =====
-
-void demonstrate_stl_lambdas() {
-    std::cout << "\n=== Lambdas with STL Algorithms ===" << std::endl;
-    
-    std::vector<SpaceShip> fleet = {
-        {1, "USS Explorer", "Science", 85.5, 150, true},
-        {2, "USS Guardian", "Battleship", 92.0, 300, true},
-        {3, "USS Voyager", "Scout", 23.1, 50, false},
-        {4, "USS Defender", "Destroyer", 67.8, 200, true},
-        {5, "USS Discovery", "Research", 91.2, 180, true}
-    };
-    
-    // Filter active ships with enough fuel
-    std::vector<SpaceShip> operational_ships;
-    std::copy_if(fleet.begin(), fleet.end(), std::back_inserter(operational_ships),
-        [](const SpaceShip& ship) {
-            return ship.is_active && ship.fuel_level > 50.0;
-        });
-    
-    std::cout << "Operational ships with >50% fuel:" << std::endl;
-    for (const auto& ship : operational_ships) {
-        std::cout << "  " << ship << std::endl;
-    }
-    
-    // Sort by fuel level (descending)
-    std::sort(fleet.begin(), fleet.end(),
-        [](const SpaceShip& a, const SpaceShip& b) {
-            return a.fuel_level > b.fuel_level;
-        });
-    
-    std::cout << "\nFleet sorted by fuel level (highest first):" << std::endl;
-    for (const auto& ship : fleet) {
-        std::cout << "  " << ship.name << ": " << ship.fuel_level << "%" << std::endl;
-    }
-    
-    // Calculate total crew size
-    int total_crew = std::accumulate(fleet.begin(), fleet.end(), 0,
-        [](int sum, const SpaceShip& ship) {
-            return ship.is_active ? sum + ship.crew_size : sum;
-        });
-    
-    std::cout << "Total active crew members: " << total_crew << std::endl;
-    
-    // Transform ship names to uppercase
-    std::vector<std::string> ship_names;
-    std::transform(fleet.begin(), fleet.end(), std::back_inserter(ship_names),
-        [](const SpaceShip& ship) {
-            std::string name = ship.name;
-            std::transform(name.begin(), name.end(), name.begin(), ::toupper);
-            return name;
-        });
-    
-    std::cout << "Ship names (uppercase): ";
-    for (const auto& name : ship_names) {
-        std::cout << name << " ";
-    }
-    std::cout << std::endl;
-}
-
-// ===== GENERIC LAMBDAS =====
-
-void demonstrate_generic_lambdas() {
-    std::cout << "\n=== Generic Lambdas ===" << std::endl;
-    
-    // Generic lambda for comparison
-    auto compare_greater = [](const auto& a, const auto& b) {
-        return a > b;
-    };
-    
-    std::cout << "5 > 3: " << compare_greater(5, 3) << std::endl;
-    std::cout << "3.14 > 2.71: " << compare_greater(3.14, 2.71) << std::endl;
-    std::cout << "\"zebra\" > \"apple\": " << compare_greater(std::string("zebra"), std::string("apple")) << std::endl;
-    
-    // Generic lambda for container processing
-    auto process_container = [](const auto& container, auto processor) {
-        std::cout << "Processing container: ";
-        for (const auto& item : container) {
-            std::cout << processor(item) << " ";
+/// @brief Automatic currying: arguments may be supplied in any grouping until `f` becomes invocable,
+///        e.g. `curry(add3)(1)(2)(3) == curry(add3)(1, 2)(3) == add3(1, 2, 3)`.
+/// @param f Callable to curry. @param bound Arguments already bound (stored by value).
+/// @return A callable that either invokes `f` or returns a further-curried callable.
+template <typename F, typename... Bound>
+[[nodiscard]] constexpr auto curry(F f, Bound... bound) {
+    return [f = std::move(f), ... bound = std::move(bound)](auto&&... args) {
+        if constexpr (std::invocable<const F&, const Bound&..., decltype(args)...>) {
+            return std::invoke(f, bound..., std::forward<decltype(args)>(args)...);
+        } else {
+            return curry(f, bound..., std::decay_t<decltype(args)>(std::forward<decltype(args)>(args))...);
         }
-        std::cout << std::endl;
     };
-    
-    std::vector<int> numbers = {1, 2, 3, 4, 5};
-    std::vector<std::string> words = {"space", "game", "lambda", "modern"};
-    
-    // Process numbers (square them)
-    process_container(numbers, [](const auto& n) { return n * n; });
-    
-    // Process strings (get length)
-    process_container(words, [](const auto& word) { return word.length(); });
-    
-    // Generic lambda with constexpr (C++17)
-    auto generic_math = [](const auto& a, const auto& b) constexpr {
-        return a * a + b * b;
-    };
-    
-    constexpr auto result = generic_math(3, 4);
-    std::cout << "Constexpr generic lambda result: " << result << std::endl;
 }
 
-// ===== LAMBDA AS FUNCTION ARGUMENTS =====
+/// @brief Merges several lambdas into one overload set (the classic `std::visit` helper).
+template <typename... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
 
-template<typename Predicate>
-std::vector<Planet> filter_planets(const std::vector<Planet>& planets, Predicate pred) {
-    std::vector<Planet> filtered;
-    std::copy_if(planets.begin(), planets.end(), std::back_inserter(filtered), pred);
-    return filtered;
+/// @brief Fixed-point combinator: lets a lambda call itself through its first parameter without the
+///        overhead (and dangling-reference hazards) of a self-capturing `std::function`.
+/// @tparam F Lambda of the form `[](const auto& self, Args...) -> R`.
+template <typename F>
+class Fix {
+public:
+    /// @brief Wraps the open-recursive function. @param f The function.
+    explicit constexpr Fix(F f) noexcept(std::is_nothrow_move_constructible_v<F>) : f_(std::move(f)) {}
+
+    /// @brief Invokes the function, passing itself as the first argument.
+    /// @param args Arguments forwarded after `self`. @return The function's result.
+    template <typename... Args>
+    constexpr decltype(auto) operator()(Args&&... args) const {
+        return f_(*this, std::forward<Args>(args)...);
+    }
+
+private:
+    F f_;
+};
+
+/// @brief Caches results of a pure unary function (keys must be totally ordered).
+/// @tparam Arg Argument type. @tparam Result Result type.
+template <typename Arg, typename Result>
+    requires std::totally_ordered<Arg>
+class Memoized {
+public:
+    /// @brief Wraps a function. @param fn The function to memoise.
+    template <typename F>
+        requires std::invocable<F&, const Arg&> && (!std::same_as<std::remove_cvref_t<F>, Memoized>)
+    explicit Memoized(F&& fn) : fn_(std::forward<F>(fn)) {}
+
+    /// @brief Returns the cached value or computes and caches it.
+    /// @param arg Argument. @return `fn(arg)`.
+    const Result& operator()(const Arg& arg) {
+        if (auto it = cache_.find(arg); it != cache_.end()) {
+            ++hits_;
+            return it->second;
+        }
+        ++misses_;
+        return cache_.emplace(arg, fn_(arg)).first->second;
+    }
+
+    /// @brief Number of cache hits. @return Hits.
+    [[nodiscard]] std::size_t hits() const noexcept { return hits_; }
+    /// @brief Number of computations performed. @return Misses.
+    [[nodiscard]] std::size_t misses() const noexcept { return misses_; }
+    /// @brief Number of cached entries. @return Cache size.
+    [[nodiscard]] std::size_t size() const noexcept { return cache_.size(); }
+
+private:
+    std::function<Result(const Arg&)> fn_;
+    std::map<Arg, Result> cache_;
+    std::size_t hits_ = 0;
+    std::size_t misses_ = 0;
+};
+
+// ===== CLOSURE FACTORIES =====
+
+/// @brief A counter closure: each call returns the next integer (state lives in a `mutable` capture).
+/// @param start First value returned. @return A stateful callable `() -> int`.
+[[nodiscard]] constexpr auto makeCounter(int start = 0) noexcept {
+    return [next = start]() mutable noexcept { return next++; };
 }
 
-template<typename Transform>
-auto transform_planets(const std::vector<Planet>& planets, Transform transform) {
-    std::vector<decltype(transform(planets[0]))> results;
-    std::transform(planets.begin(), planets.end(), std::back_inserter(results), transform);
-    return results;
-}
-
-void demonstrate_lambda_as_parameters() {
-    std::cout << "\n=== Lambdas as Function Parameters ===" << std::endl;
-    
-    std::vector<Planet> solar_system = {
-        {1, "Mercury", 0.39, 0, false},
-        {2, "Venus", 0.72, 0, false},
-        {3, "Earth", 1.0, 8000000000LL, true},
-        {4, "Mars", 1.52, 0, false},
-        {5, "Jupiter", 5.20, 0, false},
-        {6, "Kepler-442b", 112.0, 50000000LL, true},
-        {7, "Proxima-Centauri-b", 42400.0, 0, true}
-    };
-    
-    // Filter habitable planets
-    auto habitable_planets = filter_planets(solar_system, 
-        [](const Planet& p) { return p.habitable; });
-    
-    std::cout << "Habitable planets:" << std::endl;
-    for (const auto& planet : habitable_planets) {
-        std::cout << "  " << planet << std::endl;
-    }
-    
-    // Filter planets within 10 AU
-    auto close_planets = filter_planets(solar_system,
-        [](const Planet& p) { return p.distance_from_star <= 10.0; });
-    
-    std::cout << "\nPlanets within 10 AU:" << std::endl;
-    for (const auto& planet : close_planets) {
-        std::cout << "  " << planet.name << " at " << planet.distance_from_star << " AU" << std::endl;
-    }
-    
-    // Transform planets to their names
-    auto planet_names = transform_planets(solar_system,
-        [](const Planet& p) { return p.name; });
-    
-    std::cout << "\nPlanet names: ";
-    for (const auto& name : planet_names) {
-        std::cout << name << " ";
-    }
-    std::cout << std::endl;
-    
-    // Transform to population density categories
-    auto population_categories = transform_planets(solar_system,
-        [](const Planet& p) -> std::string {
-            if (p.population == 0) return "Uninhabited";
-            if (p.population < 1000000) return "Low Population";
-            if (p.population < 100000000) return "Medium Population";
-            return "High Population";
-        });
-    
-    std::cout << "\nPopulation categories:" << std::endl;
-    for (size_t i = 0; i < solar_system.size(); ++i) {
-        std::cout << "  " << solar_system[i].name << ": " << population_categories[i] << std::endl;
-    }
-}
-
-// ===== STATEFUL LAMBDAS =====
-
-void demonstrate_stateful_lambdas() {
-    std::cout << "\n=== Stateful Lambdas ===" << std::endl;
-    
-    // Lambda with mutable capture
-    int mission_counter = 0;
-    auto mission_generator = [mission_counter](const std::string& type) mutable {
-        return "Mission-" + std::to_string(++mission_counter) + "-" + type;
-    };
-    
-    std::cout << "Generated missions:" << std::endl;
-    std::cout << "  " << mission_generator("Exploration") << std::endl;
-    std::cout << "  " << mission_generator("Combat") << std::endl;
-    std::cout << "  " << mission_generator("Colonization") << std::endl;
-    std::cout << "  " << mission_generator("Trade") << std::endl;
-    
-    // Lambda for accumulating statistics
-    auto stats_accumulator = [sum = 0.0, count = 0](double value) mutable -> double {
+/// @brief A closure returning the running mean of all values passed so far.
+/// @return A stateful callable `(double) -> double`.
+[[nodiscard]] constexpr auto makeRunningAverage() noexcept {
+    return [sum = 0.0, count = 0LL](double value) mutable noexcept {
         sum += value;
         ++count;
-        return sum / count; // Return running average
+        return sum / static_cast<double>(count);
     };
-    
-    std::vector<double> fuel_readings = {85.5, 92.0, 23.1, 67.8, 91.2, 44.7, 76.3};
-    
-    std::cout << "\nRunning average of fuel readings:" << std::endl;
-    for (const auto& reading : fuel_readings) {
-        double avg = stats_accumulator(reading);
-        std::cout << "  Reading: " << reading << "%, Running avg: " << avg << "%" << std::endl;
+}
+
+/// @brief A closure testing membership in the closed interval [lo, hi].
+/// @param lo Lower bound. @param hi Upper bound. @return Predicate `(T) -> bool`.
+template <typename T>
+[[nodiscard]] constexpr auto makeRangeValidator(T lo, T hi) noexcept {
+    return [lo, hi](const T& value) noexcept { return !(value < lo) && !(hi < value); };
+}
+
+/// @brief Moves a resource into a closure with an init-capture (C++14) — the closure is then move-only.
+/// @param payload Owned resource. @return Callable returning the payload's length (0 if moved-from).
+[[nodiscard]] inline auto makeOwningReporter(std::unique_ptr<std::string> payload) {
+    return [owned = std::move(payload)]() noexcept { return owned ? owned->size() : std::size_t{0}; };
+}
+
+/// @brief Copies elements satisfying `pred`. @param items Input. @param pred Predicate. @return Matches.
+template <typename T, std::predicate<const T&> Pred>
+[[nodiscard]] std::vector<T> filterBy(const std::vector<T>& items, Pred pred) {
+    std::vector<T> out;
+    for (const auto& item : items) {
+        if (pred(item)) {
+            out.push_back(item);
+        }
     }
-    
-    // Lambda factory pattern
-    auto create_validator = [](double min_val, double max_val) {
-        return [min_val, max_val](double value) {
-            return value >= min_val && value <= max_val;
-        };
-    };
-    
-    auto fuel_validator = create_validator(20.0, 100.0);
-    auto crew_validator = create_validator(10, 500);
-    
-    std::cout << "\nValidation results:" << std::endl;
-    std::cout << "  Fuel 75.5%: " << (fuel_validator(75.5) ? "Valid" : "Invalid") << std::endl;
-    std::cout << "  Fuel 15.2%: " << (fuel_validator(15.2) ? "Valid" : "Invalid") << std::endl;
-    std::cout << "  Crew 150: " << (crew_validator(150) ? "Valid" : "Invalid") << std::endl;
-    std::cout << "  Crew 600: " << (crew_validator(600) ? "Valid" : "Invalid") << std::endl;
+    return out;
 }
 
-// ===== LAMBDA WITH PERFECT FORWARDING =====
-
-template<typename Func, typename... Args>
-auto invoke_with_timing(Func&& func, Args&&... args) {
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    if constexpr (std::is_void_v<std::invoke_result_t<Func, Args...>>) {
-        std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        std::cout << "Function executed in " << duration.count() << " microseconds" << std::endl;
-    } else {
-        auto result = std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        std::cout << "Function executed in " << duration.count() << " microseconds" << std::endl;
-        return result;
+/// @brief Maps every element through `f`. @param items Input. @param f Mapping. @return Mapped values.
+template <typename T, std::invocable<const T&> F>
+[[nodiscard]] auto mapTo(const std::vector<T>& items, F f) {
+    std::vector<std::decay_t<std::invoke_result_t<F&, const T&>>> out;
+    out.reserve(items.size());
+    for (const auto& item : items) {
+        out.push_back(f(item));
     }
+    return out;
 }
 
-void demonstrate_advanced_lambda_techniques() {
-    std::cout << "\n=== Advanced Lambda Techniques ===" << std::endl;
-    
-    // Lambda with perfect forwarding
-    auto expensive_calculation = [](const std::vector<int>& data) {
-        return std::accumulate(data.begin(), data.end(), 0LL,
-            [](long long sum, int val) {
-                // Simulate expensive operation
-                for (int i = 0; i < 1000; ++i) {
-                    sum += val * i;
-                }
-                return sum;
-            });
-    };
-    
-    std::vector<int> large_dataset(1000, 42);
-    auto result = invoke_with_timing(expensive_calculation, large_dataset);
-    std::cout << "Calculation result: " << result << std::endl;
-    
-    // Recursive lambda (C++14 style)
-    std::function<int(int)> factorial = [&factorial](int n) -> int {
-        return (n <= 1) ? 1 : n * factorial(n - 1);
-    };
-    
-    std::cout << "Factorial calculations:" << std::endl;
-    for (int i = 1; i <= 8; ++i) {
-        std::cout << "  " << i << "! = " << factorial(i) << std::endl;
+/// @brief Size in bits of any object; a C++20 template lambda with an explicit type parameter.
+inline constexpr auto sizeInBits = []<typename T>(const T& /*unused*/) constexpr noexcept {
+    return sizeof(T) * 8U;
+};
+
+/// @brief Factorial via `Fix`, evaluable at compile time.
+inline constexpr Fix factorialFix{[](const auto& self, unsigned long long n) -> unsigned long long {
+    return n <= 1 ? 1ULL : n * self(n - 1);
+}};
+
+static_assert(compose([](int x) { return x + 1; }, [](int x) { return x * 2; })(5) == 11);
+static_assert(pipeline([](int x) { return x + 1; }, [](int x) { return x * 2; })(5) == 12);
+static_assert(curry([](int a, int b, int c) { return a * 100 + b * 10 + c; })(1)(2)(3) == 123);
+static_assert(factorialFix(10) == 3628800ULL);
+static_assert(sizeInBits(0) == sizeof(int) * 8U);
+static_assert([] {
+    auto counter = makeCounter(5);
+    (void)counter();
+    return counter();
+}() == 6);
+
+// ===== CAPTURING *this =====
+
+/// @brief Shows the difference between capturing `this` (reference semantics) and `*this` (a copy).
+class Beacon {
+public:
+    /// @brief Creates a beacon. @param label Initial label.
+    explicit Beacon(std::string label) : label_(std::move(label)) {}
+
+    /// @brief Changes the label. @param label New label.
+    void relabel(std::string label) { label_ = std::move(label); }
+
+    /// @brief Closure that observes the *live* object (must not outlive it).
+    /// @return Callable returning the current label.
+    [[nodiscard]] auto liveReporter() const {
+        return [this] { return label_; };
     }
-    
-    // Lambda with std::function for polymorphism
-    std::vector<std::function<double(double)>> operations = {
-        [](double x) { return x * x; },         // Square
-        [](double x) { return std::sqrt(x); },  // Square root
-        [](double x) { return x * 2; },         // Double
-        [](double x) { return x / 2; }          // Half
-    };
-    
-    double input = 16.0;
-    std::cout << "\nOperations on " << input << ":" << std::endl;
-    std::vector<std::string> op_names = {"Square", "Sqrt", "Double", "Half"};
-    for (size_t i = 0; i < operations.size(); ++i) {
-        std::cout << "  " << op_names[i] << ": " << operations[i](input) << std::endl;
+
+    /// @brief Closure holding a snapshot copy of the object (C++17 `[*this]`); safe to outlive it.
+    /// @return Callable returning the label at the time of the call to `snapshotReporter`.
+    [[nodiscard]] auto snapshotReporter() const {
+        return [*this] { return label_; };
     }
-}
 
-// ===== LAMBDA WITH ASYNC PROGRAMMING =====
+private:
+    std::string label_;
+};
 
-void demonstrate_async_lambdas() {
-    std::cout << "\n=== Lambdas with Async Programming ===" << std::endl;
-    
-    // Lambda for async mission execution
-    auto execute_mission_async = [](const std::string& mission_name, int duration_ms) {
-        return std::async(std::launch::async, [mission_name, duration_ms]() {
-            std::cout << "Starting mission: " << mission_name << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(duration_ms));
-            std::cout << "Completed mission: " << mission_name << std::endl;
-            return "Mission " + mission_name + " successful!";
-        });
+// ===== TYPE-ERASED CALLBACKS =====
+
+/// @brief A synchronous publish/subscribe bus storing heterogeneous lambdas in `std::function`.
+///        Not thread-safe; handlers must not subscribe/unsubscribe re-entrantly while emitting.
+class EventBus {
+public:
+    using Handler = std::function<void(const std::string& payload)>;  ///< Callback signature.
+    using SubscriptionId = std::size_t;                               ///< Handle for unsubscribing.
+
+    /// @brief Registers a handler for an event name.
+    /// @param event Event name. @param handler Callback. @return Subscription id (never 0).
+    SubscriptionId subscribe(const std::string& event, Handler handler);
+
+    /// @brief Removes a subscription. @param id Id returned by `subscribe`. @return True if removed.
+    bool unsubscribe(SubscriptionId id);
+
+    /// @brief Invokes every handler registered for `event`, in subscription order.
+    /// @param event Event name. @param payload Data passed to handlers. @return Handlers invoked.
+    std::size_t emit(const std::string& event, const std::string& payload) const;
+
+    /// @brief Number of handlers for an event. @param event Event name. @return Count.
+    [[nodiscard]] std::size_t handlerCount(const std::string& event) const;
+
+private:
+    struct Entry {
+        SubscriptionId id;
+        Handler handler;
     };
-    
-    // Launch multiple async missions
-    auto mission1 = execute_mission_async("Alpha Exploration", 100);
-    auto mission2 = execute_mission_async("Beta Combat", 150);
-    auto mission3 = execute_mission_async("Gamma Research", 80);
-    
-    // Wait for all missions to complete
-    std::cout << "Waiting for missions to complete..." << std::endl;
-    std::cout << mission1.get() << std::endl;
-    std::cout << mission2.get() << std::endl;
-    std::cout << mission3.get() << std::endl;
-    
-    // Parallel processing with lambdas
-    std::vector<int> large_numbers(1000);
-    std::iota(large_numbers.begin(), large_numbers.end(), 1);
-    
-    auto parallel_sum = std::async(std::launch::async, [&large_numbers]() {
-        return std::accumulate(large_numbers.begin(), large_numbers.end(), 0LL);
-    });
-    
-    auto parallel_product = std::async(std::launch::async, [&large_numbers]() {
-        return std::accumulate(large_numbers.begin(), large_numbers.begin() + 10, 1LL,
-            [](long long prod, int val) { return prod * val; });
-    });
-    
-    std::cout << "Sum of first 1000 numbers: " << parallel_sum.get() << std::endl;
-    std::cout << "Product of first 10 numbers: " << parallel_product.get() << std::endl;
-}
+    std::map<std::string, std::vector<Entry>, std::less<>> handlers_;
+    SubscriptionId nextId_ = 1;
+};
 
-// ===== MAIN DEMONSTRATION FUNCTION =====
+// ===== ASYNC =====
 
-void demonstrate_all_lambda_expressions() {
-    std::cout << "\n🔥 Advanced Lambda Expressions Demonstration 🔥" << std::endl;
-    std::cout << "===============================================" << std::endl;
-    
-    demonstrate_basic_lambdas();
-    demonstrate_capture_modes();
-    demonstrate_stl_lambdas();
-    demonstrate_generic_lambdas();
-    demonstrate_lambda_as_parameters();
-    demonstrate_stateful_lambdas();
-    demonstrate_advanced_lambda_techniques();
-    demonstrate_async_lambdas();
-    
-    std::cout << "\n✨ Lambda expressions demonstration complete! ✨" << std::endl;
-    std::cout << "\nKey Lambda Features Demonstrated:" << std::endl;
-    std::cout << "• Basic syntax and captures" << std::endl;
-    std::cout << "• Generic lambdas (auto parameters)" << std::endl;
-    std::cout << "• Mutable lambdas for state" << std::endl;
-    std::cout << "• Lambdas with STL algorithms" << std::endl;
-    std::cout << "• Perfect forwarding and timing" << std::endl;
-    std::cout << "• Async programming with lambdas" << std::endl;
-    std::cout << "• Recursive and polymorphic lambdas" << std::endl;
-}
+/// @brief Sums a vector by splitting it into `chunks` slices, each summed by a lambda run via
+///        `std::async(std::launch::async, ...)`.
+/// @param data Input values. @param chunks Number of tasks (clamped to [1, data.size()]).
+/// @return Sum of all elements.
+[[nodiscard]] long long parallelSum(const std::vector<int>& data, std::size_t chunks);
 
-} // namespace CppVerseHub::Modern::LambdaExpressions
+/// @brief Operations over a fleet expressed as lambdas over STL algorithms.
+struct FleetSummary {
+    std::vector<std::string> operationalNames;  ///< Active ships with fuel > 50%, by fuel descending.
+    int activeCrew = 0;                         ///< Crew on active ships.
+    double meanFuel = 0.0;                      ///< Mean fuel across all ships.
+};
+
+/// @brief Computes a `FleetSummary` with `std::copy_if`, `std::sort`, `std::accumulate` and lambdas.
+/// @param fleet Input ships. @return The summary.
+[[nodiscard]] FleetSummary summarizeFleet(const std::vector<SpaceShip>& fleet);
+
+// ===== SHOWCASES =====
+
+/// @brief Syntax, parameters, return types and basic captures. @param out Destination stream.
+void demonstrateBasicLambdas(std::ostream& out = std::cout);
+/// @brief `[=]`, `[&]`, mixed, init- and `*this` captures. @param out Destination stream.
+void demonstrateCaptureModes(std::ostream& out = std::cout);
+/// @brief Lambdas as STL algorithm arguments. @param out Destination stream.
+void demonstrateStlLambdas(std::ostream& out = std::cout);
+/// @brief Generic, template and constexpr lambdas; lambdas in unevaluated contexts. @param out Stream.
+void demonstrateGenericLambdas(std::ostream& out = std::cout);
+/// @brief Mutable closures and closure factories. @param out Destination stream.
+void demonstrateStatefulLambdas(std::ostream& out = std::cout);
+/// @brief compose / pipeline / curry / Overloaded / Fix / Memoized. @param out Destination stream.
+void demonstrateFunctionalUtilities(std::ostream& out = std::cout);
+/// @brief Type-erased callbacks in an `EventBus`. @param out Destination stream.
+void demonstrateEventSystem(std::ostream& out = std::cout);
+/// @brief Lambdas as `std::async` tasks. @param out Destination stream.
+void demonstrateAsyncLambdas(std::ostream& out = std::cout);
+/// @brief Runs every lambda showcase. @param out Destination stream.
+void demonstrateAllLambdas(std::ostream& out = std::cout);
+
+}  // namespace CppVerseHub::Modern::LambdaExpressions

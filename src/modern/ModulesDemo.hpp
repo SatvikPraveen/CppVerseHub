@@ -1,486 +1,411 @@
-// File: src/modern/ModulesDemo.hpp
-// C++20 Modules System Demonstration
-
+/**
+ * @file ModulesDemo.hpp
+ * @brief C++20 modules — a *documented emulation* using headers and namespaces.
+ *
+ * Real C++20 named modules (`export module X;` / `import X;`) still cannot be used portably in this
+ * project: they need CMake's `FILE_SET CXX_MODULES` support, a scanning-capable generator, and
+ * compiler-specific BMI formats (Clang `.pcm`, GCC `.gcm`, MSVC `.ifc`) that differ in maturity across
+ * AppleClang, GCC 13 and MSVC. This file therefore **emulates** a module hierarchy with ordinary headers:
+ *
+ * | Module concept                      | Emulation used here                                          |
+ * |-------------------------------------|--------------------------------------------------------------|
+ * | `export module CppVerseHub.SpaceGame.Core;` | namespace `SpaceGame::Core` declared in this header      |
+ * | `export` declarations               | declarations in this header (the "module interface unit")    |
+ * | non-exported / module-linkage names | anonymous namespace inside ModulesDemo.cpp (internal linkage)|
+ * | module implementation unit          | ModulesDemo.cpp                                              |
+ * | `import A;` dependency edges        | the order of the namespaces + `moduleGraph()` metadata       |
+ * | versioned interface                 | `inline namespace v1` inside `Core`                          |
+ *
+ * `moduleGraph()` records the import graph that real module units would declare,
+ * `topologicalBuildOrder()` derives a valid build order from it (modules must be compiled in
+ * dependency order, unlike headers), and `moduleInterfaceSketch()` returns the source text the real
+ * interface units would contain. The simulated game itself (entities, missions, fleets, universe) is
+ * real, tested code organised along those "module" boundaries.
+ */
 #pragma once
 
-#include <string>
-#include <vector>
-#include <memory>
+#include <cstddef>
 #include <iostream>
-#include <format>
-
-// Note: Full C++20 modules require compiler support and special build configuration
-// This file demonstrates module concepts using traditional headers
-// In a full modules implementation, this would be structured as:
-// export module CppVerseHub.SpaceGame;
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace CppVerseHub::Modern::Modules {
 
-// ===== MODULE INTERFACE DEMONSTRATION =====
-
-// In a real module, this would be:
-// export module CppVerseHub.SpaceGame.Core;
-// export namespace SpaceGame::Core { ... }
-
+// ======================================================================================
+// "module CppVerseHub.SpaceGame.Core" — no imports
+// ======================================================================================
 namespace SpaceGame::Core {
-    
-    // Base entity class that would be exported from a module
-    class IEntity {
-    public:
-        virtual ~IEntity() = default;
-        virtual int getId() const = 0;
-        virtual std::string getName() const = 0;
-        virtual void update(double deltaTime) = 0;
-        virtual std::string getType() const = 0;
-    };
-    
-    // Exportable utility functions
-    std::string generateUniqueId(const std::string& prefix = "entity");
-    double calculateDistance(double x1, double y1, double x2, double y2);
-    std::vector<std::string> parseCommaSeparatedList(const std::string& input);
-    
-} // namespace SpaceGame::Core
+inline namespace v1 {
 
-// ===== SPACE ENTITIES MODULE =====
+/// @brief A 3D vector.
+struct Vec3 {
+    double x = 0.0;  ///< X.
+    double y = 0.0;  ///< Y.
+    double z = 0.0;  ///< Z.
 
-// In a real module: export module CppVerseHub.SpaceGame.Entities;
-namespace SpaceGame::Entities {
-    
-    class Planet : public Core::IEntity {
-    private:
-        int id_;
-        std::string name_;
-        double x_, y_, z_;
-        long long population_;
-        std::vector<std::string> resources_;
-        bool habitable_;
-        
-    public:
-        Planet(int id, std::string name, double x, double y, double z, 
-               long long population = 0, bool habitable = false);
-        
-        // IEntity interface implementation
-        int getId() const override { return id_; }
-        std::string getName() const override { return name_; }
-        void update(double deltaTime) override;
-        std::string getType() const override { return "Planet"; }
-        
-        // Planet-specific methods
-        void setPosition(double x, double y, double z);
-        std::tuple<double, double, double> getPosition() const;
-        
-        void setPopulation(long long population) { population_ = population; }
-        long long getPopulation() const { return population_; }
-        
-        void addResource(const std::string& resource);
-        const std::vector<std::string>& getResources() const { return resources_; }
-        
-        void setHabitable(bool habitable) { habitable_ = habitable; }
-        bool isHabitable() const { return habitable_; }
-        
-        double distanceTo(const Planet& other) const;
-    };
-    
-    class Starship : public Core::IEntity {
-    private:
-        int id_;
-        std::string name_;
-        std::string class_type_;
-        double x_, y_, z_;
-        double velocity_x_, velocity_y_, velocity_z_;
-        double fuel_;
-        double max_fuel_;
-        int crew_size_;
-        
-    public:
-        Starship(int id, std::string name, std::string class_type, 
-                double x, double y, double z, int crew_size = 100);
-        
-        // IEntity interface implementation
-        int getId() const override { return id_; }
-        std::string getName() const override { return name_; }
-        void update(double deltaTime) override;
-        std::string getType() const override { return "Starship"; }
-        
-        // Movement and navigation
-        void setPosition(double x, double y, double z);
-        std::tuple<double, double, double> getPosition() const;
-        void setVelocity(double vx, double vy, double vz);
-        std::tuple<double, double, double> getVelocity() const;
-        
-        // Resource management
-        void refuel(double amount);
-        double getFuelPercentage() const;
-        bool hasEnoughFuelFor(double distance) const;
-        
-        // Crew management
-        void setCrewSize(int size) { crew_size_ = size; }
-        int getCrewSize() const { return crew_size_; }
-        
-        std::string getClassType() const { return class_type_; }
-    };
-    
-} // namespace SpaceGame::Entities
-
-// ===== MISSION SYSTEM MODULE =====
-
-// In a real module: export module CppVerseHub.SpaceGame.Missions;
-namespace SpaceGame::Missions {
-    
-    enum class MissionStatus {
-        Pending,
-        InProgress,
-        Completed,
-        Failed,
-        Cancelled
-    };
-    
-    enum class MissionType {
-        Exploration,
-        Combat,
-        Colonization,
-        Trade,
-        Rescue,
-        Research,
-        Patrol
-    };
-    
-    class Mission {
-    private:
-        int id_;
-        std::string name_;
-        MissionType type_;
-        MissionStatus status_;
-        double progress_;
-        int priority_;
-        std::vector<int> assigned_ship_ids_;
-        double estimated_duration_;
-        double elapsed_time_;
-        
-    public:
-        Mission(int id, std::string name, MissionType type, int priority = 1);
-        
-        // Core mission management
-        void start();
-        void complete();
-        void fail();
-        void cancel();
-        void update(double deltaTime);
-        
-        // Getters
-        int getId() const { return id_; }
-        std::string getName() const { return name_; }
-        MissionType getType() const { return type_; }
-        MissionStatus getStatus() const { return status_; }
-        double getProgress() const { return progress_; }
-        int getPriority() const { return priority_; }
-        
-        // Ship assignment
-        void assignShip(int ship_id);
-        void unassignShip(int ship_id);
-        const std::vector<int>& getAssignedShips() const { return assigned_ship_ids_; }
-        
-        // Time management
-        void setEstimatedDuration(double duration) { estimated_duration_ = duration; }
-        double getEstimatedDuration() const { return estimated_duration_; }
-        double getElapsedTime() const { return elapsed_time_; }
-        double getRemainingTime() const { return estimated_duration_ - elapsed_time_; }
-        
-        std::string getStatusString() const;
-        std::string getTypeString() const;
-    };
-    
-    // Mission factory and management utilities
-    class MissionFactory {
-    public:
-        static std::unique_ptr<Mission> createExplorationMission(
-            int id, const std::string& target_system);
-        
-        static std::unique_ptr<Mission> createCombatMission(
-            int id, const std::string& enemy_location);
-        
-        static std::unique_ptr<Mission> createColonizationMission(
-            int id, const std::string& target_planet);
-        
-        static std::unique_ptr<Mission> createTradeMission(
-            int id, const std::string& trade_route);
-            
-        static std::unique_ptr<Mission> createRescueMission(
-            int id, const std::string& distress_location);
-    };
-    
-} // namespace SpaceGame::Missions
-
-// ===== FLEET MANAGEMENT MODULE =====
-
-// In a real module: export module CppVerseHub.SpaceGame.Fleet;
-namespace SpaceGame::Fleet {
-    
-    using namespace Entities;
-    using namespace Missions;
-    
-    class FleetCommander {
-    private:
-        int id_;
-        std::string name_;
-        std::string rank_;
-        int experience_level_;
-        std::vector<std::string> specializations_;
-        
-    public:
-        FleetCommander(int id, std::string name, std::string rank, int experience = 1);
-        
-        int getId() const { return id_; }
-        std::string getName() const { return name_; }
-        std::string getRank() const { return rank_; }
-        int getExperienceLevel() const { return experience_level_; }
-        
-        void addSpecialization(const std::string& specialization);
-        const std::vector<std::string>& getSpecializations() const { return specializations_; }
-        bool hasSpecialization(const std::string& specialization) const;
-        
-        void promoteRank(const std::string& new_rank);
-        void gainExperience(int points) { experience_level_ += points; }
-    };
-    
-    class FleetFormation {
-    private:
-        int formation_id_;
-        std::string name_;
-        std::vector<std::unique_ptr<Starship>> ships_;
-        std::unique_ptr<FleetCommander> commander_;
-        std::vector<std::unique_ptr<Mission>> active_missions_;
-        
-    public:
-        FleetFormation(int id, std::string name, std::unique_ptr<FleetCommander> commander);
-        
-        // Fleet management
-        void addShip(std::unique_ptr<Starship> ship);
-        void removeShip(int ship_id);
-        Starship* findShip(int ship_id) const;
-        
-        // Mission management
-        void assignMission(std::unique_ptr<Mission> mission);
-        void completeMission(int mission_id);
-        void abortMission(int mission_id);
-        
-        // Fleet status
-        int getShipCount() const { return static_cast<int>(ships_.size()); }
-        int getActiveMissionCount() const { return static_cast<int>(active_missions_.size()); }
-        double getAverageFuelLevel() const;
-        int getTotalCrewSize() const;
-        
-        // Update and maintenance
-        void update(double deltaTime);
-        void refuelAllShips();
-        
-        // Information
-        std::string getName() const { return name_; }
-        int getId() const { return formation_id_; }
-        const FleetCommander* getCommander() const { return commander_.get(); }
-        
-        std::vector<std::string> getFleetReport() const;
-    };
-    
-} // namespace SpaceGame::Fleet
-
-// ===== GAME SYSTEM MODULE =====
-
-// In a real module: export module CppVerseHub.SpaceGame.System;
-namespace SpaceGame::System {
-    
-    using namespace Core;
-    using namespace Entities;
-    using namespace Missions;
-    using namespace Fleet;
-    
-    class GameUniverse {
-    private:
-        std::vector<std::unique_ptr<Planet>> planets_;
-        std::vector<std::unique_ptr<FleetFormation>> fleets_;
-        std::vector<std::unique_ptr<Mission>> global_missions_;
-        double game_time_;
-        int next_id_;
-        
-    public:
-        GameUniverse();
-        
-        // Universe management
-        void update(double deltaTime);
-        void reset();
-        
-        // Planet management
-        void addPlanet(std::unique_ptr<Planet> planet);
-        Planet* findPlanet(int id) const;
-        Planet* findPlanetByName(const std::string& name) const;
-        std::vector<Planet*> findHestablePlanets() const;
-        
-        // Fleet management
-        void addFleet(std::unique_ptr<FleetFormation> fleet);
-        FleetFormation* findFleet(int id) const;
-        FleetFormation* findFleetByName(const std::string& name) const;
-        
-        // Mission management
-        void addGlobalMission(std::unique_ptr<Mission> mission);
-        Mission* findMission(int id) const;
-        std::vector<Mission*> findMissionsByType(MissionType type) const;
-        std::vector<Mission*> findMissionsByStatus(MissionStatus status) const;
-        
-        // Universe statistics
-        int getPlanetCount() const { return static_cast<int>(planets_.size()); }
-        int getFleetCount() const { return static_cast<int>(fleets_.size()); }
-        int getMissionCount() const { return static_cast<int>(global_missions_.size()); }
-        long long getTotalPopulation() const;
-        
-        double getGameTime() const { return game_time_; }
-        
-        // Utility functions
-        int generateNextId() { return ++next_id_; }
-        std::vector<std::string> getUniverseReport() const;
-    };
-    
-    // Game system utilities
-    class GameUtilities {
-    public:
-        static std::unique_ptr<GameUniverse> createSampleUniverse();
-        static void populateWithSampleData(GameUniverse& universe);
-        static void runSimulation(GameUniverse& universe, double duration, double time_step = 1.0);
-        
-        // Serialization support (would be in separate module in real implementation)
-        static std::string serializeUniverse(const GameUniverse& universe);
-        static std::unique_ptr<GameUniverse> deserializeUniverse(const std::string& data);
-    };
-    
-} // namespace SpaceGame::System
-
-// ===== MODULE DEMONSTRATION FUNCTIONS =====
-
-void demonstrate_module_concepts() {
-    std::cout << "\n=== C++20 Modules Concept Demonstration ===" << std::endl;
-    std::cout << "Note: This demonstrates module concepts using traditional headers" << std::endl;
-    std::cout << "In a real C++20 modules setup, these would be separate module files" << std::endl;
-    
-    // Create a sample universe using our modular components
-    auto universe = SpaceGame::System::GameUtilities::createSampleUniverse();
-    
-    std::cout << "\nCreated sample universe with modular components:" << std::endl;
-    std::cout << "- Planets: " << universe->getPlanetCount() << std::endl;
-    std::cout << "- Fleets: " << universe->getFleetCount() << std::endl;
-    std::cout << "- Missions: " << universe->getMissionCount() << std::endl;
-    
-    // Demonstrate cross-module interactions
-    std::cout << "\nDemonstrating cross-module interactions:" << std::endl;
-    
-    // Find a habitable planet
-    auto habitable_planets = universe->findHestablePlanets();
-    if (!habitable_planets.empty()) {
-        auto planet = habitable_planets[0];
-        std::cout << "Found habitable planet: " << planet->getName() << std::endl;
-        
-        // Create a colonization mission for this planet
-        auto mission = SpaceGame::Missions::MissionFactory::createColonizationMission(
-            universe->generateNextId(), planet->getName());
-        
-        std::cout << "Created mission: " << mission->getName() << std::endl;
-        universe->addGlobalMission(std::move(mission));
-    }
-    
-    // Run a short simulation
-    std::cout << "\nRunning universe simulation..." << std::endl;
-    SpaceGame::System::GameUtilities::runSimulation(*universe, 10.0, 1.0);
-    
-    std::cout << "Universe simulation complete!" << std::endl;
-    std::cout << "Final game time: " << universe->getGameTime() << " time units" << std::endl;
-}
-
-// ===== MODULE EXPORT SIMULATION =====
-
-// In a real C++20 module implementation, exports would look like:
-/*
-export module CppVerseHub.SpaceGame.Core;
-
-export namespace SpaceGame::Core {
-    class IEntity;
-    std::string generateUniqueId(const std::string& prefix = "entity");
-    double calculateDistance(double x1, double y1, double x2, double y2);
-    std::vector<std::string> parseCommaSeparatedList(const std::string& input);
-}
-
-export module CppVerseHub.SpaceGame.Entities;
-import CppVerseHub.SpaceGame.Core;
-
-export namespace SpaceGame::Entities {
-    class Planet;
-    class Starship;
-}
-
-export module CppVerseHub.SpaceGame.Missions;
-import CppVerseHub.SpaceGame.Core;
-
-export namespace SpaceGame::Missions {
-    enum class MissionStatus;
-    enum class MissionType;
-    class Mission;
-    class MissionFactory;
-}
-
-export module CppVerseHub.SpaceGame.Fleet;
-import CppVerseHub.SpaceGame.Entities;
-import CppVerseHub.SpaceGame.Missions;
-
-export namespace SpaceGame::Fleet {
-    class FleetCommander;
-    class FleetFormation;
-}
-
-export module CppVerseHub.SpaceGame.System;
-import CppVerseHub.SpaceGame.Core;
-import CppVerseHub.SpaceGame.Entities;
-import CppVerseHub.SpaceGame.Missions;
-import CppVerseHub.SpaceGame.Fleet;
-
-export namespace SpaceGame::System {
-    class GameUniverse;
-    class GameUtilities;
-}
-*/
-
-// ===== MODULE INTERFACE DOCUMENTATION =====
-
-class ModuleDocumentation {
-public:
-    static void printModuleStructure() {
-        std::cout << "\n=== Module Structure Documentation ===" << std::endl;
-        std::cout << "CppVerseHub.SpaceGame Module Hierarchy:" << std::endl;
-        std::cout << "├── Core (Base interfaces and utilities)" << std::endl;
-        std::cout << "│   ├── IEntity interface" << std::endl;
-        std::cout << "│   ├── Utility functions" << std::endl;
-        std::cout << "│   └── Common types" << std::endl;
-        std::cout << "├── Entities (Game objects)" << std::endl;
-        std::cout << "│   ├── Planet class" << std::endl;
-        std::cout << "│   └── Starship class" << std::endl;
-        std::cout << "├── Missions (Mission management)" << std::endl;
-        std::cout << "│   ├── Mission class" << std::endl;
-        std::cout << "│   ├── MissionFactory" << std::endl;
-        std::cout << "│   └── Mission enums" << std::endl;
-        std::cout << "├── Fleet (Fleet management)" << std::endl;
-        std::cout << "│   ├── FleetCommander class" << std::endl;
-        std::cout << "│   └── FleetFormation class" << std::endl;
-        std::cout << "└── System (Game universe)" << std::endl;
-        std::cout << "    ├── GameUniverse class" << std::endl;
-        std::cout << "    └── GameUtilities class" << std::endl;
-    }
-    
-    static void printModuleBenefits() {
-        std::cout << "\n=== Benefits of C++20 Modules ===" << std::endl;
-        std::cout << "✓ Faster compilation (no header parsing)" << std::endl;
-        std::cout << "✓ Better encapsulation (true interface/implementation separation)" << std::endl;
-        std::cout << "✓ Eliminated macro pollution" << std::endl;
-        std::cout << "✓ No more include order dependencies" << std::endl;
-        std::cout << "✓ Better tooling support (IDEs can understand module boundaries)" << std::endl;
-        std::cout << "✓ Reduced binary bloat" << std::endl;
-        std::cout << "✓ Template instantiation isolation" << std::endl;
-    }
+    /// @brief Memberwise equality.
+    friend bool operator==(const Vec3&, const Vec3&) = default;
 };
 
-} // namespace CppVerseHub::Modern::Modules
+/// @brief Euclidean distance. @param a First point. @param b Second point. @return |a - b|.
+[[nodiscard]] double calculateDistance(const Vec3& a, const Vec3& b) noexcept;
+
+/// @brief Splits a comma-separated list, trimming whitespace and dropping empty items.
+/// @param input Text such as "ore, water ,,gas". @return Items.
+[[nodiscard]] std::vector<std::string> parseCommaSeparatedList(std::string_view input);
+
+/// @brief Produces sequential ids "prefix-1", "prefix-2", ... (per-generator state, no globals).
+class IdGenerator {
+public:
+    /// @brief Creates a generator. @param prefix Id prefix.
+    explicit IdGenerator(std::string prefix = "entity");
+    /// @brief Next id. @return A new unique id.
+    [[nodiscard]] std::string next();
+    /// @brief Ids issued so far. @return Count.
+    [[nodiscard]] std::size_t issued() const noexcept { return counter_; }
+
+private:
+    std::string prefix_;
+    std::size_t counter_ = 0;
+};
+
+/// @brief Polymorphic base of every simulated object.
+class IEntity {
+public:
+    virtual ~IEntity() = default;
+    /// @brief Identifier. @return Id.
+    [[nodiscard]] virtual int getId() const noexcept = 0;
+    /// @brief Name. @return Name.
+    [[nodiscard]] virtual const std::string& getName() const noexcept = 0;
+    /// @brief Advances the simulation. @param deltaTime Time step (>= 0).
+    virtual void update(double deltaTime) = 0;
+    /// @brief Dynamic type name. @return Type name.
+    [[nodiscard]] virtual std::string_view getType() const noexcept = 0;
+
+protected:
+    IEntity() = default;
+    IEntity(const IEntity&) = default;
+    IEntity(IEntity&&) = default;
+    IEntity& operator=(const IEntity&) = default;
+    IEntity& operator=(IEntity&&) = default;
+};
+
+}  // namespace v1
+}  // namespace SpaceGame::Core
+
+// ======================================================================================
+// "module CppVerseHub.SpaceGame.Entities" — import Core;
+// ======================================================================================
+namespace SpaceGame::Entities {
+
+/// @brief A planet; habitable planets grow their population by 1% per unit time.
+class Planet final : public Core::IEntity {
+public:
+    /// @brief Creates a planet. @param id Id. @param name Name. @param position Location.
+    /// @param population Inhabitants. @param habitable Supports life.
+    Planet(int id, std::string name, Core::Vec3 position, long long population = 0, bool habitable = false);
+
+    [[nodiscard]] int getId() const noexcept override { return id_; }
+    [[nodiscard]] const std::string& getName() const noexcept override { return name_; }
+    void update(double deltaTime) override;
+    [[nodiscard]] std::string_view getType() const noexcept override { return "Planet"; }
+
+    /// @brief Location. @return Position.
+    [[nodiscard]] const Core::Vec3& getPosition() const noexcept { return position_; }
+    /// @brief Inhabitants. @return Population.
+    [[nodiscard]] long long getPopulation() const noexcept { return population_; }
+    /// @brief Sets inhabitants. @param population New population (negative values clamp to 0).
+    void setPopulation(long long population) noexcept { population_ = population < 0 ? 0 : population; }
+    /// @brief Habitability. @return True if habitable.
+    [[nodiscard]] bool isHabitable() const noexcept { return habitable_; }
+    /// @brief Adds a resource name (duplicates ignored). @param resource Resource.
+    void addResource(const std::string& resource);
+    /// @brief Resources. @return Resource names.
+    [[nodiscard]] const std::vector<std::string>& getResources() const noexcept { return resources_; }
+    /// @brief Distance to another planet. @param other Planet. @return Distance.
+    [[nodiscard]] double distanceTo(const Planet& other) const noexcept;
+
+private:
+    int id_;
+    std::string name_;
+    Core::Vec3 position_;
+    long long population_;
+    bool habitable_;
+    std::vector<std::string> resources_;
+};
+
+/// @brief A starship that moves with constant velocity and burns fuel proportional to distance.
+class Starship final : public Core::IEntity {
+public:
+    static constexpr double kMaxFuel = 1000.0;      ///< Tank size.
+    static constexpr double kFuelPerUnit = 1.0;     ///< Fuel burned per distance unit.
+
+    /// @brief Creates a ship with a full tank. @param id Id. @param name Name. @param classType Class.
+    /// @param position Start position. @param crewSize Crew.
+    Starship(int id, std::string name, std::string classType, Core::Vec3 position, int crewSize = 100);
+
+    [[nodiscard]] int getId() const noexcept override { return id_; }
+    [[nodiscard]] const std::string& getName() const noexcept override { return name_; }
+    /// @brief Moves by velocity * dt if there is enough fuel, otherwise stops (velocity zeroed).
+    /// @param deltaTime Time step.
+    void update(double deltaTime) override;
+    [[nodiscard]] std::string_view getType() const noexcept override { return "Starship"; }
+
+    /// @brief Position. @return Position.
+    [[nodiscard]] const Core::Vec3& getPosition() const noexcept { return position_; }
+    /// @brief Sets the velocity. @param velocity New velocity.
+    void setVelocity(const Core::Vec3& velocity) noexcept { velocity_ = velocity; }
+    /// @brief Velocity. @return Velocity.
+    [[nodiscard]] const Core::Vec3& getVelocity() const noexcept { return velocity_; }
+    /// @brief Adds fuel (clamped to the tank). @param amount Fuel to add (negative ignored).
+    void refuel(double amount) noexcept;
+    /// @brief Fuel level. @return Percentage 0..100.
+    [[nodiscard]] double getFuelPercentage() const noexcept { return fuel_ / kMaxFuel * 100.0; }
+    /// @brief Whether a trip is affordable. @param distance Trip length. @return True if enough fuel.
+    [[nodiscard]] bool hasEnoughFuelFor(double distance) const noexcept { return fuel_ >= distance * kFuelPerUnit; }
+    /// @brief Crew. @return Crew size.
+    [[nodiscard]] int getCrewSize() const noexcept { return crewSize_; }
+    /// @brief Ship class. @return Class name.
+    [[nodiscard]] const std::string& getClassType() const noexcept { return classType_; }
+
+private:
+    int id_;
+    std::string name_;
+    std::string classType_;
+    Core::Vec3 position_;
+    Core::Vec3 velocity_{};
+    double fuel_ = kMaxFuel;
+    int crewSize_;
+};
+
+}  // namespace SpaceGame::Entities
+
+// ======================================================================================
+// "module CppVerseHub.SpaceGame.Missions" — import Core;
+// ======================================================================================
+namespace SpaceGame::Missions {
+
+/// @brief Lifecycle states. Pending -> InProgress -> {Completed, Failed}; Pending/InProgress -> Cancelled.
+enum class MissionStatus { Pending, InProgress, Completed, Failed, Cancelled };
+
+/// @brief Mission kinds.
+enum class MissionType { Exploration, Combat, Colonization, Trade, Rescue };
+
+/// @brief Name of a status. @param s Status. @return Name.
+[[nodiscard]] std::string_view toString(MissionStatus s) noexcept;
+/// @brief Name of a type. @param t Type. @return Name.
+[[nodiscard]] std::string_view toString(MissionType t) noexcept;
+
+/// @brief A mission with a small state machine; progress advances with simulated time.
+class Mission {
+public:
+    /// @brief Creates a pending mission. @param id Id. @param name Name. @param type Kind.
+    /// @param estimatedDuration Time to complete (> 0). @param priority Priority.
+    Mission(int id, std::string name, MissionType type, double estimatedDuration, int priority = 1);
+
+    /// @brief Pending -> InProgress. @return True if the transition happened.
+    bool start() noexcept;
+    /// @brief InProgress -> Failed. @return True if the transition happened.
+    bool fail() noexcept;
+    /// @brief Pending/InProgress -> Cancelled. @return True if the transition happened.
+    bool cancel() noexcept;
+    /// @brief Advances an in-progress mission; completes it when elapsed >= duration.
+    /// @param deltaTime Time step.
+    void update(double deltaTime) noexcept;
+
+    /// @brief Assigns a ship (duplicates ignored). @param shipId Ship id. @return True if added.
+    bool assignShip(int shipId);
+    /// @brief Unassigns a ship. @param shipId Ship id. @return True if removed.
+    bool unassignShip(int shipId);
+
+    /// @brief Id. @return Id.
+    [[nodiscard]] int getId() const noexcept { return id_; }
+    /// @brief Name. @return Name.
+    [[nodiscard]] const std::string& getName() const noexcept { return name_; }
+    /// @brief Kind. @return Type.
+    [[nodiscard]] MissionType getType() const noexcept { return type_; }
+    /// @brief State. @return Status.
+    [[nodiscard]] MissionStatus getStatus() const noexcept { return status_; }
+    /// @brief Completion. @return Percentage 0..100.
+    [[nodiscard]] double getProgress() const noexcept { return progress_; }
+    /// @brief Priority. @return Priority.
+    [[nodiscard]] int getPriority() const noexcept { return priority_; }
+    /// @brief Assigned ship ids. @return Ids.
+    [[nodiscard]] const std::vector<int>& getAssignedShips() const noexcept { return assignedShips_; }
+    /// @brief Remaining time. @return max(0, duration - elapsed).
+    [[nodiscard]] double getRemainingTime() const noexcept;
+
+private:
+    int id_;
+    std::string name_;
+    MissionType type_;
+    MissionStatus status_ = MissionStatus::Pending;
+    double progress_ = 0.0;
+    int priority_;
+    double estimatedDuration_;
+    double elapsed_ = 0.0;
+    std::vector<int> assignedShips_;
+};
+
+/// @brief Factory with sensible defaults per mission type.
+class MissionFactory {
+public:
+    /// @brief Creates a mission of the given type with its default duration and priority.
+    /// @param id Id. @param type Kind. @param target Target description (used in the name).
+    /// @return Owning pointer to the mission.
+    [[nodiscard]] static std::unique_ptr<Mission> create(int id, MissionType type, const std::string& target);
+};
+
+}  // namespace SpaceGame::Missions
+
+// ======================================================================================
+// "module CppVerseHub.SpaceGame.Fleet" — import Entities; import Missions;
+// ======================================================================================
+namespace SpaceGame::Fleet {
+
+/// @brief Commanding officer of a formation.
+struct FleetCommander {
+    std::string name;            ///< Name.
+    std::string rank;            ///< Rank.
+    int experience = 1;          ///< Experience level.
+};
+
+/// @brief A formation that owns its ships and missions.
+class FleetFormation {
+public:
+    /// @brief Creates an empty formation. @param id Id. @param name Name. @param commander Commander.
+    FleetFormation(int id, std::string name, FleetCommander commander);
+
+    /// @brief Adds a ship (null ignored). @param ship Ship to own.
+    void addShip(std::unique_ptr<Entities::Starship> ship);
+    /// @brief Removes a ship and hands ownership back. @param shipId Id. @return The ship, or null.
+    [[nodiscard]] std::unique_ptr<Entities::Starship> removeShip(int shipId);
+    /// @brief Non-owning lookup. @param shipId Id. @return Pointer or null.
+    [[nodiscard]] Entities::Starship* findShip(int shipId) const noexcept;
+
+    /// @brief Takes a mission, starts it and assigns all current ships. @param mission Mission (null ignored).
+    void assignMission(std::unique_ptr<Missions::Mission> mission);
+    /// @brief Advances ships and missions; completed missions are retired.
+    /// @param deltaTime Time step.
+    void update(double deltaTime);
+    /// @brief Refuels every ship to full.
+    void refuelAll() noexcept;
+
+    /// @brief Id. @return Id.
+    [[nodiscard]] int getId() const noexcept { return id_; }
+    /// @brief Name. @return Name.
+    [[nodiscard]] const std::string& getName() const noexcept { return name_; }
+    /// @brief Commander. @return Commander.
+    [[nodiscard]] const FleetCommander& getCommander() const noexcept { return commander_; }
+    /// @brief Ships. @return Count.
+    [[nodiscard]] std::size_t getShipCount() const noexcept { return ships_.size(); }
+    /// @brief Active missions. @return Count.
+    [[nodiscard]] std::size_t getActiveMissionCount() const noexcept { return missions_.size(); }
+    /// @brief Missions retired as completed. @return Count.
+    [[nodiscard]] std::size_t getCompletedMissionCount() const noexcept { return completedMissions_; }
+    /// @brief Mean fuel. @return Percentage (0 if no ships).
+    [[nodiscard]] double getAverageFuelLevel() const noexcept;
+    /// @brief Total crew. @return Crew.
+    [[nodiscard]] int getTotalCrewSize() const noexcept;
+
+private:
+    int id_;
+    std::string name_;
+    FleetCommander commander_;
+    std::vector<std::unique_ptr<Entities::Starship>> ships_;
+    std::vector<std::unique_ptr<Missions::Mission>> missions_;
+    std::size_t completedMissions_ = 0;
+};
+
+}  // namespace SpaceGame::Fleet
+
+// ======================================================================================
+// "module CppVerseHub.SpaceGame.System" — import Core; import Entities; import Missions; import Fleet;
+// ======================================================================================
+namespace SpaceGame::System {
+
+/// @brief The whole simulation: owns planets, fleets and global missions.
+class GameUniverse {
+public:
+    GameUniverse() = default;
+
+    /// @brief Adds a planet (null ignored). @param planet Planet.
+    void addPlanet(std::unique_ptr<Entities::Planet> planet);
+    /// @brief Adds a fleet (null ignored). @param fleet Fleet.
+    void addFleet(std::unique_ptr<Fleet::FleetFormation> fleet);
+    /// @brief Adds a global mission (null ignored). @param mission Mission.
+    void addMission(std::unique_ptr<Missions::Mission> mission);
+
+    /// @brief Advances everything. @param deltaTime Time step (negative values are ignored).
+    void update(double deltaTime);
+    /// @brief Runs `steps` updates of `timeStep`. @param steps Number of steps. @param timeStep Step size.
+    void runSimulation(int steps, double timeStep);
+
+    /// @brief Lookup by name. @param name Name. @return Pointer or null.
+    [[nodiscard]] const Entities::Planet* findPlanetByName(std::string_view name) const noexcept;
+    /// @brief Habitable planets. @return Non-owning pointers.
+    [[nodiscard]] std::vector<const Entities::Planet*> findHabitablePlanets() const;
+    /// @brief Missions with a status. @param status Status. @return Non-owning pointers.
+    [[nodiscard]] std::vector<const Missions::Mission*> findMissionsByStatus(Missions::MissionStatus status) const;
+
+    /// @brief Planets. @return Count.
+    [[nodiscard]] std::size_t getPlanetCount() const noexcept { return planets_.size(); }
+    /// @brief Fleets. @return Count.
+    [[nodiscard]] std::size_t getFleetCount() const noexcept { return fleets_.size(); }
+    /// @brief Global missions. @return Count.
+    [[nodiscard]] std::size_t getMissionCount() const noexcept { return missions_.size(); }
+    /// @brief Total population. @return Sum over planets.
+    [[nodiscard]] long long getTotalPopulation() const noexcept;
+    /// @brief Simulated time. @return Time.
+    [[nodiscard]] double getGameTime() const noexcept { return gameTime_; }
+
+    /// @brief Human-readable status lines. @return Lines.
+    [[nodiscard]] std::vector<std::string> getUniverseReport() const;
+    /// @brief Serialises planets, one per line: `name;x;y;z;population;habitable`.
+    /// @return Text. @throws std::invalid_argument if a name contains ';' or a newline.
+    [[nodiscard]] std::string serializePlanets() const;
+    /// @brief Parses the output of `serializePlanets` (ids are assigned 1..n).
+    /// @param data Text. @return Planets. @throws std::invalid_argument on malformed input.
+    [[nodiscard]] static std::vector<std::unique_ptr<Entities::Planet>> deserializePlanets(std::string_view data);
+
+    /// @brief Deterministic sample universe: 4 planets, 2 fleets, 2 global missions.
+    /// @return The universe.
+    [[nodiscard]] static GameUniverse createSample();
+
+private:
+    std::vector<std::unique_ptr<Entities::Planet>> planets_;
+    std::vector<std::unique_ptr<Fleet::FleetFormation>> fleets_;
+    std::vector<std::unique_ptr<Missions::Mission>> missions_;
+    double gameTime_ = 0.0;
+};
+
+}  // namespace SpaceGame::System
+
+// ======================================================================================
+// Module metadata (what the real module units would declare)
+// ======================================================================================
+
+/// @brief One module unit of the emulated hierarchy.
+struct ModuleUnit {
+    std::string name;                  ///< Module name, e.g. "CppVerseHub.SpaceGame.Core".
+    std::vector<std::string> imports;  ///< Modules it imports.
+    std::vector<std::string> exports;  ///< Entities it exports.
+};
+
+/// @brief The emulated module dependency graph. @return All module units.
+[[nodiscard]] std::vector<ModuleUnit> moduleGraph();
+
+/// @brief A build order in which every module is compiled after its imports (Kahn's algorithm).
+/// @param graph Module units. @return Module names, or nullopt if the graph has a cycle or an unknown import.
+[[nodiscard]] std::optional<std::vector<std::string>> topologicalBuildOrder(const std::vector<ModuleUnit>& graph);
+
+/// @brief Source text of the module interface units this file emulates. @return C++ module code.
+[[nodiscard]] std::string moduleInterfaceSketch();
+
+/// @brief Showcase of the emulated module system and the game it organises. @param out Destination stream.
+void demonstrateModules(std::ostream& out = std::cout);
+
+}  // namespace CppVerseHub::Modern::Modules
