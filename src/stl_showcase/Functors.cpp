@@ -75,6 +75,7 @@ double calculateWarpTime(const Starship& ship, double distance) noexcept {
 
 std::vector<double> warpTimesTo(std::span<const Starship> ships, double distance) {
     using std::placeholders::_1;
+    // NOLINTNEXTLINE(modernize-avoid-bind): this function demonstrates std::bind itself
     const auto time_for = std::bind(calculateWarpTime, _1, distance);
     std::vector<double> times;
     times.reserve(ships.size());
@@ -231,6 +232,7 @@ void demonstrateFunctionBinding(std::ostream& out) {
     out << "\n=== Function Binding ===\n";
     using std::placeholders::_1;
     using std::placeholders::_2;
+    // NOLINTNEXTLINE(modernize-avoid-bind): shown alongside bind_front and lambdas on purpose
     const auto from_origin = std::bind(calculateDistance, 0.0, 0.0, _1, _2);
     out << "std::bind distance from origin to (3,4): " << from_origin(3.0, 4.0) << '\n';
     const auto from_base = std::bind_front(calculateDistance, 1.0, 1.0);

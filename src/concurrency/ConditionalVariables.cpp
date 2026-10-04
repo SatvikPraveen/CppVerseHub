@@ -173,6 +173,7 @@ void demonstrate_condition_variables(std::ostream& out) {
         std::atomic<int> consumed_count{0};
 
         std::vector<std::thread> consumers;
+        consumers.reserve(2);
         for (int c = 0; c < 2; ++c) {
             consumers.emplace_back([&] {
                 while (auto item = queue.pop()) {
@@ -182,6 +183,7 @@ void demonstrate_condition_variables(std::ostream& out) {
             });
         }
         std::vector<std::thread> producer_threads;
+        producer_threads.reserve(static_cast<std::size_t>(producers));
         for (int p = 0; p < producers; ++p) {
             producer_threads.emplace_back([&queue, p] {
                 for (int i = 1; i <= per_producer; ++i) {
@@ -240,6 +242,7 @@ void demonstrate_condition_variables(std::ostream& out) {
         std::atomic<int> in_use{0};
         std::atomic<int> peak{0};
         std::vector<std::thread> clients;
+        clients.reserve(6);
         for (int i = 0; i < 6; ++i) {
             clients.emplace_back([&] {
                 auto lease = pool.acquire();

@@ -31,6 +31,9 @@
 #include <utility>
 #include <vector>
 
+// This header teaches std::enable_if and expression SFINAE on purpose; rewriting the examples as
+// requires-clauses would remove the technique being demonstrated (concepts are covered elsewhere).
+// NOLINTBEGIN(modernize-use-constraints)
 namespace CppVerseHub::Templates::SFINAE {
 
 // ===== Classic detection: overloaded test functions =====
@@ -636,5 +639,7 @@ inline void demonstrate_sfinae(std::ostream& out = std::cout) {
 }
 
 } // namespace CppVerseHub::Templates::SFINAE
+
+// NOLINTEND(modernize-use-constraints)
 
 #endif // CPPVERSEHUB_TEMPLATES_SFINAE_EXAMPLES_HPP

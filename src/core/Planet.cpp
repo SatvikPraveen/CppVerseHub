@@ -76,7 +76,8 @@ Planet::Planet(EntityId id, const nlohmann::json& params)
 
 void Planet::setHabitability(double value) {
     // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
-    if (!(value >= 0.0 && value <= 1.0)) { // NOLINT(readability-simplify-boolean-expr)
+    // NOLINTNEXTLINE(readability-simplify-boolean-expr)
+    if (!(value >= 0.0 && value <= 1.0)) {
         throw InvalidArgumentException("habitability must be in [0, 1]");
     }
     habitability_ = value;

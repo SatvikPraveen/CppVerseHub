@@ -95,7 +95,7 @@ void WorkStealingThreadPool::worker_loop(std::size_t index) {
         if (UniqueTask task = try_acquire(index)) {
             try {
                 task();
-            } catch (...) {
+            } catch (...) { // NOLINT(bugprone-empty-catch): see below
                 // submit() tasks never throw; see PoolCore::worker_loop.
             }
             completed_.fetch_add(1, std::memory_order_relaxed);

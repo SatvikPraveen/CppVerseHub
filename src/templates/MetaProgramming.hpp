@@ -1039,7 +1039,8 @@ template <typename Key, typename Value, std::size_t N>
 class ConstexprMap {
 public:
     /** @param entries key/value pairs */
-    constexpr explicit ConstexprMap(std::array<std::pair<Key, Value>, N> entries) : entries_(entries) {}
+    constexpr explicit ConstexprMap(std::array<std::pair<Key, Value>, N> entries)
+        : entries_(std::move(entries)) {}
 
     /** @param key key to look up @return the value, or nullopt */
     [[nodiscard]] constexpr std::optional<Value> find(const Key& key) const {

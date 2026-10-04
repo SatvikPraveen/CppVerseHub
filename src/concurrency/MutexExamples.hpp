@@ -31,6 +31,7 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -339,6 +340,9 @@ public:
      */
     [[nodiscard]] const T& get() {
         std::call_once(once_, [this] { value_.emplace(factory_()); });
+        if (!value_) { // unreachable: call_once returned normally, so the factory stored a value
+            throw std::logic_error("LazyValue: factory completed without a value");
+        }
         return *value_;
     }
 

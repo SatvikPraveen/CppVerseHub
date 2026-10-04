@@ -91,6 +91,7 @@ public:
         /** @brief Implicit conversion iterator -> const_iterator. @param other mutable iterator */
         template <bool OtherConst>
             requires(IsConst && !OtherConst)
+        // NOLINTNEXTLINE(google-explicit-constructor): iterator -> const_iterator must be implicit
         constexpr ArrayIterator(const ArrayIterator<OtherConst>& other) noexcept : ptr_(other.operator->()) {}
 
         /** @return referenced element */
@@ -1259,6 +1260,7 @@ public:
     /** @brief Engaged with a value converted from v. @param v value */
     template <typename U = T>
         requires is_value_arg<U>
+    // NOLINTNEXTLINE(google-explicit-constructor): conditionally explicit, mirroring std::optional
     constexpr explicit(!std::is_convertible_v<U&&, T>) Optional(U&& v)
         : value_(std::forward<U>(v)), engaged_(true) {}
 

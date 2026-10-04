@@ -28,3 +28,6 @@ arithOperationsOnVoidPointer:src/stl_showcase/Iterators.hpp
 passedByValue
 # cppcheck cannot parse a short-circuiting fold expression with a comma operator inside (internal AST error).
 internalAstError:src/templates/MetaProgramming.hpp
+# cppcheck misparses C++20 nested inline namespace definitions (namespace A::inline B) and loses the
+# member-initialiser lists of the constructors that follow; every member is initialised.
+uninitMemberVar:src/modern/ModulesDemo.cpp

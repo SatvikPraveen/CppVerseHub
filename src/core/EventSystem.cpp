@@ -49,8 +49,8 @@ void Subscription::reset() noexcept {
         if (auto state = state_.lock()) {
             try {
                 static_cast<void>(state->remove(type_, token_));
-            } catch (...) { // std::mutex::lock may throw std::system_error; never propagate from reset
-            }
+                // NOLINTNEXTLINE(bugprone-empty-catch): std::mutex::lock may throw; reset() is noexcept
+            } catch (...) {}
         }
         token_ = 0;
     }

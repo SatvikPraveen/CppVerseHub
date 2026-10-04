@@ -31,6 +31,7 @@
 #include "templates/Demo.hpp"
 #include "utils/Demo.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -88,12 +89,7 @@ public:
     explicit Options(std::span<const std::string_view> args) : args_(args.begin(), args.end()) {}
 
     [[nodiscard]] bool flag(std::string_view key) const {
-        for (const auto& a : args_) {
-            if (a == key) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::find(args_, key) != args_.end();
     }
 
     [[nodiscard]] std::optional<std::string_view> value(std::string_view key) const {
@@ -183,6 +179,7 @@ void reportEngine(const CppVerseHub::Core::SimulationEngine& engine, std::ostrea
 
 int runEngine(CppVerseHub::Core::SimulationEngine& engine, const Options& opts, std::uint64_t steps,
               std::ostream& out) {
+    // NOLINTNEXTLINE(google-build-using-namespace): function-scoped, so it cannot leak
     using namespace CppVerseHub::Core;
     const bool quiet = opts.flag("--quiet");
 
@@ -214,6 +211,7 @@ int runEngine(CppVerseHub::Core::SimulationEngine& engine, const Options& opts, 
 }
 
 int cmdSimulate(const Options& opts, std::ostream& out) {
+    // NOLINTNEXTLINE(google-build-using-namespace): function-scoped, so it cannot leak
     using namespace CppVerseHub::Core;
     SampleScenarioOptions scenario;
     scenario.seed = opts.integer("--seed", scenario.seed);
@@ -229,6 +227,7 @@ int cmdSimulate(const Options& opts, std::ostream& out) {
 }
 
 int cmdReplay(std::string_view file, const Options& opts, std::ostream& out) {
+    // NOLINTNEXTLINE(google-build-using-namespace): function-scoped, so it cannot leak
     using namespace CppVerseHub::Core;
     auto engine = loadScenarioFile(std::filesystem::path(std::string(file)));
     out << "Loaded " << file << " at t=" << engine->time() << "s\n";

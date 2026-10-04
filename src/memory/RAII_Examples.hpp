@@ -235,7 +235,7 @@ public:
         if (on_stop_) {
             try {
                 on_stop_(elapsed());
-            } catch (...) { // destructors must not throw
+            } catch (...) { // NOLINT(bugprone-empty-catch): destructors must not throw
             }
         }
     }
@@ -551,8 +551,8 @@ private:
         --leased_;
         try {
             idle_.push_back(std::move(r));
-        } catch (...) { // out of memory: the resource is destroyed instead of pooled
-        }
+            // NOLINTNEXTLINE(bugprone-empty-catch): out of memory, so the resource is destroyed, not pooled
+        } catch (...) {}
     }
 
     mutable std::mutex mutex_;

@@ -384,8 +384,8 @@ class LinkedList {
         /// Conversion from mutable to const iterator.
         template <bool C = Const>
             requires C
-        Iterator(const Iterator<false>& other) noexcept
-            : node_(other.node_) {} // NOLINT(google-explicit-constructor)
+        // NOLINTNEXTLINE(google-explicit-constructor): iterator -> const_iterator must be implicit
+        Iterator(const Iterator<false>& other) noexcept : node_(other.node_) {}
 
         reference operator*() const noexcept { return node_->value; }
         pointer operator->() const noexcept { return &node_->value; }
@@ -1101,9 +1101,9 @@ public:
             rehash_for(size_ + 1);
         }
         std::size_t i = home(key);
-        while (slots_[i]) {
-            if (eq_(slots_[i]->first, key)) {
-                slots_[i]->second = std::move(value);
+        for (auto* slot = &slots_[i]; slot->has_value(); slot = &slots_[i]) {
+            if (eq_((*slot)->first, key)) {
+                (*slot)->second = std::move(value);
                 return false;
             }
             i = (i + 1) & mask();
@@ -1120,13 +1120,21 @@ public:
      */
     [[nodiscard]] V* find(const K& key) {
         const auto i = locate(key);
-        return i ? &slots_[*i]->second : nullptr;
+        if (!i) {
+            return nullptr;
+        }
+        auto& slot = slots_[*i]; // locate() only returns occupied slots
+        return slot ? &slot->second : nullptr;
     }
 
     /// @copydoc find(const K&)
     [[nodiscard]] const V* find(const K& key) const {
         const auto i = locate(key);
-        return i ? &slots_[*i]->second : nullptr;
+        if (!i) {
+            return nullptr;
+        }
+        auto& slot = slots_[*i]; // locate() only returns occupied slots
+        return slot ? &slot->second : nullptr;
     }
 
     /**
@@ -1159,8 +1167,8 @@ public:
         std::size_t hole = *found;
         slots_[hole].reset();
         std::size_t j = (hole + 1) & mask();
-        while (slots_[j]) {
-            const std::size_t h = home(slots_[j]->first);
+        while (const auto& slot = slots_[j]) {
+            const std::size_t h = home(slot->first);
             // Move slot j into the hole if the hole lies on j's probe path [h, j].
             if (((j - h) & mask()) >= ((j - hole) & mask())) {
                 slots_[hole] = std::move(slots_[j]);
@@ -1237,8 +1245,8 @@ private:
 
     [[nodiscard]] std::optional<std::size_t> locate(const K& key) const {
         std::size_t i = home(key);
-        while (slots_[i]) {
-            if (eq_(slots_[i]->first, key)) {
+        for (const auto* slot = &slots_[i]; slot->has_value(); slot = &slots_[i]) {
+            if (eq_((*slot)->first, key)) {
                 return i;
             }
             i = (i + 1) & mask();

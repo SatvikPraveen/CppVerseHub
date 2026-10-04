@@ -1,6 +1,0 @@
----
-# SFINAE_Examples.hpp teaches std::enable_if and expression SFINAE on purpose, so rewriting
-# them as requires-clauses would remove the very technique the file demonstrates.
-InheritParentConfig: true
-Checks: '-modernize-use-constraints'
-...

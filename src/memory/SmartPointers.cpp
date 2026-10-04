@@ -117,7 +117,7 @@ std::unique_ptr<Resource, ResourceFactory::CountingDeleter> ResourceFactory::cre
     };
     // Create first with a default deleter so nothing leaks if building the deleter throws.
     std::unique_ptr<Resource> owned = create(kind, std::move(name));
-    return std::unique_ptr<Resource, CountingDeleter>(owned.release(), std::move(deleter));
+    return {owned.release(), std::move(deleter)};
 }
 
 // ------------------------------------------------------------------- ResourceCache
@@ -226,9 +226,14 @@ void demonstrateSmartPointers(std::ostream& out) {
     out << "=== Smart Pointers ===\n";
     const std::ios_base::fmtflags saved_flags = out.flags();
     struct FlagRestorer {
+        FlagRestorer(std::ostream& s, std::ios_base::fmtflags f) : stream(s), flags(f) {}
+        FlagRestorer(const FlagRestorer&) = delete;
+        FlagRestorer& operator=(const FlagRestorer&) = delete;
+        FlagRestorer(FlagRestorer&&) = delete;
+        FlagRestorer& operator=(FlagRestorer&&) = delete;
+        ~FlagRestorer() { stream.flags(flags); }
         std::ostream& stream;
         std::ios_base::fmtflags flags;
-        ~FlagRestorer() { stream.flags(flags); }
     } const restorer{out, saved_flags};
     const int live_before = Resource::live_count();
 
@@ -269,6 +274,7 @@ void demonstrateSmartPointers(std::ostream& out) {
         out << "Aliased member keeps owner alive: altitude = " << *altitude << "\n";
 
         std::vector<std::thread> threads;
+        threads.reserve(4);
         for (int t = 0; t < 4; ++t) {
             threads.emplace_back([craft] {
                 for (int i = 0; i < 1000; ++i) {

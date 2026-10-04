@@ -570,6 +570,7 @@ void demonstrateLogging(std::ostream& out) {
         auto async = std::make_shared<AsyncSink>(ring);
         asyncLogger.addSink(async);
         std::vector<std::thread> threads;
+        threads.reserve(4);
         for (int t = 0; t < 4; ++t) {
             threads.emplace_back([&asyncLogger, t] {
                 for (int i = 0; i < 25; ++i) {

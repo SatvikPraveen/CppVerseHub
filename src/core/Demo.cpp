@@ -34,11 +34,11 @@ void showVectors(std::ostream& out) {
 void showEntitiesAndFactory(std::ostream& out) {
     out << "-- Strong ids, entities and the factory registry --\n";
     Galaxy galaxy("Factory Demo");
-    Planet& terra = galaxy.createPlanet("Terra", {0.0, 0.0, 0.0}, PlanetType::Terrestrial, 0.9);
-    Entity& vega = galaxy.spawn(
+    const Planet& terra = galaxy.createPlanet("Terra", {0.0, 0.0, 0.0}, PlanetType::Terrestrial, 0.9);
+    const Entity& vega = galaxy.spawn(
         "planet",
         {{"name", "Vega"}, {"position", {120.0, 0.0, 0.0}}, {"planetType", "ocean"}, {"habitability", 0.7}});
-    Entity& patrol = galaxy.spawn(
+    const Entity& patrol = galaxy.spawn(
         "fleet", {{"name", "Patrol"},
                   {"position", {0.0, 0.0, 0.0}},
                   {"ships", {{{"type", "fighter"}, {"count", 6}}, {{"type", "cruiser"}, {"count", 2}}}}});

@@ -157,7 +157,7 @@ bool MissionContext::resume() {
 bool MissionContext::advance(double percent) {
     return apply(state_->advance(*this, percent), "advance");
 }
-bool MissionContext::fail(std::string reason) {
+bool MissionContext::fail(const std::string& reason) {
     return apply(state_->fail(*this, reason), "fail");
 }
 bool MissionContext::abort() {

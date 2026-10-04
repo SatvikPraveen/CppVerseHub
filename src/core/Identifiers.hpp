@@ -67,7 +67,7 @@ using MissionId = StrongId<MissionIdTag>;
 namespace std {
 /// @brief Hash support so StrongId can key unordered containers.
 template <typename Tag>
-struct hash<CppVerseHub::Core::StrongId<Tag>> {
+struct hash<CppVerseHub::Core::StrongId<Tag>> { // NOLINT(cert-dcl58-cpp): allowed for program-defined types
     /// @brief Hash the underlying value. @param id Id. @return Hash value.
     [[nodiscard]] size_t operator()(const CppVerseHub::Core::StrongId<Tag>& id) const noexcept {
         return hash<uint64_t>{}(id.value());

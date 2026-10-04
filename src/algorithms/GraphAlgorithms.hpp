@@ -497,7 +497,7 @@ template <EdgeWeight W, std::invocable<std::size_t> H>
     while (!open.empty()) {
         const auto [f, gu, u] = open.top();
         open.pop();
-        if (best[u] && *best[u] < gu) {
+        if (const auto& bu = best[u]; bu && *bu < gu) {
             continue; // stale
         }
         ++expanded;
@@ -509,7 +509,7 @@ template <EdgeWeight W, std::invocable<std::size_t> H>
                 throw std::invalid_argument("a_star: negative edge weight");
             }
             const W ng = gu + arc.weight;
-            if (!best[arc.to] || ng < *best[arc.to]) {
+            if (auto& bt = best[arc.to]; !bt || ng < *bt) {
                 best[arc.to] = ng;
                 parent[arc.to] = u;
                 open.emplace(ng + static_cast<W>(std::invoke(heuristic, arc.to)), ng, arc.to);

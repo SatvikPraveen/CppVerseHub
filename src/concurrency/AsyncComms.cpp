@@ -234,6 +234,7 @@ void demonstrate_async_comms(std::ostream& out) {
                        command);
         });
         std::vector<std::thread> clients;
+        clients.reserve(4);
         for (int c = 0; c < 4; ++c) {
             clients.emplace_back([&account] {
                 for (int i = 0; i < 25; ++i) {

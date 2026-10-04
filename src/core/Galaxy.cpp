@@ -32,8 +32,8 @@ Galaxy::Galaxy(std::string name, const Vector3D& minCorner, const Vector3D& maxC
     , entityFactory_(makeDefaultEntityFactory())
     , missionFactory_(makeDefaultMissionFactory()) {
     // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
-    if (!(min_.x <= max_.x && min_.y <= max_.y &&
-          min_.z <= max_.z)) { // NOLINT(readability-simplify-boolean-expr)
+    // NOLINTNEXTLINE(readability-simplify-boolean-expr)
+    if (!(min_.x <= max_.x && min_.y <= max_.y && min_.z <= max_.z)) {
         throw InvalidArgumentException("galaxy bounds: minCorner must not exceed maxCorner");
     }
 }
@@ -51,12 +51,16 @@ bool Galaxy::contains(const Vector3D& p) const noexcept {
 Planet& Galaxy::createPlanet(std::string name, const Vector3D& position, PlanetType type,
                              double habitability) {
     auto planet = std::make_unique<Planet>(allocateEntityId(), std::move(name), position, type, habitability);
-    return static_cast<Planet&>(addEntity(std::move(planet)));
+    Planet& ref = *planet; // keep the typed reference; ownership moves into the galaxy below
+    static_cast<void>(addEntity(std::move(planet)));
+    return ref;
 }
 
 Fleet& Galaxy::createFleet(std::string name, const Vector3D& position) {
     auto fleet = std::make_unique<Fleet>(allocateEntityId(), std::move(name), position);
-    return static_cast<Fleet&>(addEntity(std::move(fleet)));
+    Fleet& ref = *fleet; // keep the typed reference; ownership moves into the galaxy below
+    static_cast<void>(addEntity(std::move(fleet)));
+    return ref;
 }
 
 Entity& Galaxy::spawn(const std::string& kind, const nlohmann::json& params) {

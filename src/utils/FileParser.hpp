@@ -41,7 +41,7 @@ public:
      * @param line 1-based line (0 = unknown).
      * @param column 1-based column (0 = unknown).
      */
-    ParseException(const std::string& message, std::size_t line = 0, std::size_t column = 0);
+    explicit ParseException(const std::string& message, std::size_t line = 0, std::size_t column = 0);
 
     /// @brief Line of the error. @return 1-based line, or 0 if unknown.
     [[nodiscard]] std::size_t line() const noexcept { return line_; }

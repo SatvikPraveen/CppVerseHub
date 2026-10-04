@@ -97,7 +97,7 @@ void FixedSizePool::deallocate(void* p) noexcept {
 
 bool FixedSizePool::owns(const void* p) const noexcept {
     const auto* b = static_cast<const std::byte*>(p);
-    const std::less<const std::byte*> less;
+    const std::less<> less; // total order over unrelated pointers, unlike built-in <
     const std::size_t chunk_bytes = stride_ * blocks_per_chunk_;
     return std::any_of(chunks_.begin(), chunks_.end(), [&](const std::byte* chunk) {
         return !less(b, chunk) && less(b, chunk + chunk_bytes);
@@ -166,6 +166,7 @@ void demonstrateMemoryPools(std::ostream& out) {
     // 1. Raw fixed-size pool.
     FixedSizePool pool(24, 8, 8);
     std::vector<void*> blocks;
+    blocks.reserve(20);
     for (int i = 0; i < 20; ++i) {
         blocks.push_back(pool.allocate());
     }
@@ -211,6 +212,7 @@ void demonstrateMemoryPools(std::ostream& out) {
     ObjectPool<Particle, 16> particles;
     {
         std::vector<ObjectPool<Particle, 16>::Handle> live;
+        live.reserve(10);
         for (int i = 0; i < 10; ++i) {
             live.push_back(particles.acquire(i * 1.0, 0.0, 1.0, 2.0));
         }
@@ -227,9 +229,11 @@ void demonstrateMemoryPools(std::ostream& out) {
     ThreadSafePool shared(32);
     {
         std::vector<std::thread> workers;
+        workers.reserve(4);
         for (int t = 0; t < 4; ++t) {
             workers.emplace_back([&shared] {
                 std::vector<void*> mine;
+                mine.reserve(200);
                 for (int i = 0; i < 200; ++i) {
                     mine.push_back(shared.allocate());
                 }

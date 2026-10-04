@@ -176,6 +176,7 @@ public:
     SimpleVector(std::initializer_list<T> init) : SimpleVector() {
         reserve(init.size());
         std::ranges::copy(init, data_.get());
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): delegating ctor, set after copying
         size_ = init.size();
     }
 
@@ -183,6 +184,7 @@ public:
     SimpleVector(const SimpleVector& other) : SimpleVector() {
         reserve(other.size_);
         std::copy_n(other.data_.get(), other.size_, data_.get());
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): delegating ctor, set after copying
         size_ = other.size_;
     }
 
@@ -367,8 +369,8 @@ private:
         /// Implicit conversion iterator -> const_iterator.
         template <bool OtherConst>
             requires(Const && !OtherConst)
-        Iterator(const Iterator<OtherConst>& other) noexcept
-            : ptr_(other.ptr_) {} // NOLINT(google-explicit-constructor)
+        // NOLINTNEXTLINE(google-explicit-constructor): iterator -> const_iterator must be implicit
+        Iterator(const Iterator<OtherConst>& other) noexcept : ptr_(other.ptr_) {}
 
         [[nodiscard]] reference operator*() const noexcept { return *ptr_; }
         [[nodiscard]] pointer operator->() const noexcept { return ptr_; }
@@ -731,9 +733,12 @@ static_assert(
  *        opting into borrowed_range lets algorithms return real iterators for rvalue ranges
  *        instead of std::ranges::dangling.
  */
+// Specialising a std variable template for a program-defined type is explicitly permitted.
+// NOLINTBEGIN(cert-dcl58-cpp)
 namespace std::ranges {
 template <>
 inline constexpr bool enable_borrowed_range<CppVerseHub::STL::FibonacciRange> = true;
 } // namespace std::ranges
+// NOLINTEND(cert-dcl58-cpp)
 
 static_assert(std::ranges::borrowed_range<CppVerseHub::STL::FibonacciRange>);

@@ -92,6 +92,7 @@ private:
     template <typename F>
     struct Model final : Concept {
         template <typename G>
+            requires(!std::is_same_v<std::remove_cvref_t<G>, Model>)
         explicit Model(G&& g) : fn(std::forward<G>(g)) {}
         void call() override { std::invoke(fn); }
         F fn;
@@ -214,7 +215,7 @@ private:
             }
             try {
                 task();
-            } catch (...) {
+            } catch (...) { // NOLINT(bugprone-empty-catch): see below
                 // Tasks created by submit() never throw (packaged_task captures the
                 // exception into the future); anything else is swallowed so a single
                 // faulty task cannot terminate the process.

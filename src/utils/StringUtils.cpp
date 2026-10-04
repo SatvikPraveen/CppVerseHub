@@ -795,24 +795,24 @@ std::optional<std::size_t> Unicode::codePointCount(std::string_view text) noexce
     return count;
 }
 
-std::string Unicode::encodeUtf8(char32_t cp) {
+std::string Unicode::encodeUtf8(char32_t codePoint) {
     std::string out;
-    if (cp < 0x80) {
-        out.push_back(static_cast<char>(cp));
-    } else if (cp < 0x800) {
-        out.push_back(static_cast<char>(0xC0U | (cp >> 6U)));
-        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
-    } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+    if (codePoint < 0x80) {
+        out.push_back(static_cast<char>(codePoint));
+    } else if (codePoint < 0x800) {
+        out.push_back(static_cast<char>(0xC0U | (codePoint >> 6U)));
+        out.push_back(static_cast<char>(0x80U | (codePoint & 0x3FU)));
+    } else if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
         return {};
-    } else if (cp < 0x10000) {
-        out.push_back(static_cast<char>(0xE0U | (cp >> 12U)));
-        out.push_back(static_cast<char>(0x80U | ((cp >> 6U) & 0x3FU)));
-        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
-    } else if (cp <= 0x10FFFF) {
-        out.push_back(static_cast<char>(0xF0U | (cp >> 18U)));
-        out.push_back(static_cast<char>(0x80U | ((cp >> 12U) & 0x3FU)));
-        out.push_back(static_cast<char>(0x80U | ((cp >> 6U) & 0x3FU)));
-        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
+    } else if (codePoint < 0x10000) {
+        out.push_back(static_cast<char>(0xE0U | (codePoint >> 12U)));
+        out.push_back(static_cast<char>(0x80U | ((codePoint >> 6U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | (codePoint & 0x3FU)));
+    } else if (codePoint <= 0x10FFFF) {
+        out.push_back(static_cast<char>(0xF0U | (codePoint >> 18U)));
+        out.push_back(static_cast<char>(0x80U | ((codePoint >> 12U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | ((codePoint >> 6U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | (codePoint & 0x3FU)));
     }
     return out;
 }

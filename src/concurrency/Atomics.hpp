@@ -213,7 +213,8 @@ private:
     static constexpr std::size_t kMask = Capacity - 1;
 
     T* slot_storage(std::size_t index) noexcept {
-        return static_cast<T*>(static_cast<void*>(buffer_[index & kMask].bytes));
+        // The slot's object was created by placement new into these bytes; launder recovers a usable pointer.
+        return std::launder(reinterpret_cast<T*>(buffer_[index & kMask].bytes));
     }
     T* slot(std::size_t index) noexcept { return std::launder(slot_storage(index)); }
 
@@ -316,6 +317,7 @@ public:
 private:
     struct Node {
         template <typename U>
+            requires(!std::is_same_v<std::remove_cvref_t<U>, Node>)
         explicit Node(U&& v) : value(std::forward<U>(v)) {}
         T value;
         std::atomic<Node*> next{nullptr};

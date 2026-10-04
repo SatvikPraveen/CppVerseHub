@@ -194,6 +194,8 @@ std::string ConfigValue::toString() const {
 // ConfigManager: special members
 // ===================================================================================================
 
+// The source must be locked before its members are read, so these cannot use member initialisers.
+// NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer)
 ConfigManager::ConfigManager(const ConfigManager& other) {
     const std::shared_lock lock(other.mutex_);
     values_ = other.values_;
@@ -205,6 +207,7 @@ ConfigManager::ConfigManager(ConfigManager&& other) noexcept {
     values_ = std::move(other.values_);
     validators_ = std::move(other.validators_);
 }
+// NOLINTEND(cppcoreguidelines-prefer-member-initializer)
 
 ConfigManager& ConfigManager::operator=(const ConfigManager& other) {
     if (this != &other) {
@@ -392,7 +395,7 @@ std::string ConfigManager::toIni() const {
     std::string out;
     auto formatValue = [](const ConfigValue& v) {
         if (v.type() == ConfigValue::Type::String) {
-            const std::string s = v.toString();
+            std::string s = v.toString();
             // Quote strings that would otherwise be re-parsed as another type or lose whitespace.
             if (ConfigValue::parse(s) != v || s.find_first_of(";#") != std::string::npos) {
                 return "\"" + String::replaceAll(String::replaceAll(s, "\\", "\\\\"), "\"", "\\\"") + "\"";
@@ -431,7 +434,11 @@ std::string ConfigManager::toIni() const {
 namespace {
 void flattenJson(ConfigManager& config, const JsonValue& json, const std::string& prefix) {
     for (const auto& [name, child] : json.asObject()) {
-        const std::string key = prefix.empty() ? name : prefix + "." + name;
+        std::string key = prefix;
+        if (!key.empty()) {
+            key += '.';
+        }
+        key += name;
         switch (child.type()) {
             case JsonValue::Type::Null:
                 break;

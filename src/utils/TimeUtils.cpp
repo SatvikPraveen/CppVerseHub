@@ -66,6 +66,7 @@ struct Cursor {
 } // namespace
 
 std::string formatDuration(Nanoseconds duration) {
+    // NOLINTNEXTLINE(google-build-using-namespace): idiomatic, function-scoped use of <chrono> calendar names
     using namespace std::chrono;
     if (duration < Nanoseconds::zero()) {
         // Avoid overflow on the most negative value by formatting its magnitude via microseconds.
@@ -102,6 +103,7 @@ std::string formatDuration(Nanoseconds duration) {
 }
 
 std::string formatIso8601(SystemClock::time_point tp, bool withMillis, std::chrono::minutes utcOffset) {
+    // NOLINTNEXTLINE(google-build-using-namespace): idiomatic, function-scoped use of <chrono> calendar names
     using namespace std::chrono;
     const auto local = time_point_cast<milliseconds>(tp) + utcOffset;
     const auto dayPoint = floor<days>(local);
@@ -128,6 +130,7 @@ std::string formatIso8601(SystemClock::time_point tp, bool withMillis, std::chro
 }
 
 std::optional<SystemClock::time_point> parseIso8601(std::string_view text) {
+    // NOLINTNEXTLINE(google-build-using-namespace): idiomatic, function-scoped use of <chrono> calendar names
     using namespace std::chrono;
     Cursor cur{text};
     const auto y = cur.digits(4);
@@ -557,6 +560,7 @@ void PerformanceProfiler::report(std::ostream& out) const {
 // ===================================================================================================
 
 double SpaceTime::decimalYear(SystemClock::time_point tp) {
+    // NOLINTNEXTLINE(google-build-using-namespace): idiomatic, function-scoped use of <chrono> calendar names
     using namespace std::chrono;
     const auto dayPoint = floor<days>(tp);
     const year_month_day ymd{dayPoint};
@@ -571,6 +575,7 @@ double SpaceTime::decimalYear(SystemClock::time_point tp) {
 // ===================================================================================================
 
 void demonstrateTime(std::ostream& out) {
+    // NOLINTNEXTLINE(google-build-using-namespace): idiomatic, function-scoped use of <chrono> calendar names
     using namespace std::chrono;
     out << "=== Time utilities ===\n";
 

@@ -125,6 +125,7 @@ void demonstrate_mutexes(std::ostream& out) {
         std::mutex m;
         long long counter = 0;
         std::vector<std::thread> threads;
+        threads.reserve(4);
         for (int t = 0; t < 4; ++t) {
             threads.emplace_back([&] {
                 for (int i = 0; i < 10000; ++i) {
@@ -205,6 +206,7 @@ void demonstrate_mutexes(std::ostream& out) {
     {
         ThreadSafeMap<std::string, int> registry;
         std::vector<std::thread> writers;
+        writers.reserve(4);
         for (int t = 0; t < 4; ++t) {
             writers.emplace_back([&registry] {
                 for (int i = 0; i < 250; ++i) {
@@ -224,6 +226,7 @@ void demonstrate_mutexes(std::ostream& out) {
             return std::string("orbital-parameters-v2");
         });
         std::vector<std::thread> readers;
+        readers.reserve(4);
         for (int t = 0; t < 4; ++t) {
             readers.emplace_back([&config] { static_cast<void>(config.get()); });
         }

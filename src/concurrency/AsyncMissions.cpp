@@ -309,6 +309,7 @@ void demonstrate_async_missions(std::ostream& out) {
             << '\n';
 
         std::vector<std::future<int>> probes;
+        probes.reserve(4);
         for (int i = 0; i < 4; ++i) {
             probes.push_back(pool.submit([i] { return 10 * i; }));
         }

@@ -106,6 +106,7 @@ public:
      */
     template <typename... Args>
         requires(sizeof...(Args) == N) && (std::convertible_to<Args, T> && ...)
+    // NOLINTNEXTLINE(google-explicit-constructor): explicit exactly when it is a one-argument conversion
     constexpr explicit(N == 1) Vector(Args... values) noexcept : data_{static_cast<T>(values)...} {}
 
     /**

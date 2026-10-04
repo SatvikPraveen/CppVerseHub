@@ -224,8 +224,8 @@ std::uint64_t splitmix(std::uint64_t x) noexcept {
 
 BloomFilter::BloomFilter(std::size_t expected_elements, double false_positive_rate) {
     // Negated conjunction on purpose: it also rejects NaN, which the De Morgan form would accept.
-    if (!(false_positive_rate > 0.0 &&
-          false_positive_rate < 1.0)) { // NOLINT(readability-simplify-boolean-expr)
+    // NOLINTNEXTLINE(readability-simplify-boolean-expr)
+    if (!(false_positive_rate > 0.0 && false_positive_rate < 1.0)) {
         throw std::invalid_argument("BloomFilter: false_positive_rate must be in (0, 1)");
     }
     const double n = static_cast<double>(std::max<std::size_t>(1, expected_elements));

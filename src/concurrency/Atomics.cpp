@@ -161,6 +161,7 @@ void demonstrate_atomics(std::ostream& out) {
         SpinLock lock;
         long long shared = 0;
         std::vector<std::thread> threads;
+        threads.reserve(4);
         for (int t = 0; t < 4; ++t) {
             threads.emplace_back([&] {
                 for (int i = 0; i < 5000; ++i) {
@@ -205,6 +206,7 @@ void demonstrate_atomics(std::ostream& out) {
     {
         LockFreeStack<int> stack;
         std::vector<std::thread> pushers;
+        pushers.reserve(4);
         for (int t = 0; t < 4; ++t) {
             pushers.emplace_back([&stack, t] {
                 for (int i = 0; i < 1000; ++i) {
@@ -218,6 +220,7 @@ void demonstrate_atomics(std::ostream& out) {
         std::atomic<long long> popped_sum{0};
         std::atomic<int> popped{0};
         std::vector<std::thread> poppers;
+        poppers.reserve(4);
         for (int t = 0; t < 4; ++t) {
             poppers.emplace_back([&] {
                 while (auto v = stack.pop()) {
@@ -236,6 +239,7 @@ void demonstrate_atomics(std::ostream& out) {
     {
         AtomicStatistics stats;
         std::vector<std::thread> threads;
+        threads.reserve(4);
         for (int t = 0; t < 4; ++t) {
             threads.emplace_back([&stats, t] {
                 for (int i = 1; i <= 100; ++i) {

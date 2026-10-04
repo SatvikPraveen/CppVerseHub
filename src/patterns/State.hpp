@@ -132,7 +132,7 @@ public:
     /// @brief Report progress (only while active). @param percent Delta in percent (> 0). @return Accepted.
     bool advance(double percent);
     /// @brief Fail the mission. @param reason Reason. @return true if accepted.
-    bool fail(std::string reason);
+    bool fail(const std::string& reason);
     /// @brief Abort the mission. @return true if accepted.
     bool abort();
 

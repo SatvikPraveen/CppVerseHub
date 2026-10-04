@@ -43,7 +43,10 @@ std::string FileRAII::read_all() {
         throw std::runtime_error("FileRAII: file is closed");
     }
     static_cast<void>(std::fflush(file_.get()));
-    std::rewind(file_.get());
+    if (std::fseek(file_.get(), 0, SEEK_SET) != 0) {
+        throw std::runtime_error("FileRAII: cannot seek '" + path_.string() + "'");
+    }
+    std::clearerr(file_.get());
     std::string content;
     char buffer[4096];
     std::size_t n = 0;

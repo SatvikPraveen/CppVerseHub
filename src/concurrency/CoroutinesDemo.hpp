@@ -36,6 +36,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -279,6 +280,9 @@ struct TaskPromise : TaskPromiseBase {
         if (error) {
             std::rethrow_exception(error);
         }
+        if (!value) {
+            throw std::logic_error("Task: result requested before the coroutine produced one");
+        }
         return std::move(*value);
     }
 };
@@ -438,7 +442,11 @@ public:
         if (handle_.promise().error) {
             std::rethrow_exception(handle_.promise().error);
         }
-        return std::move(*handle_.promise().value);
+        auto& result = handle_.promise().value;
+        if (!result) {
+            throw std::logic_error("sync_wait: coroutine finished without a result");
+        }
+        return std::move(*result);
     }
 
 private:
