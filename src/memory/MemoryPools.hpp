@@ -1,688 +1,495 @@
 /**
  * @file MemoryPools.hpp
- * @brief Advanced memory pool implementations for efficient memory allocation
- * @details File location: src/memory/MemoryPools.hpp
- * 
- * This file implements various memory pool strategies including fixed-size pools,
- * variable-size pools, thread-safe pools, and object pools with specialized
- * allocation patterns for high-performance applications.
+ * @brief Fixed-size block pools, segregated small-object allocation and typed object pools.
+ *
+ * Demonstrates the memory-pool family of techniques:
+ *  - FixedSizePool: a growable pool of equally-sized, equally-aligned blocks threaded on an
+ *    intrusive free list. O(1) allocate/deallocate, no per-block header, no fragmentation.
+ *  - PoolAllocator<T>: an STL allocator that serves single-object requests (list/map/set
+ *    nodes) from a FixedSizePool and falls back to the heap for arrays.
+ *  - ThreadSafePool: a mutex-protected FixedSizePool for concurrent use.
+ *  - SmallObjectAllocator: size-segregated pools (16-byte classes up to 256 bytes) exposed
+ *    as a `std::pmr::memory_resource`, the design used by most general-purpose allocators.
+ *  - ObjectPool<T, N>: typed, fixed-capacity pool that constructs objects in place and
+ *    hands them out as `std::unique_ptr` with a pool-returning deleter (exception safe).
+ *
+ * Why: node-based containers and game/simulation entities allocate many small objects of
+ * one size; pools make that allocation cheap, cache friendly and predictable.
  */
 
-#ifndef MEMORY_POOLS_HPP
-#define MEMORY_POOLS_HPP
+#ifndef CPPVERSEHUB_MEMORY_MEMORY_POOLS_HPP
+#define CPPVERSEHUB_MEMORY_MEMORY_POOLS_HPP
 
-#include <memory>
-#include <vector>
-#include <list>
-#include <unordered_map>
-#include <mutex>
-#include <atomic>
+#include "memory/CustomAllocators.hpp"
+
+#include <array>
 #include <cstddef>
-#include <cassert>
+#include <cstdint>
+#include <functional>
 #include <iostream>
-#include <algorithm>
-#include <thread>
-#include <chrono>
+#include <memory>
+#include <memory_resource>
+#include <mutex>
+#include <new>
 #include <type_traits>
-#include <bitset>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Memory {
 
     /**
      * @class FixedSizePool
-     * @brief Memory pool for fixed-size allocations with O(1) allocation/deallocation
+     * @brief Growable pool of fixed-size blocks with an intrusive free list.
+     *
+     * Blocks are carved out of chunks obtained from an upstream `std::pmr::memory_resource`.
+     * The stride is rounded up so every block satisfies the requested alignment. Not
+     * thread-safe (see ThreadSafePool).
      */
-    template<size_t BlockSize, size_t PoolSize = 4096>
     class FixedSizePool {
-    private:
-        static constexpr size_t BlocksPerChunk = PoolSize / BlockSize;
-        static_assert(BlocksPerChunk > 0, "Block size too large for pool size");
-
-        struct FreeBlock {
-            FreeBlock* next;
-        };
-
-        struct MemoryChunk {
-            alignas(std::max_align_t) char data[PoolSize];
-            std::bitset<BlocksPerChunk> allocation_mask;
-            size_t free_count;
-            FreeBlock* free_list;
-            std::unique_ptr<MemoryChunk> next_chunk;
-
-            MemoryChunk() : free_count(BlocksPerChunk), free_list(nullptr) {
-                // Initialize free list
-                for (size_t i = 0; i < BlocksPerChunk; ++i) {
-                    FreeBlock* block = reinterpret_cast<FreeBlock*>(&data[i * BlockSize]);
-                    block->next = (i < BlocksPerChunk - 1) ? 
-                                  reinterpret_cast<FreeBlock*>(&data[(i + 1) * BlockSize]) : 
-                                  nullptr;
-                    if (i == 0) free_list = block;
-                }
-            }
-        };
-
     public:
-        FixedSizePool() : head_chunk_(std::make_unique<MemoryChunk>()), 
-                         total_allocated_(0), total_chunks_(1) {
-            std::cout << "FixedSizePool: Created pool with block size " << BlockSize 
-                      << ", blocks per chunk: " << BlocksPerChunk << "\n";
-        }
+        /**
+         * @brief Construct a pool. No memory is acquired until the first allocate().
+         * @param block_size Usable bytes per block (> 0).
+         * @param block_alignment Power-of-two alignment of every block.
+         * @param blocks_per_chunk Number of blocks obtained per upstream request (> 0).
+         * @param max_chunks Maximum number of chunks (0 = unlimited).
+         * @param upstream Resource providing chunk memory.
+         * @throws std::invalid_argument on invalid parameters.
+         */
+        explicit FixedSizePool(std::size_t block_size, std::size_t block_alignment = alignof(std::max_align_t),
+                               std::size_t blocks_per_chunk = 64, std::size_t max_chunks = 0,
+                               std::pmr::memory_resource* upstream = std::pmr::get_default_resource());
 
-        ~FixedSizePool() {
-            std::cout << "FixedSizePool: Destroyed pool with " << total_chunks_ 
-                      << " chunks, " << total_allocated_ << " allocations\n";
-        }
+        FixedSizePool(const FixedSizePool&) = delete;
+        FixedSizePool& operator=(const FixedSizePool&) = delete;
+        FixedSizePool(FixedSizePool&&) = delete;
+        FixedSizePool& operator=(FixedSizePool&&) = delete;
 
-        void* allocate() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            // Find chunk with available blocks
-            MemoryChunk* chunk = find_available_chunk();
-            if (!chunk) {
-                // Create new chunk
-                auto new_chunk = std::make_unique<MemoryChunk>();
-                new_chunk->next_chunk = std::move(head_chunk_);
-                head_chunk_ = std::move(new_chunk);
-                chunk = head_chunk_.get();
-                ++total_chunks_;
-            }
+        /** @brief Return all chunks to upstream. Outstanding blocks become invalid. */
+        ~FixedSizePool();
 
-            // Allocate from chunk
-            assert(chunk->free_list != nullptr);
-            void* result = chunk->free_list;
-            chunk->free_list = chunk->free_list->next;
-            --chunk->free_count;
-            
-            // Update allocation mask
-            size_t block_index = (static_cast<char*>(result) - chunk->data) / BlockSize;
-            chunk->allocation_mask.set(block_index);
+        /**
+         * @brief Obtain one block.
+         * @return Pointer to block_size() bytes aligned to block_alignment().
+         * @throws std::bad_alloc if the chunk limit is reached or upstream fails (pool unchanged).
+         */
+        [[nodiscard]] void* allocate();
 
-            ++total_allocated_;
-            
-            std::cout << "FixedSizePool: Allocated block " << block_index 
-                      << " from chunk (free count: " << chunk->free_count << ")\n";
-            
-            return result;
-        }
+        /**
+         * @brief Obtain one block without throwing.
+         * @return Block pointer, or nullptr if no memory is available.
+         */
+        [[nodiscard]] void* try_allocate() noexcept;
 
-        void deallocate(void* ptr) {
-            if (!ptr) return;
+        /**
+         * @brief Return a block to the pool.
+         * @param p Pointer obtained from this pool (nullptr is ignored).
+         */
+        void deallocate(void* p) noexcept;
 
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            MemoryChunk* chunk = find_chunk_for_ptr(ptr);
-            if (!chunk) {
-                std::cout << "FixedSizePool: ERROR - Pointer not from this pool!\n";
-                return;
-            }
+        /**
+         * @brief Check whether @p p lies inside one of this pool's chunks.
+         * @param p Pointer to test.
+         * @return True if owned by the pool.
+         */
+        [[nodiscard]] bool owns(const void* p) const noexcept;
 
-            // Add back to free list
-            FreeBlock* block = static_cast<FreeBlock*>(ptr);
-            block->next = chunk->free_list;
-            chunk->free_list = block;
-            ++chunk->free_count;
+        /**
+         * @brief Return every chunk to upstream (all outstanding blocks become invalid).
+         */
+        void release() noexcept;
 
-            // Update allocation mask
-            size_t block_index = (static_cast<char*>(ptr) - chunk->data) / BlockSize;
-            chunk->allocation_mask.reset(block_index);
-
-            --total_allocated_;
-            
-            std::cout << "FixedSizePool: Deallocated block " << block_index 
-                      << " (free count: " << chunk->free_count << ")\n";
-        }
-
-        size_t block_size() const { return BlockSize; }
-        size_t total_allocated() const { 
-            std::lock_guard<std::mutex> lock(mutex_);
-            return total_allocated_; 
-        }
-        size_t total_chunks() const { 
-            std::lock_guard<std::mutex> lock(mutex_);
-            return total_chunks_; 
-        }
-
-        bool is_from_pool(void* ptr) const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return find_chunk_for_ptr(ptr) != nullptr;
-        }
-
-        void print_statistics() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            std::cout << "\n=== FixedSizePool Statistics ===\n";
-            std::cout << "Block size: " << BlockSize << " bytes\n";
-            std::cout << "Blocks per chunk: " << BlocksPerChunk << "\n";
-            std::cout << "Total chunks: " << total_chunks_ << "\n";
-            std::cout << "Total allocated: " << total_allocated_ << "\n";
-            std::cout << "Memory overhead: " << (total_chunks_ * sizeof(MemoryChunk)) << " bytes\n";
-        }
+        /** @brief @return Usable bytes per block as requested. */
+        [[nodiscard]] std::size_t block_size() const noexcept { return block_size_; }
+        /** @brief @return Distance in bytes between consecutive blocks. */
+        [[nodiscard]] std::size_t stride() const noexcept { return stride_; }
+        /** @brief @return Alignment guaranteed for every block. */
+        [[nodiscard]] std::size_t block_alignment() const noexcept { return alignment_; }
+        /** @brief @return Blocks currently handed out. */
+        [[nodiscard]] std::size_t blocks_in_use() const noexcept { return in_use_; }
+        /** @brief @return Blocks currently owned (free + in use). */
+        [[nodiscard]] std::size_t capacity() const noexcept { return chunks_.size() * blocks_per_chunk_; }
+        /** @brief @return Number of chunks obtained from upstream. */
+        [[nodiscard]] std::size_t chunk_count() const noexcept { return chunks_.size(); }
 
     private:
-        mutable std::mutex mutex_;
-        std::unique_ptr<MemoryChunk> head_chunk_;
-        size_t total_allocated_;
-        size_t total_chunks_;
+        struct FreeNode {
+            FreeNode* next;
+        };
 
-        MemoryChunk* find_available_chunk() {
-            MemoryChunk* current = head_chunk_.get();
-            while (current) {
-                if (current->free_count > 0) {
-                    return current;
-                }
-                current = current->next_chunk.get();
-            }
-            return nullptr;
-        }
+        [[nodiscard]] bool grow() noexcept;
 
-        MemoryChunk* find_chunk_for_ptr(void* ptr) const {
-            MemoryChunk* current = head_chunk_.get();
-            while (current) {
-                char* chunk_start = current->data;
-                char* chunk_end = chunk_start + PoolSize;
-                if (ptr >= chunk_start && ptr < chunk_end) {
-                    return current;
-                }
-                current = current->next_chunk.get();
-            }
-            return nullptr;
-        }
+        std::size_t block_size_;
+        std::size_t alignment_;
+        std::size_t stride_;
+        std::size_t blocks_per_chunk_;
+        std::size_t max_chunks_;
+        std::pmr::memory_resource* upstream_;
+        std::vector<std::byte*> chunks_;
+        FreeNode* free_list_ = nullptr;
+        std::size_t in_use_ = 0;
     };
 
     /**
-     * @class VariableSizePool
-     * @brief Memory pool for variable-size allocations using segregated free lists
+     * @class PoolAllocator
+     * @brief STL allocator serving single-object requests from a FixedSizePool.
+     *
+     * Requests for exactly one object that fits the pool's block size and alignment come
+     * from the pool; everything else (e.g. vector buffers, hash bucket arrays) goes to the
+     * heap. This makes it a drop-in node allocator for list, map, set and unordered_*.
+     *
+     * @tparam T Value type.
      */
-    class VariableSizePool {
-    private:
-        static constexpr size_t MinBlockSize = 16;
-        static constexpr size_t MaxBlockSize = 4096;
-        static constexpr size_t NumSizeClasses = 32;
-        static constexpr size_t ChunkSize = 64 * 1024; // 64KB chunks
-
-        struct FreeBlock {
-            FreeBlock* next;
-            size_t size;
-        };
-
-        struct MemoryChunk {
-            char* data;
-            size_t size;
-            size_t used;
-            std::unique_ptr<MemoryChunk> next;
-
-            MemoryChunk(size_t chunk_size) : size(chunk_size), used(0) {
-                data = new char[size];
-                std::cout << "VariableSizePool: Created chunk of " << size << " bytes\n";
-            }
-
-            ~MemoryChunk() {
-                delete[] data;
-                std::cout << "VariableSizePool: Destroyed chunk of " << size << " bytes\n";
-            }
-        };
-
+    template <typename T>
+    class PoolAllocator {
     public:
-        VariableSizePool() : total_allocated_(0), total_chunks_(0) {
-            // Initialize free lists
-            for (size_t i = 0; i < NumSizeClasses; ++i) {
-                free_lists_[i] = nullptr;
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using propagate_on_container_copy_assignment = std::true_type;
+        using propagate_on_container_move_assignment = std::true_type;
+        using propagate_on_container_swap = std::true_type;
+        using is_always_equal = std::false_type;
+
+        /** @brief Rebind to another value type. */
+        template <typename U>
+        struct rebind {
+            using other = PoolAllocator<U>;
+        };
+
+        /**
+         * @brief Bind to a pool.
+         * @param pool Pool that must outlive every container using this allocator.
+         */
+        explicit PoolAllocator(FixedSizePool& pool) noexcept : pool_(&pool) {}
+
+        /**
+         * @brief Rebinding converting constructor.
+         * @param other Allocator for another type sharing the pool.
+         */
+        template <typename U>
+        PoolAllocator(const PoolAllocator<U>& other) noexcept // NOLINT(google-explicit-constructor)
+            : pool_(other.pool()) {}
+
+        /**
+         * @brief Allocate storage for @p n objects.
+         * @param n Number of objects.
+         * @return Pointer aligned for T.
+         * @throws std::bad_array_new_length on overflow; std::bad_alloc on exhaustion.
+         */
+        [[nodiscard]] T* allocate(size_type n) {
+            if (n > std::numeric_limits<size_type>::max() / sizeof(T)) {
+                throw std::bad_array_new_length();
             }
-            std::cout << "VariableSizePool: Created with " << NumSizeClasses << " size classes\n";
+            if (uses_pool(n)) {
+                return static_cast<T*>(pool_->allocate());
+            }
+            return static_cast<T*>(detail::allocate_bytes(n * sizeof(T), alignof(T)));
         }
 
-        ~VariableSizePool() {
-            std::cout << "VariableSizePool: Destroyed with " << total_chunks_ 
-                      << " chunks, " << total_allocated_ << " bytes allocated\n";
+        /**
+         * @brief Release storage from allocate().
+         * @param p Pointer from allocate(n).
+         * @param n Same @p n passed to allocate().
+         */
+        void deallocate(T* p, size_type n) noexcept {
+            if (uses_pool(n)) {
+                pool_->deallocate(p);
+            } else {
+                detail::deallocate_bytes(p, alignof(T));
+            }
         }
 
-        void* allocate(size_t size) {
-            if (size == 0) return nullptr;
-            if (size > MaxBlockSize) {
-                // Fall back to standard allocation for large sizes
-                std::cout << "VariableSizePool: Large allocation " << size 
-                          << " bytes, using standard allocator\n";
-                return std::malloc(size);
-            }
+        /** @brief @return The bound pool. */
+        [[nodiscard]] FixedSizePool* pool() const noexcept { return pool_; }
 
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            size_t aligned_size = align_size(size);
-            size_t size_class = get_size_class(aligned_size);
-
-            // Try to allocate from free list
-            if (free_lists_[size_class]) {
-                FreeBlock* block = free_lists_[size_class];
-                free_lists_[size_class] = block->next;
-                
-                std::cout << "VariableSizePool: Allocated " << aligned_size 
-                          << " bytes from free list (class " << size_class << ")\n";
-                
-                return block;
-            }
-
-            // Allocate from chunk
-            void* result = allocate_from_chunk(aligned_size);
-            if (result) {
-                total_allocated_ += aligned_size;
-                std::cout << "VariableSizePool: Allocated " << aligned_size 
-                          << " bytes from chunk\n";
-            }
-
-            return result;
+    private:
+        [[nodiscard]] bool uses_pool(size_type n) const noexcept {
+            return n == 1 && sizeof(T) <= pool_->block_size() && alignof(T) <= pool_->block_alignment();
         }
 
-        void deallocate(void* ptr, size_t size) {
-            if (!ptr) return;
-            
-            if (size > MaxBlockSize) {
-                std::cout << "VariableSizePool: Large deallocation, using standard deallocator\n";
-                std::free(ptr);
-                return;
-            }
+        FixedSizePool* pool_;
+    };
 
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            size_t aligned_size = align_size(size);
-            size_t size_class = get_size_class(aligned_size);
+    /**
+     * @brief Equality: allocators are interchangeable iff they share the same pool.
+     * @param lhs First allocator.
+     * @param rhs Second allocator.
+     * @return True if both use the same pool.
+     */
+    template <typename T, typename U>
+    [[nodiscard]] bool operator==(const PoolAllocator<T>& lhs, const PoolAllocator<U>& rhs) noexcept {
+        return lhs.pool() == rhs.pool();
+    }
 
-            // Add to free list
-            FreeBlock* block = static_cast<FreeBlock*>(ptr);
-            block->next = free_lists_[size_class];
-            block->size = aligned_size;
-            free_lists_[size_class] = block;
+    static_assert(AllocatorUtils::Allocator<PoolAllocator<long>>);
 
-            total_allocated_ -= aligned_size;
-            
-            std::cout << "VariableSizePool: Deallocated " << aligned_size 
-                      << " bytes to free list (class " << size_class << ")\n";
+    /**
+     * @class ThreadSafePool
+     * @brief Mutex-protected FixedSizePool that may be shared between threads.
+     */
+    class ThreadSafePool {
+    public:
+        /**
+         * @brief Construct the underlying pool.
+         * @param block_size Usable bytes per block.
+         * @param block_alignment Power-of-two block alignment.
+         * @param blocks_per_chunk Blocks per upstream request.
+         */
+        explicit ThreadSafePool(std::size_t block_size, std::size_t block_alignment = alignof(std::max_align_t),
+                                std::size_t blocks_per_chunk = 64)
+            : pool_(block_size, block_alignment, blocks_per_chunk) {}
+
+        /**
+         * @brief Obtain a block.
+         * @return Block pointer.
+         * @throws std::bad_alloc if upstream fails.
+         */
+        [[nodiscard]] void* allocate() {
+            const std::lock_guard lock(mutex_);
+            return pool_.allocate();
         }
 
-        size_t total_allocated() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return total_allocated_;
+        /**
+         * @brief Return a block.
+         * @param p Pointer from allocate().
+         */
+        void deallocate(void* p) noexcept {
+            const std::lock_guard lock(mutex_);
+            pool_.deallocate(p);
         }
 
-        size_t total_chunks() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return total_chunks_;
+        /** @brief @return Blocks currently in use. */
+        [[nodiscard]] std::size_t blocks_in_use() const {
+            const std::lock_guard lock(mutex_);
+            return pool_.blocks_in_use();
         }
 
-        void print_statistics() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            std::cout << "\n=== VariableSizePool Statistics ===\n";
-            std::cout << "Total chunks: " << total_chunks_ << "\n";
-            std::cout << "Total allocated: " << total_allocated_ << " bytes\n";
-            
-            std::cout << "Free lists:\n";
-            for (size_t i = 0; i < NumSizeClasses; ++i) {
-                size_t count = 0;
-                FreeBlock* current = free_lists_[i];
-                while (current) {
-                    ++count;
-                    current = current->next;
-                }
-                if (count > 0) {
-                    std::cout << "  Size class " << i << " (" << size_class_to_size(i) 
-                              << " bytes): " << count << " blocks\n";
-                }
-            }
+        /** @brief @return Block capacity currently owned. */
+        [[nodiscard]] std::size_t capacity() const {
+            const std::lock_guard lock(mutex_);
+            return pool_.capacity();
         }
 
     private:
         mutable std::mutex mutex_;
-        FreeBlock* free_lists_[NumSizeClasses];
-        std::unique_ptr<MemoryChunk> head_chunk_;
-        size_t total_allocated_;
-        size_t total_chunks_;
+        FixedSizePool pool_;
+    };
 
-        size_t align_size(size_t size) {
-            return (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
-        }
+    /**
+     * @class SmallObjectAllocator
+     * @brief Size-segregated pool allocator exposed as a `std::pmr::memory_resource`.
+     *
+     * Requests up to kMaxSmallSize bytes with alignment <= kGranularity are rounded up to a
+     * multiple of kGranularity and served from the matching FixedSizePool; larger or
+     * over-aligned requests are forwarded to the upstream resource. Not thread-safe.
+     */
+    class SmallObjectAllocator final : public std::pmr::memory_resource {
+    public:
+        /** @brief Size-class granularity and maximum supported small alignment. */
+        static constexpr std::size_t kGranularity = 16;
+        /** @brief Largest request served from a pool. */
+        static constexpr std::size_t kMaxSmallSize = 256;
+        /** @brief Number of size classes. */
+        static constexpr std::size_t kClassCount = kMaxSmallSize / kGranularity;
 
-        size_t get_size_class(size_t size) {
-            // Simple power-of-2 size classes
-            size_t class_size = MinBlockSize;
-            for (size_t i = 0; i < NumSizeClasses; ++i) {
-                if (size <= class_size) {
-                    return i;
-                }
-                class_size *= 2;
-                if (class_size > MaxBlockSize) {
-                    return NumSizeClasses - 1;
-                }
+        /**
+         * @brief Construct the size-class pools (no memory acquired yet).
+         * @param upstream Resource for chunks and large requests.
+         */
+        explicit SmallObjectAllocator(std::pmr::memory_resource* upstream = std::pmr::get_default_resource());
+
+        SmallObjectAllocator(const SmallObjectAllocator&) = delete;
+        SmallObjectAllocator& operator=(const SmallObjectAllocator&) = delete;
+        SmallObjectAllocator(SmallObjectAllocator&&) = delete;
+        SmallObjectAllocator& operator=(SmallObjectAllocator&&) = delete;
+        ~SmallObjectAllocator() override = default;
+
+        /**
+         * @brief Map a request size to its size class.
+         * @param bytes Request size.
+         * @return Class index, or kClassCount if the request is "large".
+         */
+        [[nodiscard]] static constexpr std::size_t size_class(std::size_t bytes) noexcept {
+            if (bytes > kMaxSmallSize) {
+                return kClassCount;
             }
-            return NumSizeClasses - 1;
+            return bytes == 0 ? 0 : (bytes - 1) / kGranularity;
         }
 
-        size_t size_class_to_size(size_t size_class) {
-            return MinBlockSize << size_class;
+        /** @brief @return Requests served by the size-class pools. */
+        [[nodiscard]] std::size_t small_allocations() const noexcept { return small_allocations_; }
+        /** @brief @return Requests forwarded upstream. */
+        [[nodiscard]] std::size_t large_allocations() const noexcept { return large_allocations_; }
+        /**
+         * @brief Blocks in use in one size class.
+         * @param index Size-class index (< kClassCount).
+         * @return Blocks in use.
+         */
+        [[nodiscard]] std::size_t blocks_in_use(std::size_t index) const noexcept {
+            return index < kClassCount ? pools_[index]->blocks_in_use() : 0;
+        }
+        /** @brief @return Blocks in use across all classes. */
+        [[nodiscard]] std::size_t total_blocks_in_use() const noexcept;
+
+    private:
+        void* do_allocate(std::size_t bytes, std::size_t alignment) override;
+        void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override;
+        [[nodiscard]] bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+            return this == &other;
         }
 
-        void* allocate_from_chunk(size_t size) {
-            // Find chunk with enough space
-            MemoryChunk* chunk = find_chunk_with_space(size);
-            if (!chunk) {
-                // Create new chunk
-                auto new_chunk = std::make_unique<MemoryChunk>(ChunkSize);
-                new_chunk->next = std::move(head_chunk_);
-                head_chunk_ = std::move(new_chunk);
-                chunk = head_chunk_.get();
-                ++total_chunks_;
-            }
-
-            void* result = chunk->data + chunk->used;
-            chunk->used += size;
-            return result;
-        }
-
-        MemoryChunk* find_chunk_with_space(size_t size) {
-            MemoryChunk* current = head_chunk_.get();
-            while (current) {
-                if (current->size - current->used >= size) {
-                    return current;
-                }
-                current = current->next.get();
-            }
-            return nullptr;
-        }
+        std::pmr::memory_resource* upstream_;
+        std::array<std::unique_ptr<FixedSizePool>, kClassCount> pools_;
+        std::size_t small_allocations_ = 0;
+        std::size_t large_allocations_ = 0;
     };
 
     /**
      * @class ObjectPool
-     * @brief Template-based object pool for specific types
+     * @brief Fixed-capacity typed pool with in-object storage and RAII handles.
+     *
+     * acquire() constructs a T in a free slot and returns a `std::unique_ptr` whose deleter
+     * destroys the object and returns the slot. If T's constructor throws, the slot is
+     * returned before the exception propagates (strong guarantee). Handles must not
+     * outlive the pool. Not thread-safe.
+     *
+     * @tparam T Object type.
+     * @tparam Capacity Maximum number of live objects.
      */
-    template<typename T, size_t PoolSize = 100>
+    template <typename T, std::size_t Capacity>
     class ObjectPool {
-    private:
-        struct ObjectSlot {
-            alignas(T) char storage[sizeof(T)];
-            bool in_use;
-            
-            ObjectSlot() : in_use(false) {}
-        };
+        static_assert(Capacity > 0, "ObjectPool needs at least one slot");
 
     public:
-        ObjectPool() : next_free_(0), objects_in_use_(0) {
-            std::cout << "ObjectPool<" << typeid(T).name() << ">: Created pool with " 
-                      << PoolSize << " slots\n";
-        }
-
-        ~ObjectPool() {
-            // Destroy any remaining objects
-            for (size_t i = 0; i < PoolSize; ++i) {
-                if (slots_[i].in_use) {
-                    reinterpret_cast<T*>(slots_[i].storage)->~T();
-                }
-            }
-            std::cout << "ObjectPool<" << typeid(T).name() << ">: Destroyed pool\n";
-        }
-
-        template<typename... Args>
-        T* acquire(Args&&... args) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            // Find free slot
-            for (size_t i = 0; i < PoolSize; ++i) {
-                size_t index = (next_free_ + i) % PoolSize;
-                if (!slots_[index].in_use) {
-                    slots_[index].in_use = true;
-                    next_free_ = (index + 1) % PoolSize;
-                    ++objects_in_use_;
-                    
-                    // Construct object in place
-                    T* object = new (slots_[index].storage) T(std::forward<Args>(args)...);
-                    
-                    std::cout << "ObjectPool: Acquired object at slot " << index 
-                              << " (" << objects_in_use_ << "/" << PoolSize << " in use)\n";
-                    
-                    return object;
-                }
-            }
-            
-            std::cout << "ObjectPool: Pool exhausted, returning nullptr\n";
-            return nullptr;
-        }
-
-        void release(T* object) {
-            if (!object) return;
-
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            // Find the slot for this object
-            for (size_t i = 0; i < PoolSize; ++i) {
-                if (reinterpret_cast<void*>(slots_[i].storage) == object) {
-                    if (slots_[i].in_use) {
-                        object->~T();
-                        slots_[i].in_use = false;
-                        --objects_in_use_;
-                        
-                        std::cout << "ObjectPool: Released object at slot " << i 
-                                  << " (" << objects_in_use_ << "/" << PoolSize << " in use)\n";
-                    } else {
-                        std::cout << "ObjectPool: ERROR - Double release detected!\n";
-                    }
-                    return;
-                }
-            }
-            
-            std::cout << "ObjectPool: ERROR - Object not from this pool!\n";
-        }
-
-        size_t objects_in_use() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return objects_in_use_;
-        }
-
-        size_t available_objects() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return PoolSize - objects_in_use_;
-        }
-
-        bool is_full() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return objects_in_use_ == PoolSize;
-        }
-
-        bool is_empty() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return objects_in_use_ == 0;
-        }
-
-    private:
-        mutable std::mutex mutex_;
-        ObjectSlot slots_[PoolSize];
-        size_t next_free_;
-        size_t objects_in_use_;
-    };
-
-    /**
-     * @class ThreadSafeMemoryPool
-     * @brief Thread-safe memory pool with per-thread caches
-     */
-    template<size_t BlockSize>
-    class ThreadSafeMemoryPool {
-    private:
-        static constexpr size_t CacheSize = 32;
-        
-        struct ThreadCache {
-            void* blocks[CacheSize];
-            size_t count;
-            
-            ThreadCache() : count(0) {
-                for (size_t i = 0; i < CacheSize; ++i) {
-                    blocks[i] = nullptr;
-                }
-            }
-        };
-
-    public:
-        ThreadSafeMemoryPool() : global_pool_(std::make_unique<FixedSizePool<BlockSize>>()) {
-            std::cout << "ThreadSafeMemoryPool: Created with block size " << BlockSize << "\n";
-        }
-
-        ~ThreadSafeMemoryPool() {
-            // Clean up thread caches
-            std::lock_guard<std::mutex> lock(cache_mutex_);
-            for (auto& [thread_id, cache] : thread_caches_) {
-                for (size_t i = 0; i < cache->count; ++i) {
-                    global_pool_->deallocate(cache->blocks[i]);
-                }
-            }
-            std::cout << "ThreadSafeMemoryPool: Destroyed\n";
-        }
-
-        void* allocate() {
-            ThreadCache* cache = get_thread_cache();
-            
-            // Try to allocate from thread cache
-            if (cache->count > 0) {
-                --cache->count;
-                void* result = cache->blocks[cache->count];
-                cache->blocks[cache->count] = nullptr;
-                
-                thread_local_allocations_.fetch_add(1);
-                return result;
-            }
-
-            // Refill cache from global pool
-            refill_cache(cache);
-            
-            if (cache->count > 0) {
-                --cache->count;
-                void* result = cache->blocks[cache->count];
-                cache->blocks[cache->count] = nullptr;
-                
-                thread_local_allocations_.fetch_add(1);
-                return result;
-            }
-
-            // Global pool allocation failed
-            return nullptr;
-        }
-
-        void deallocate(void* ptr) {
-            if (!ptr) return;
-
-            ThreadCache* cache = get_thread_cache();
-            
-            // Add to thread cache if there's space
-            if (cache->count < CacheSize) {
-                cache->blocks[cache->count] = ptr;
-                ++cache->count;
-                
-                thread_local_deallocations_.fetch_add(1);
-                return;
-            }
-
-            // Cache is full, return to global pool
-            global_pool_->deallocate(ptr);
-            thread_local_deallocations_.fetch_add(1);
-        }
-
-        size_t get_thread_allocations() const {
-            return thread_local_allocations_.load();
-        }
-
-        size_t get_thread_deallocations() const {
-            return thread_local_deallocations_.load();
-        }
-
-        void print_statistics() const {
-            global_pool_->print_statistics();
-            
-            std::lock_guard<std::mutex> lock(cache_mutex_);
-            std::cout << "Thread caches: " << thread_caches_.size() << "\n";
-            std::cout << "Total thread allocations: " << thread_local_allocations_.load() << "\n";
-            std::cout << "Total thread deallocations: " << thread_local_deallocations_.load() << "\n";
-        }
-
-    private:
-        std::unique_ptr<FixedSizePool<BlockSize>> global_pool_;
-        mutable std::mutex cache_mutex_;
-        std::unordered_map<std::thread::id, std::unique_ptr<ThreadCache>> thread_caches_;
-        
-        // Thread-local statistics
-        thread_local std::atomic<size_t> thread_local_allocations_{0};
-        thread_local std::atomic<size_t> thread_local_deallocations_{0};
-
-        ThreadCache* get_thread_cache() {
-            std::thread::id current_id = std::this_thread::get_id();
-            
-            std::lock_guard<std::mutex> lock(cache_mutex_);
-            auto it = thread_caches_.find(current_id);
-            if (it == thread_caches_.end()) {
-                auto cache = std::make_unique<ThreadCache>();
-                ThreadCache* cache_ptr = cache.get();
-                thread_caches_[current_id] = std::move(cache);
-                return cache_ptr;
-            }
-            return it->second.get();
-        }
-
-        void refill_cache(ThreadCache* cache) {
-            // Allocate multiple blocks from global pool
-            size_t blocks_to_allocate = std::min(CacheSize - cache->count, CacheSize / 2);
-            
-            for (size_t i = 0; i < blocks_to_allocate; ++i) {
-                void* block = global_pool_->allocate();
-                if (block) {
-                    cache->blocks[cache->count] = block;
-                    ++cache->count;
-                } else {
-                    break;
-                }
-            }
-        }
-    };
-
-    /**
-     * @class MemoryPoolDemo
-     * @brief Comprehensive demonstration of memory pool implementations
-     */
-    class MemoryPoolDemo {
-    public:
-        MemoryPoolDemo() = default;
-
-        void demonstrateFixedSizePool();
-        void demonstrateVariableSizePool();
-        void demonstrateObjectPool();
-        void demonstrateThreadSafePool();
-        void demonstratePoolPerformance();
-        void demonstrateRealWorldScenario();
-
-        void runAllDemonstrations();
-
-    private:
-        // Test objects for demonstrations
-        class TestObject {
+        /** @brief Deleter that hands the object back to its pool. */
+        class Releaser {
         public:
-            TestObject(int id = 0, const std::string& name = "default") 
-                : id_(id), name_(name), data_(100, 'X') {
-                std::cout << "TestObject " << id_ << " '" << name_ << "' constructed\n";
+            /** @brief Construct a detached deleter (used by empty handles). */
+            Releaser() noexcept = default;
+            /**
+             * @brief Construct a deleter bound to @p pool.
+             * @param pool Owning pool.
+             */
+            explicit Releaser(ObjectPool* pool) noexcept : pool_(pool) {}
+            /**
+             * @brief Destroy @p p and free its slot.
+             * @param p Object obtained from the pool.
+             */
+            void operator()(T* p) const noexcept {
+                if (pool_ != nullptr && p != nullptr) {
+                    pool_->destroy(p);
+                }
             }
-            
-            ~TestObject() {
-                std::cout << "TestObject " << id_ << " '" << name_ << "' destroyed\n";
-            }
-            
-            void process() {
-                std::cout << "TestObject " << id_ << " processing...\n";
-                // Simulate work
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
-            
-            int get_id() const { return id_; }
-            const std::string& get_name() const { return name_; }
-            
+
         private:
-            int id_;
-            std::string name_;
-            std::vector<char> data_; // Some payload
+            ObjectPool* pool_ = nullptr;
         };
 
-        void benchmark_allocation_performance();
+        /** @brief Owning handle to a pooled object. */
+        using Handle = std::unique_ptr<T, Releaser>;
+
+        /** @brief Construct an empty pool (no objects constructed). */
+        ObjectPool() noexcept {
+            for (std::size_t i = 0; i < Capacity; ++i) {
+                free_[i] = Capacity - 1 - i; // pop from the back: slot 0 first
+            }
+        }
+
+        ObjectPool(const ObjectPool&) = delete;
+        ObjectPool& operator=(const ObjectPool&) = delete;
+        ObjectPool(ObjectPool&&) = delete;
+        ObjectPool& operator=(ObjectPool&&) = delete;
+
+        /** @brief Destroy any objects still alive (their handles must already be gone). */
+        ~ObjectPool() {
+            for (T*& p : live_) {
+                if (p != nullptr) {
+                    std::destroy_at(p);
+                    p = nullptr;
+                }
+            }
+        }
+
+        /**
+         * @brief Construct an object in a free slot.
+         * @param args Constructor arguments.
+         * @return Owning handle.
+         * @throws std::bad_alloc if the pool is full; anything T's constructor throws.
+         */
+        template <typename... Args>
+        [[nodiscard]] Handle acquire(Args&&... args) {
+            Handle h = try_acquire(std::forward<Args>(args)...);
+            if (!h) {
+                throw std::bad_alloc();
+            }
+            return h;
+        }
+
+        /**
+         * @brief Construct an object if a slot is free.
+         * @param args Constructor arguments.
+         * @return Owning handle, or an empty handle if the pool is full.
+         * @throws Anything T's constructor throws (the slot is returned first).
+         */
+        template <typename... Args>
+        [[nodiscard]] Handle try_acquire(Args&&... args) {
+            if (free_count_ == 0) {
+                return Handle(nullptr, Releaser(this));
+            }
+            const std::size_t index = free_[free_count_ - 1];
+            // Construct before committing the slot: if this throws, the pool is unchanged.
+            T* object = ::new (static_cast<void*>(slots_[index].bytes)) T(std::forward<Args>(args)...);
+            --free_count_;
+            live_[index] = object;
+            return Handle(object, Releaser(this));
+        }
+
+        /** @brief @return Number of live objects. */
+        [[nodiscard]] std::size_t in_use() const noexcept { return Capacity - free_count_; }
+        /** @brief @return Number of free slots. */
+        [[nodiscard]] std::size_t available() const noexcept { return free_count_; }
+        /** @brief @return Total slot count. */
+        [[nodiscard]] static constexpr std::size_t capacity() noexcept { return Capacity; }
+
+        /**
+         * @brief Check whether @p p points at one of this pool's slots.
+         * @param p Pointer to test.
+         * @return True if owned.
+         */
+        [[nodiscard]] bool owns(const T* p) const noexcept {
+            const auto* b = reinterpret_cast<const std::byte*>(p);
+            const auto* first = slots_[0].bytes;
+            const auto* last = slots_[Capacity - 1].bytes + sizeof(Slot);
+            return !std::less<const std::byte*>{}(b, first) && std::less<const std::byte*>{}(b, last);
+        }
+
+    private:
+        struct Slot {
+            alignas(T) std::byte bytes[sizeof(T)];
+        };
+
+        void destroy(T* p) noexcept {
+            // Integer arithmetic: the slots are distinct arrays, so pointer subtraction would be UB.
+            const auto offset = reinterpret_cast<std::uintptr_t>(p) - reinterpret_cast<std::uintptr_t>(&slots_[0]);
+            const auto index = static_cast<std::size_t>(offset) / sizeof(Slot);
+            std::destroy_at(p);
+            live_[index] = nullptr;
+            free_[free_count_++] = index;
+        }
+
+        std::array<Slot, Capacity> slots_{};
+        std::array<T*, Capacity> live_{};
+        std::array<std::size_t, Capacity> free_{};
+        std::size_t free_count_ = Capacity;
     };
+
+    /**
+     * @brief Showcase: fixed-size pools, node allocators, size classes and object pools.
+     * @param out Stream receiving the narration.
+     */
+    void demonstrateMemoryPools(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Memory
 
-#endif // MEMORY_POOLS_HPP
+#endif // CPPVERSEHUB_MEMORY_MEMORY_POOLS_HPP

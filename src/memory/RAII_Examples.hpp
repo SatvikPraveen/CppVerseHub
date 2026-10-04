@@ -1,622 +1,800 @@
 /**
  * @file RAII_Examples.hpp
- * @brief Comprehensive RAII (Resource Acquisition Is Initialization) examples
- * @details File location: src/memory/RAII_Examples.hpp
- * 
- * This file demonstrates various RAII patterns including file handling,
- * memory management, locks, network connections, and custom RAII wrappers.
+ * @brief Resource Acquisition Is Initialisation: ownership wrappers and scope guards.
+ *
+ * Demonstrates how C++ ties resource lifetime to object lifetime:
+ *  - UniqueHandle<Traits>: a generic move-only owner for C-style handles (file descriptors,
+ *    OS handles), illustrated with an in-process mock handle table.
+ *  - FileRAII: rule-of-zero file wrapper built on `std::unique_ptr<FILE, Closer>`.
+ *  - TimerRAII: scoped timing that reports through a callback on destruction.
+ *  - ScopedLock<Mutex>: a lock_guard/unique_lock style lock owner.
+ *  - ScopeGuard / ScopeFail / ScopeSuccess: run cleanup on scope exit, on exception only,
+ *    or on normal exit only (`std::uncaught_exceptions`).
+ *  - ResourcePool<R>: leases pooled resources that automatically return on destruction.
+ *  - NetworkConnection: a mock connection showing acquisition-in-constructor and that a
+ *    throwing constructor leaks nothing.
+ *  - RAIIUtils::ArrayRAII<T>: a hand-written rule-of-five container with the strong
+ *    exception guarantee (copy-and-swap) built on uninitialised-memory algorithms.
+ *
+ * Why: RAII makes cleanup deterministic and exception safe without try/finally.
  */
 
-#ifndef RAII_EXAMPLES_HPP
-#define RAII_EXAMPLES_HPP
+#ifndef CPPVERSEHUB_MEMORY_RAII_EXAMPLES_HPP
+#define CPPVERSEHUB_MEMORY_RAII_EXAMPLES_HPP
 
-#include <memory>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-#include <mutex>
+#include <atomic>
 #include <chrono>
-#include <thread>
-#include <functional>
-#include <exception>
+#include <concepts>
+#include <cstddef>
 #include <cstdio>
-#include <cassert>
+#include <exception>
+#include <filesystem>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Memory {
 
     /**
-     * @class FileRAII
-     * @brief RAII wrapper for C-style FILE* handles
+     * @brief Requirements for UniqueHandle traits.
      */
-    class FileRAII {
+    template <typename Traits>
+    concept HandleTraits = requires(typename Traits::handle_type h) {
+        typename Traits::handle_type;
+        { Traits::invalid() } noexcept -> std::same_as<typename Traits::handle_type>;
+        { Traits::close(h) } noexcept;
+    };
+
+    /**
+     * @class UniqueHandle
+     * @brief Generic move-only owner of a C-style handle.
+     * @tparam Traits Provides handle_type, invalid() and close().
+     */
+    template <HandleTraits Traits>
+    class UniqueHandle {
     public:
-        explicit FileRAII(const std::string& filename, const std::string& mode)
-            : file_(std::fopen(filename.c_str(), mode.c_str())), filename_(filename) {
-            if (!file_) {
-                throw std::runtime_error("Failed to open file: " + filename);
-            }
-            std::cout << "FileRAII: Opened file '" << filename_ << "'\n";
-        }
+        using handle_type = typename Traits::handle_type;
 
-        ~FileRAII() {
-            if (file_) {
-                std::fclose(file_);
-                std::cout << "FileRAII: Closed file '" << filename_ << "'\n";
-            }
-        }
+        /** @brief Construct an empty (invalid) handle. */
+        UniqueHandle() noexcept = default;
 
-        // Non-copyable
-        FileRAII(const FileRAII&) = delete;
-        FileRAII& operator=(const FileRAII&) = delete;
+        /**
+         * @brief Adopt ownership of @p h.
+         * @param h Handle to own.
+         */
+        explicit UniqueHandle(handle_type h) noexcept : handle_(h) {}
 
-        // Movable
-        FileRAII(FileRAII&& other) noexcept
-            : file_(other.file_), filename_(std::move(other.filename_)) {
-            other.file_ = nullptr;
-        }
+        UniqueHandle(const UniqueHandle&) = delete;
+        UniqueHandle& operator=(const UniqueHandle&) = delete;
 
-        FileRAII& operator=(FileRAII&& other) noexcept {
+        /**
+         * @brief Transfer ownership from @p other.
+         * @param other Source, left invalid.
+         */
+        UniqueHandle(UniqueHandle&& other) noexcept : handle_(other.release()) {}
+
+        /**
+         * @brief Close the current handle and take ownership of @p other's.
+         * @param other Source, left invalid.
+         * @return *this.
+         */
+        UniqueHandle& operator=(UniqueHandle&& other) noexcept {
             if (this != &other) {
-                if (file_) {
-                    std::fclose(file_);
-                }
-                file_ = other.file_;
-                filename_ = std::move(other.filename_);
-                other.file_ = nullptr;
+                reset(other.release());
             }
             return *this;
         }
 
-        // Access the underlying FILE*
-        FILE* get() const { return file_; }
-        
-        // Convenience methods
-        bool write(const std::string& data) {
-            return file_ && std::fwrite(data.c_str(), 1, data.size(), file_) == data.size();
-        }
+        /** @brief Close the owned handle, if any. */
+        ~UniqueHandle() { reset(); }
 
-        std::string read_all() {
-            if (!file_) return "";
-            
-            std::fseek(file_, 0, SEEK_END);
-            long size = std::ftell(file_);
-            std::fseek(file_, 0, SEEK_SET);
-            
-            std::string content(size, '\0');
-            std::fread(&content[0], 1, size, file_);
-            return content;
-        }
+        /** @brief @return The raw handle (ownership retained). */
+        [[nodiscard]] handle_type get() const noexcept { return handle_; }
+        /** @brief @return True if a valid handle is owned. */
+        [[nodiscard]] bool valid() const noexcept { return handle_ != Traits::invalid(); }
+        /** @brief @return valid(). */
+        explicit operator bool() const noexcept { return valid(); }
 
-        void flush() {
-            if (file_) std::fflush(file_);
+        /**
+         * @brief Give up ownership without closing.
+         * @return The previously owned handle.
+         */
+        [[nodiscard]] handle_type release() noexcept { return std::exchange(handle_, Traits::invalid()); }
+
+        /**
+         * @brief Close the current handle and own @p h instead.
+         * @param h New handle (defaults to invalid).
+         */
+        void reset(handle_type h = Traits::invalid()) noexcept {
+            const handle_type old = std::exchange(handle_, h);
+            if (old != Traits::invalid()) {
+                Traits::close(old);
+            }
         }
 
     private:
-        FILE* file_;
-        std::string filename_;
+        handle_type handle_ = Traits::invalid();
+    };
+
+    /**
+     * @brief Mock "operating system" handle table used to demonstrate UniqueHandle portably.
+     */
+    struct MockOsHandleTraits {
+        using handle_type = int;
+
+        /** @brief @return Sentinel for "no handle". */
+        static constexpr int invalid() noexcept { return -1; }
+
+        /**
+         * @brief Open a new mock handle.
+         * @return Fresh handle id (>= 0).
+         */
+        [[nodiscard]] static int open() noexcept {
+            open_count_.fetch_add(1, std::memory_order_relaxed);
+            return next_id_.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        /**
+         * @brief Close a mock handle.
+         * @param h Handle to close.
+         */
+        static void close(int h) noexcept {
+            if (h >= 0) {
+                open_count_.fetch_sub(1, std::memory_order_relaxed);
+            }
+        }
+
+        /** @brief @return Number of handles currently open. */
+        [[nodiscard]] static int open_count() noexcept { return open_count_.load(); }
+
+    private:
+        inline static std::atomic<int> next_id_{0};
+        inline static std::atomic<int> open_count_{0};
+    };
+
+    /** @brief UniqueHandle over the mock handle table. */
+    using MockOsHandle = UniqueHandle<MockOsHandleTraits>;
+
+    /**
+     * @class FileRAII
+     * @brief Rule-of-zero file wrapper: `std::unique_ptr<FILE, Closer>` does all the work.
+     */
+    class FileRAII {
+    public:
+        /**
+         * @brief Open @p path with a C `fopen` mode string.
+         * @param path File to open.
+         * @param mode Mode such as "w", "r", "a+", "wb".
+         * @throws std::runtime_error if the file cannot be opened.
+         */
+        FileRAII(const std::filesystem::path& path, const char* mode);
+
+        /**
+         * @brief Write @p data.
+         * @param data Bytes to write.
+         * @return True if all bytes were written.
+         */
+        bool write(std::string_view data);
+
+        /**
+         * @brief Read the whole file from the beginning.
+         * @return File contents.
+         * @throws std::runtime_error if the file is closed or a read fails.
+         */
+        [[nodiscard]] std::string read_all();
+
+        /** @brief Flush buffered output. @return True on success. */
+        bool flush() noexcept;
+
+        /** @brief Close early. @return True if the close succeeded (or already closed). */
+        bool close() noexcept;
+
+        /** @brief @return True while the file is open. */
+        [[nodiscard]] bool is_open() const noexcept { return file_ != nullptr; }
+        /** @brief @return Path the file was opened with. */
+        [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
+
+    private:
+        struct Closer {
+            void operator()(std::FILE* f) const noexcept { static_cast<void>(std::fclose(f)); }
+        };
+
+        std::unique_ptr<std::FILE, Closer> file_;
+        std::filesystem::path path_;
     };
 
     /**
      * @class TimerRAII
-     * @brief RAII timer for measuring execution time
+     * @brief Measures the lifetime of a scope and reports it through a callback.
      */
     class TimerRAII {
     public:
-        explicit TimerRAII(const std::string& operation_name)
-            : operation_name_(operation_name), start_time_(std::chrono::high_resolution_clock::now()) {
-            std::cout << "TimerRAII: Starting timer for '" << operation_name_ << "'\n";
-        }
+        using Clock = std::chrono::steady_clock;
+        using Callback = std::function<void(std::chrono::nanoseconds)>;
 
+        /**
+         * @brief Start timing.
+         * @param on_stop Invoked with the elapsed time on destruction (may be empty).
+         */
+        explicit TimerRAII(Callback on_stop = {}) : on_stop_(std::move(on_stop)), start_(Clock::now()) {}
+
+        TimerRAII(const TimerRAII&) = delete;
+        TimerRAII& operator=(const TimerRAII&) = delete;
+        TimerRAII(TimerRAII&&) = delete;
+        TimerRAII& operator=(TimerRAII&&) = delete;
+
+        /** @brief Stop timing and report; callback exceptions are swallowed. */
         ~TimerRAII() {
-            auto end_time = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time_);
-            std::cout << "TimerRAII: '" << operation_name_ << "' completed in " 
-                      << duration.count() << " microseconds\n";
+            if (on_stop_) {
+                try {
+                    on_stop_(elapsed());
+                } catch (...) { // destructors must not throw
+                }
+            }
         }
 
-        // Get elapsed time without destroying the timer
-        std::chrono::microseconds elapsed() const {
-            auto current_time = std::chrono::high_resolution_clock::now();
-            return std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time_);
+        /** @brief @return Time since construction. */
+        [[nodiscard]] std::chrono::nanoseconds elapsed() const noexcept {
+            return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start_);
         }
 
     private:
-        std::string operation_name_;
-        std::chrono::high_resolution_clock::time_point start_time_;
+        Callback on_stop_;
+        Clock::time_point start_;
+    };
+
+    /**
+     * @brief Types with lock() / unlock().
+     */
+    template <typename M>
+    concept BasicLockable = requires(M m) {
+        m.lock();
+        m.unlock();
     };
 
     /**
      * @class ScopedLock
-     * @brief Custom RAII lock implementation
+     * @brief Owns a lock on a mutex for the lifetime of the object (with early unlock).
+     * @tparam Mutex Any BasicLockable type.
      */
-    template<typename Mutex>
+    template <BasicLockable Mutex>
     class ScopedLock {
     public:
-        explicit ScopedLock(Mutex& mutex) : mutex_(mutex), locked_(false) {
-            lock();
-        }
+        /**
+         * @brief Lock @p mutex.
+         * @param mutex Mutex to lock; must outlive this object.
+         */
+        explicit ScopedLock(Mutex& mutex) : mutex_(mutex) { lock(); }
 
-        ~ScopedLock() {
-            if (locked_) {
-                unlock();
-            }
-        }
-
-        // Non-copyable, non-movable for safety
         ScopedLock(const ScopedLock&) = delete;
         ScopedLock& operator=(const ScopedLock&) = delete;
         ScopedLock(ScopedLock&&) = delete;
         ScopedLock& operator=(ScopedLock&&) = delete;
 
-        void lock() {
-            if (!locked_) {
-                mutex_.lock();
-                locked_ = true;
-                std::cout << "ScopedLock: Mutex locked\n";
-            }
-        }
-
-        void unlock() {
-            if (locked_) {
+        /** @brief Unlock if still owned. */
+        ~ScopedLock() {
+            if (owns_) {
                 mutex_.unlock();
-                locked_ = false;
-                std::cout << "ScopedLock: Mutex unlocked\n";
             }
         }
 
-        bool is_locked() const { return locked_; }
+        /** @brief Re-acquire after unlock() (no-op if already owned). */
+        void lock() {
+            if (!owns_) {
+                mutex_.lock();
+                owns_ = true;
+            }
+        }
+
+        /** @brief Release early (no-op if not owned). */
+        void unlock() {
+            if (owns_) {
+                mutex_.unlock();
+                owns_ = false;
+            }
+        }
+
+        /** @brief @return True while the lock is held. */
+        [[nodiscard]] bool owns_lock() const noexcept { return owns_; }
 
     private:
         Mutex& mutex_;
-        bool locked_;
+        bool owns_ = false;
     };
 
     /**
-     * @class ResourcePool
-     * @brief RAII-managed resource pool
+     * @brief When a scope guard fires.
      */
-    template<typename Resource>
-    class ResourcePool {
-    private:
-        struct PooledResource {
-            std::unique_ptr<Resource> resource;
-            bool in_use = false;
-        };
+    enum class GuardPolicy {
+        Always,    ///< On every scope exit.
+        OnFailure, ///< Only when leaving the scope because of an exception.
+        OnSuccess  ///< Only when leaving the scope normally.
+    };
+
+    /**
+     * @class BasicScopeGuard
+     * @brief Runs a callable when the scope is left, subject to a policy.
+     *
+     * The callable must not throw (destructors are noexcept). Moved-from or dismissed
+     * guards do nothing.
+     *
+     * @tparam F Nullary callable.
+     * @tparam Policy When to fire.
+     */
+    template <typename F, GuardPolicy Policy>
+    class BasicScopeGuard {
+        static_assert(std::is_nothrow_move_constructible_v<F>, "guard callable must be nothrow movable");
 
     public:
-        explicit ResourcePool(size_t initial_size = 10) {
-            pool_.reserve(initial_size);
-            for (size_t i = 0; i < initial_size; ++i) {
-                pool_.push_back({std::make_unique<Resource>(), false});
+        /**
+         * @brief Arm the guard.
+         * @param f Cleanup action.
+         */
+        explicit BasicScopeGuard(F f) noexcept
+            : cleanup_(std::move(f)), exceptions_on_entry_(std::uncaught_exceptions()) {}
+
+        /**
+         * @brief Move the responsibility from @p other.
+         * @param other Source guard, dismissed afterwards.
+         */
+        BasicScopeGuard(BasicScopeGuard&& other) noexcept
+            : cleanup_(std::move(other.cleanup_)),
+              exceptions_on_entry_(other.exceptions_on_entry_),
+              active_(std::exchange(other.active_, false)) {}
+
+        BasicScopeGuard(const BasicScopeGuard&) = delete;
+        BasicScopeGuard& operator=(const BasicScopeGuard&) = delete;
+        BasicScopeGuard& operator=(BasicScopeGuard&&) = delete;
+
+        /** @brief Fire according to the policy. */
+        ~BasicScopeGuard() {
+            if (!active_) {
+                return;
             }
-            std::cout << "ResourcePool: Created with " << initial_size << " resources\n";
-        }
-
-        ~ResourcePool() {
-            std::cout << "ResourcePool: Destroying pool with " << pool_.size() << " resources\n";
-        }
-
-        class ResourceHandle {
-        public:
-            ResourceHandle(ResourcePool& pool, size_t index)
-                : pool_(pool), index_(index) {}
-
-            ~ResourceHandle() {
-                if (index_ != SIZE_MAX) {
-                    pool_.return_resource(index_);
+            const bool unwinding = std::uncaught_exceptions() > exceptions_on_entry_;
+            if constexpr (Policy == GuardPolicy::Always) {
+                cleanup_();
+            } else if constexpr (Policy == GuardPolicy::OnFailure) {
+                if (unwinding) {
+                    cleanup_();
+                }
+            } else {
+                if (!unwinding) {
+                    cleanup_();
                 }
             }
+        }
 
-            // Non-copyable but movable
-            ResourceHandle(const ResourceHandle&) = delete;
-            ResourceHandle& operator=(const ResourceHandle&) = delete;
+        /** @brief Disarm (e.g. after a transaction commits). */
+        void dismiss() noexcept { active_ = false; }
+        /** @brief @return True if the guard is still armed. */
+        [[nodiscard]] bool active() const noexcept { return active_; }
 
-            ResourceHandle(ResourceHandle&& other) noexcept
-                : pool_(other.pool_), index_(other.index_) {
-                other.index_ = SIZE_MAX;
-            }
+    private:
+        F cleanup_;
+        int exceptions_on_entry_;
+        bool active_ = true;
+    };
 
-            ResourceHandle& operator=(ResourceHandle&& other) noexcept {
+    /** @brief Guard that always runs. */
+    template <typename F>
+    using ScopeGuard = BasicScopeGuard<F, GuardPolicy::Always>;
+    /** @brief Guard that runs only during exception unwinding. */
+    template <typename F>
+    using ScopeFail = BasicScopeGuard<F, GuardPolicy::OnFailure>;
+    /** @brief Guard that runs only on normal scope exit. */
+    template <typename F>
+    using ScopeSuccess = BasicScopeGuard<F, GuardPolicy::OnSuccess>;
+
+    /**
+     * @brief Create a ScopeGuard.
+     * @param f Cleanup action.
+     * @return Armed guard.
+     */
+    template <typename F>
+    [[nodiscard]] ScopeGuard<std::decay_t<F>> make_scope_guard(F&& f) {
+        return ScopeGuard<std::decay_t<F>>(std::forward<F>(f));
+    }
+
+    /**
+     * @brief Create a ScopeFail guard.
+     * @param f Rollback action.
+     * @return Armed guard.
+     */
+    template <typename F>
+    [[nodiscard]] ScopeFail<std::decay_t<F>> make_scope_fail(F&& f) {
+        return ScopeFail<std::decay_t<F>>(std::forward<F>(f));
+    }
+
+    /**
+     * @brief Create a ScopeSuccess guard.
+     * @param f Commit action.
+     * @return Armed guard.
+     */
+    template <typename F>
+    [[nodiscard]] ScopeSuccess<std::decay_t<F>> make_scope_success(F&& f) {
+        return ScopeSuccess<std::decay_t<F>>(std::forward<F>(f));
+    }
+
+    /**
+     * @class ResourcePool
+     * @brief Thread-safe pool of reusable resources leased through RAII handles.
+     * @tparam Resource Pooled type.
+     */
+    template <typename Resource>
+    class ResourcePool {
+    public:
+        using Factory = std::function<std::unique_ptr<Resource>()>;
+
+        /**
+         * @class Lease
+         * @brief Move-only handle; returns the resource to the pool on destruction.
+         */
+        class Lease {
+        public:
+            Lease(const Lease&) = delete;
+            Lease& operator=(const Lease&) = delete;
+
+            /**
+             * @brief Transfer the lease.
+             * @param other Source, left empty.
+             */
+            Lease(Lease&& other) noexcept
+                : pool_(std::exchange(other.pool_, nullptr)), resource_(std::move(other.resource_)) {}
+
+            /**
+             * @brief Return the current resource and take over @p other's.
+             * @param other Source, left empty.
+             * @return *this.
+             */
+            Lease& operator=(Lease&& other) noexcept {
                 if (this != &other) {
-                    if (index_ != SIZE_MAX) {
-                        pool_.return_resource(index_);
-                    }
-                    index_ = other.index_;
-                    other.index_ = SIZE_MAX;
+                    give_back();
+                    pool_ = std::exchange(other.pool_, nullptr);
+                    resource_ = std::move(other.resource_);
                 }
                 return *this;
             }
 
-            Resource* operator->() const {
-                return index_ != SIZE_MAX ? pool_.pool_[index_].resource.get() : nullptr;
-            }
+            /** @brief Return the resource to the pool. */
+            ~Lease() { give_back(); }
 
-            Resource& operator*() const {
-                assert(index_ != SIZE_MAX);
-                return *pool_.pool_[index_].resource;
-            }
-
-            bool is_valid() const { return index_ != SIZE_MAX; }
+            /** @brief @return The leased resource. */
+            [[nodiscard]] Resource& operator*() const noexcept { return *resource_; }
+            /** @brief @return Pointer to the leased resource. */
+            [[nodiscard]] Resource* operator->() const noexcept { return resource_.get(); }
+            /** @brief @return True if this lease holds a resource. */
+            explicit operator bool() const noexcept { return resource_ != nullptr; }
 
         private:
-            ResourcePool& pool_;
-            size_t index_;
-        };
+            friend class ResourcePool;
+            Lease(ResourcePool* pool, std::unique_ptr<Resource> r) noexcept : pool_(pool), resource_(std::move(r)) {}
 
-        ResourceHandle acquire() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            
-            for (size_t i = 0; i < pool_.size(); ++i) {
-                if (!pool_[i].in_use) {
-                    pool_[i].in_use = true;
-                    std::cout << "ResourcePool: Acquired resource " << i << "\n";
-                    return ResourceHandle(*this, i);
+            void give_back() noexcept {
+                if (pool_ != nullptr && resource_) {
+                    pool_->give_back(std::move(resource_));
                 }
+                pool_ = nullptr;
             }
 
-            // No available resource, create a new one
-            pool_.push_back({std::make_unique<Resource>(), true});
-            size_t index = pool_.size() - 1;
-            std::cout << "ResourcePool: Created and acquired new resource " << index << "\n";
-            return ResourceHandle(*this, index);
+            ResourcePool* pool_;
+            std::unique_ptr<Resource> resource_;
+        };
+
+        /**
+         * @brief Create a pool with @p initial_size pre-built resources.
+         * @param initial_size Resources created eagerly.
+         * @param factory Creates new resources (default: std::make_unique<Resource>()).
+         */
+        explicit ResourcePool(std::size_t initial_size = 0, Factory factory = {})
+            : factory_(factory ? std::move(factory) : Factory([] { return std::make_unique<Resource>(); })) {
+            idle_.reserve(initial_size);
+            for (std::size_t i = 0; i < initial_size; ++i) {
+                idle_.push_back(factory_());
+            }
+            created_ = initial_size;
         }
 
-        size_t size() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return pool_.size();
+        ResourcePool(const ResourcePool&) = delete;
+        ResourcePool& operator=(const ResourcePool&) = delete;
+        ResourcePool(ResourcePool&&) = delete;
+        ResourcePool& operator=(ResourcePool&&) = delete;
+        ~ResourcePool() = default;
+
+        /**
+         * @brief Lease an idle resource, creating one if none is idle.
+         * @return Lease that returns the resource on destruction (must not outlive the pool).
+         */
+        [[nodiscard]] Lease acquire() {
+            std::unique_lock lock(mutex_);
+            if (!idle_.empty()) {
+                std::unique_ptr<Resource> r = std::move(idle_.back());
+                idle_.pop_back();
+                ++leased_;
+                return Lease(this, std::move(r));
+            }
+            lock.unlock(); // do not hold the lock while running user code
+            std::unique_ptr<Resource> r = factory_();
+            lock.lock();
+            ++created_;
+            ++leased_;
+            return Lease(this, std::move(r));
         }
 
-        size_t available_count() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return std::count_if(pool_.begin(), pool_.end(), 
-                                [](const PooledResource& pr) { return !pr.in_use; });
+        /** @brief @return Idle resources. */
+        [[nodiscard]] std::size_t idle_count() const {
+            const std::lock_guard lock(mutex_);
+            return idle_.size();
+        }
+        /** @brief @return Resources currently leased. */
+        [[nodiscard]] std::size_t leased_count() const {
+            const std::lock_guard lock(mutex_);
+            return leased_;
+        }
+        /** @brief @return Resources ever created. */
+        [[nodiscard]] std::size_t created_count() const {
+            const std::lock_guard lock(mutex_);
+            return created_;
         }
 
     private:
-        void return_resource(size_t index) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (index < pool_.size()) {
-                pool_[index].in_use = false;
-                std::cout << "ResourcePool: Returned resource " << index << "\n";
+        void give_back(std::unique_ptr<Resource> r) noexcept {
+            const std::lock_guard lock(mutex_);
+            --leased_;
+            try {
+                idle_.push_back(std::move(r));
+            } catch (...) { // out of memory: the resource is destroyed instead of pooled
             }
         }
 
-        std::vector<PooledResource> pool_;
         mutable std::mutex mutex_;
-        
-        friend class ResourceHandle;
+        Factory factory_;
+        std::vector<std::unique_ptr<Resource>> idle_;
+        std::size_t leased_ = 0;
+        std::size_t created_ = 0;
     };
 
     /**
      * @class NetworkConnection
-     * @brief Mock network connection for RAII demonstration
+     * @brief Mock connection: "connects" in the constructor and "disconnects" in the destructor.
      */
     class NetworkConnection {
     public:
-        explicit NetworkConnection(const std::string& address, int port)
-            : address_(address), port_(port), connected_(false) {
-            connect();
-        }
+        /**
+         * @brief Connect to @p address.
+         * @param address "host:port"; must contain a ':'.
+         * @throws std::invalid_argument if the address is malformed (nothing is acquired).
+         */
+        explicit NetworkConnection(std::string address);
 
-        ~NetworkConnection() {
-            disconnect();
-        }
-
-        // Non-copyable but movable
         NetworkConnection(const NetworkConnection&) = delete;
         NetworkConnection& operator=(const NetworkConnection&) = delete;
 
-        NetworkConnection(NetworkConnection&& other) noexcept
-            : address_(std::move(other.address_)), port_(other.port_), connected_(other.connected_) {
-            other.connected_ = false;
-        }
+        /**
+         * @brief Take over @p other's connection.
+         * @param other Source, left disconnected.
+         */
+        NetworkConnection(NetworkConnection&& other) noexcept;
 
-        NetworkConnection& operator=(NetworkConnection&& other) noexcept {
-            if (this != &other) {
-                disconnect();
-                address_ = std::move(other.address_);
-                port_ = other.port_;
-                connected_ = other.connected_;
-                other.connected_ = false;
-            }
-            return *this;
-        }
+        /**
+         * @brief Disconnect, then take over @p other's connection.
+         * @param other Source, left disconnected.
+         * @return *this.
+         */
+        NetworkConnection& operator=(NetworkConnection&& other) noexcept;
 
-        bool send_data(const std::string& data) {
-            if (!connected_) return false;
-            
-            std::cout << "NetworkConnection: Sending " << data.size() 
-                      << " bytes to " << address_ << ":" << port_ << "\n";
-            return true;
-        }
+        /** @brief Disconnect if connected. */
+        ~NetworkConnection();
 
-        std::string receive_data() {
-            if (!connected_) return "";
-            
-            std::cout << "NetworkConnection: Receiving data from " 
-                      << address_ << ":" << port_ << "\n";
-            return "Mock received data";
-        }
+        /**
+         * @brief Send a message.
+         * @param message Payload.
+         * @return Bytes "sent".
+         * @throws std::logic_error if not connected.
+         */
+        std::size_t send(std::string_view message);
 
-        bool is_connected() const { return connected_; }
+        /** @brief Disconnect early. */
+        void disconnect() noexcept;
+
+        /** @brief @return True while connected. */
+        [[nodiscard]] bool connected() const noexcept { return connected_; }
+        /** @brief @return Remote address. */
+        [[nodiscard]] const std::string& address() const noexcept { return address_; }
+        /** @brief @return Bytes sent over this connection. */
+        [[nodiscard]] std::size_t bytes_sent() const noexcept { return bytes_sent_; }
+        /** @brief @return Connections currently open process-wide. */
+        [[nodiscard]] static int active_connections() noexcept { return active_.load(); }
 
     private:
-        void connect() {
-            std::cout << "NetworkConnection: Connecting to " 
-                      << address_ << ":" << port_ << "\n";
-            // Simulate connection time
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            connected_ = true;
-            std::cout << "NetworkConnection: Connected successfully\n";
-        }
-
-        void disconnect() {
-            if (connected_) {
-                std::cout << "NetworkConnection: Disconnecting from " 
-                          << address_ << ":" << port_ << "\n";
-                connected_ = false;
-            }
-        }
-
         std::string address_;
-        int port_;
-        bool connected_;
+        std::size_t bytes_sent_ = 0;
+        bool connected_ = false;
+        inline static std::atomic<int> active_{0};
     };
 
     /**
-     * @class ScopeGuard
-     * @brief Generic RAII scope guard for arbitrary cleanup actions
-     */
-    template<typename F>
-    class ScopeGuard {
-    public:
-        explicit ScopeGuard(F&& cleanup_function)
-            : cleanup_(std::forward<F>(cleanup_function)), active_(true) {}
-
-        ~ScopeGuard() {
-            if (active_) {
-                try {
-                    cleanup_();
-                } catch (...) {
-                    // Destructors should not throw
-                    std::cout << "ScopeGuard: Exception in cleanup function\n";
-                }
-            }
-        }
-
-        // Non-copyable but movable
-        ScopeGuard(const ScopeGuard&) = delete;
-        ScopeGuard& operator=(const ScopeGuard&) = delete;
-
-        ScopeGuard(ScopeGuard&& other) noexcept
-            : cleanup_(std::move(other.cleanup_)), active_(other.active_) {
-            other.active_ = false;
-        }
-
-        ScopeGuard& operator=(ScopeGuard&& other) noexcept {
-            if (this != &other) {
-                if (active_) {
-                    cleanup_();
-                }
-                cleanup_ = std::move(other.cleanup_);
-                active_ = other.active_;
-                other.active_ = false;
-            }
-            return *this;
-        }
-
-        void dismiss() {
-            active_ = false;
-        }
-
-        bool is_active() const { return active_; }
-
-    private:
-        F cleanup_;
-        bool active_;
-    };
-
-    /**
-     * @brief Helper function to create scope guards
-     */
-    template<typename F>
-    ScopeGuard<F> make_scope_guard(F&& cleanup_function) {
-        return ScopeGuard<F>(std::forward<F>(cleanup_function));
-    }
-
-    /**
-     * @class MemoryMapper
-     * @brief RAII wrapper for memory-mapped files (mock implementation)
-     */
-    class MemoryMapper {
-    public:
-        explicit MemoryMapper(const std::string& filename, size_t size)
-            : filename_(filename), size_(size), mapped_memory_(nullptr) {
-            // Mock memory mapping
-            mapped_memory_ = new char[size_];
-            std::cout << "MemoryMapper: Mapped " << size_ 
-                      << " bytes from file '" << filename_ << "'\n";
-        }
-
-        ~MemoryMapper() {
-            if (mapped_memory_) {
-                delete[] mapped_memory_;
-                std::cout << "MemoryMapper: Unmapped memory for file '" 
-                          << filename_ << "'\n";
-            }
-        }
-
-        // Non-copyable but movable
-        MemoryMapper(const MemoryMapper&) = delete;
-        MemoryMapper& operator=(const MemoryMapper&) = delete;
-
-        MemoryMapper(MemoryMapper&& other) noexcept
-            : filename_(std::move(other.filename_)), size_(other.size_), 
-              mapped_memory_(other.mapped_memory_) {
-            other.mapped_memory_ = nullptr;
-            other.size_ = 0;
-        }
-
-        MemoryMapper& operator=(MemoryMapper&& other) noexcept {
-            if (this != &other) {
-                if (mapped_memory_) {
-                    delete[] mapped_memory_;
-                }
-                filename_ = std::move(other.filename_);
-                size_ = other.size_;
-                mapped_memory_ = other.mapped_memory_;
-                other.mapped_memory_ = nullptr;
-                other.size_ = 0;
-            }
-            return *this;
-        }
-
-        char* data() const { return mapped_memory_; }
-        size_t size() const { return size_; }
-
-        void sync() {
-            if (mapped_memory_) {
-                std::cout << "MemoryMapper: Synchronizing mapped memory to disk\n";
-            }
-        }
-
-    private:
-        std::string filename_;
-        size_t size_;
-        char* mapped_memory_;
-    };
-
-    /**
-     * @class RAIIDemo
-     * @brief Comprehensive demonstration of RAII patterns
-     */
-    class RAIIDemo {
-    public:
-        RAIIDemo() = default;
-
-        void demonstrateFileRAII();
-        void demonstrateTimerRAII();
-        void demonstrateScopedLock();
-        void demonstrateResourcePool();
-        void demonstrateNetworkConnection();
-        void demonstrateScopeGuard();
-        void demonstrateMemoryMapper();
-        void demonstrateExceptionSafety();
-        void demonstrateNestedRAII();
-        void demonstrateRAIIWithSmartPointers();
-
-        void runAllDemonstrations();
-
-    private:
-        // Test resource for pool demonstration
-        class TestResource {
-        public:
-            TestResource() : id_(++counter_) {
-                std::cout << "TestResource " << id_ << " created\n";
-            }
-            
-            ~TestResource() {
-                std::cout << "TestResource " << id_ << " destroyed\n";
-            }
-            
-            void do_work() {
-                std::cout << "TestResource " << id_ << " is working\n";
-            }
-            
-            int get_id() const { return id_; }
-            
-        private:
-            int id_;
-            static int counter_;
-        };
-
-        mutable std::mutex demo_mutex_;
-    };
-
-    /**
-     * @brief Utility functions for RAII
+     * @brief Utilities built on RAII.
      */
     namespace RAIIUtils {
-        
-        /**
-         * @brief Create a temporary file with RAII cleanup
-         */
-        std::unique_ptr<FileRAII> create_temp_file(const std::string& content = "");
 
         /**
-         * @brief Measure execution time of any callable
+         * @brief Run @p func while timing it.
+         * @param elapsed Receives the duration.
+         * @param func Callable to run.
+         * @return Whatever @p func returns.
          */
-        template<typename F>
-        auto measure_execution(F&& func, const std::string& operation_name = "operation") {
-            TimerRAII timer(operation_name);
-            return func();
+        template <typename F>
+        decltype(auto) measure(std::chrono::nanoseconds& elapsed, F&& func) {
+            const TimerRAII timer([&elapsed](std::chrono::nanoseconds d) { elapsed = d; });
+            return std::forward<F>(func)();
         }
 
         /**
-         * @brief Create a scoped cleanup action
+         * @class ArrayRAII
+         * @brief Fixed-size heap array with full rule-of-five and strong exception guarantee.
+         * @tparam T Element type.
          */
-        template<typename F>
-        auto on_scope_exit(F&& cleanup) {
-            return make_scope_guard(std::forward<F>(cleanup));
-        }
-
-        /**
-         * @brief RAII wrapper for C-style arrays
-         */
-        template<typename T>
+        template <typename T>
         class ArrayRAII {
         public:
-            explicit ArrayRAII(size_t count) : array_(new T[count]), size_(count) {
-                std::cout << "ArrayRAII: Allocated array of " << count 
-                          << " elements of type " << typeid(T).name() << "\n";
+            using value_type = T;
+            using size_type = std::size_t;
+            using iterator = T*;
+            using const_iterator = const T*;
+
+            /** @brief Construct an empty array. */
+            ArrayRAII() noexcept = default;
+
+            /**
+             * @brief Construct @p size copies of @p value.
+             * @param size Element count.
+             * @param value Prototype element.
+             * @throws Anything T's copy constructor or the allocator throws (no leak).
+             */
+            explicit ArrayRAII(size_type size, const T& value = T()) : data_(allocate(size)), size_(size) {
+                try {
+                    std::uninitialized_fill_n(data_, size_, value);
+                } catch (...) {
+                    deallocate(data_, size_);
+                    throw;
+                }
             }
 
-            ~ArrayRAII() {
-                delete[] array_;
-                std::cout << "ArrayRAII: Deallocated array of " << size_ << " elements\n";
+            /**
+             * @brief Deep copy.
+             * @param other Source.
+             * @throws Anything T's copy constructor throws (no leak, source untouched).
+             */
+            ArrayRAII(const ArrayRAII& other) : data_(allocate(other.size_)), size_(other.size_) {
+                try {
+                    std::uninitialized_copy_n(other.data_, other.size_, data_);
+                } catch (...) {
+                    deallocate(data_, size_);
+                    throw;
+                }
             }
 
-            // Non-copyable but movable
-            ArrayRAII(const ArrayRAII&) = delete;
-            ArrayRAII& operator=(const ArrayRAII&) = delete;
-
+            /**
+             * @brief Steal @p other's buffer.
+             * @param other Source, left empty.
+             */
             ArrayRAII(ArrayRAII&& other) noexcept
-                : array_(other.array_), size_(other.size_) {
-                other.array_ = nullptr;
-                other.size_ = 0;
-            }
+                : data_(std::exchange(other.data_, nullptr)), size_(std::exchange(other.size_, 0)) {}
 
-            ArrayRAII& operator=(ArrayRAII&& other) noexcept {
+            /**
+             * @brief Copy-and-swap assignment (strong guarantee).
+             * @param other Source.
+             * @return *this.
+             */
+            ArrayRAII& operator=(const ArrayRAII& other) {
                 if (this != &other) {
-                    delete[] array_;
-                    array_ = other.array_;
-                    size_ = other.size_;
-                    other.array_ = nullptr;
-                    other.size_ = 0;
+                    ArrayRAII copy(other); // may throw; *this unchanged
+                    swap(copy);
                 }
                 return *this;
             }
 
-            T& operator[](size_t index) {
-                assert(index < size_);
-                return array_[index];
+            /**
+             * @brief Move assignment.
+             * @param other Source, left empty.
+             * @return *this.
+             */
+            ArrayRAII& operator=(ArrayRAII&& other) noexcept {
+                if (this != &other) {
+                    ArrayRAII tmp(std::move(other));
+                    swap(tmp);
+                }
+                return *this;
             }
 
-            const T& operator[](size_t index) const {
-                assert(index < size_);
-                return array_[index];
+            /** @brief Destroy elements and free the buffer. */
+            ~ArrayRAII() {
+                std::destroy_n(data_, size_);
+                deallocate(data_, size_);
             }
 
-            T* data() const { return array_; }
-            size_t size() const { return size_; }
+            /**
+             * @brief Swap contents with @p other.
+             * @param other Array to swap with.
+             */
+            void swap(ArrayRAII& other) noexcept {
+                std::swap(data_, other.data_);
+                std::swap(size_, other.size_);
+            }
+
+            /**
+             * @brief Unchecked element access.
+             * @param i Index (< size()).
+             * @return Element reference.
+             */
+            [[nodiscard]] T& operator[](size_type i) noexcept { return data_[i]; }
+            /**
+             * @brief Unchecked element access.
+             * @param i Index (< size()).
+             * @return Element reference.
+             */
+            [[nodiscard]] const T& operator[](size_type i) const noexcept { return data_[i]; }
+
+            /**
+             * @brief Checked element access.
+             * @param i Index.
+             * @return Element reference.
+             * @throws std::out_of_range if @p i >= size().
+             */
+            [[nodiscard]] T& at(size_type i) {
+                if (i >= size_) {
+                    throw std::out_of_range("ArrayRAII::at: index out of range");
+                }
+                return data_[i];
+            }
+
+            /** @brief @return Element count. */
+            [[nodiscard]] size_type size() const noexcept { return size_; }
+            /** @brief @return True if empty. */
+            [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
+            /** @brief @return Pointer to the first element. */
+            [[nodiscard]] T* data() noexcept { return data_; }
+            /** @brief @return Pointer to the first element. */
+            [[nodiscard]] const T* data() const noexcept { return data_; }
+            /** @brief @return Begin iterator. */
+            [[nodiscard]] iterator begin() noexcept { return data_; }
+            /** @brief @return End iterator. */
+            [[nodiscard]] iterator end() noexcept { return data_ + size_; }
+            /** @brief @return Begin iterator. */
+            [[nodiscard]] const_iterator begin() const noexcept { return data_; }
+            /** @brief @return End iterator. */
+            [[nodiscard]] const_iterator end() const noexcept { return data_ + size_; }
 
         private:
-            T* array_;
-            size_t size_;
+            [[nodiscard]] static T* allocate(size_type n) {
+                return n == 0 ? nullptr : std::allocator<T>{}.allocate(n);
+            }
+            static void deallocate(T* p, size_type n) noexcept {
+                if (p != nullptr) {
+                    std::allocator<T>{}.deallocate(p, n);
+                }
+            }
+
+            T* data_ = nullptr;
+            size_type size_ = 0;
         };
-    }
+
+    } // namespace RAIIUtils
+
+    /**
+     * @brief Showcase: every RAII wrapper in this header, including exception paths.
+     * @param out Stream receiving the narration.
+     */
+    void demonstrateRAII(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Memory
 
-#endif // RAII_EXAMPLES_HPP
+#endif // CPPVERSEHUB_MEMORY_RAII_EXAMPLES_HPP

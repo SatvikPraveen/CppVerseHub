@@ -1,313 +1,431 @@
 /**
  * @file SmartPointers.hpp
- * @brief Comprehensive demonstration of smart pointer usage in C++
- * @details File location: src/memory/SmartPointers.hpp
- * 
- * This file demonstrates advanced usage of unique_ptr, shared_ptr, and weak_ptr
- * with real-world scenarios in a space simulation context.
+ * @brief Ownership semantics with unique_ptr, shared_ptr and weak_ptr.
+ *
+ * Demonstrates, in a small space-simulation domain:
+ *  - Exclusive ownership and polymorphic deletion (`std::unique_ptr<Resource>`), factories
+ *    returning owning pointers, and custom deleters.
+ *  - Shared ownership (`std::shared_ptr`), the aliasing constructor, and
+ *    `enable_shared_from_this`.
+ *  - Non-owning observation (`std::weak_ptr`): an observer list that tolerates dead
+ *    observers, a cache that does not keep entries alive, and parent links that break
+ *    reference cycles in a tree.
+ *  - The pimpl idiom with `std::unique_ptr<Impl>` and value semantics.
+ *  - Safe ownership-transferring casts (`dynamic_unique_cast`).
+ *
+ * Why: smart pointers encode ownership in the type system, eliminating leaks, double frees
+ * and dangling pointers, while weak_ptr makes non-owning back references safe.
  */
 
-#ifndef SMARTPOINTERS_HPP
-#define SMARTPOINTERS_HPP
+#ifndef CPPVERSEHUB_MEMORY_SMART_POINTERS_HPP
+#define CPPVERSEHUB_MEMORY_SMART_POINTERS_HPP
 
-#include <memory>
-#include <vector>
-#include <string>
-#include <iostream>
+#include <atomic>
+#include <cstddef>
 #include <functional>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <unordered_map>
-#include <chrono>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Memory {
 
     /**
      * @class Resource
-     * @brief Base class demonstrating proper resource management
+     * @brief Polymorphic base class with a process-wide live-instance counter.
      */
     class Resource {
     public:
-        explicit Resource(const std::string& name) : name_(name), id_(++counter_) {
-            std::cout << "Resource '" << name_ << "' (ID: " << id_ << ") created\n";
-        }
-        
-        virtual ~Resource() {
-            std::cout << "Resource '" << name_ << "' (ID: " << id_ << ") destroyed\n";
-        }
-        
-        const std::string& getName() const { return name_; }
-        int getId() const { return id_; }
-        
+        /**
+         * @brief Construct a named resource.
+         * @param name Human-readable name.
+         */
+        explicit Resource(std::string name);
+        Resource(const Resource&) = delete;
+        Resource& operator=(const Resource&) = delete;
+        Resource(Resource&&) = delete;
+        Resource& operator=(Resource&&) = delete;
+        /** @brief Virtual destructor: deletion through Resource* is well defined. */
+        virtual ~Resource();
+
+        /** @brief @return Resource name. */
+        [[nodiscard]] const std::string& name() const noexcept { return name_; }
+        /** @brief @return Unique id assigned at construction. */
+        [[nodiscard]] int id() const noexcept { return id_; }
+        /** @brief @return Short type tag, e.g. "station". */
+        [[nodiscard]] virtual std::string_view kind() const noexcept = 0;
+        /** @brief Advance the resource by one simulation step. */
         virtual void process() = 0;
-        
-    protected:
+        /** @brief @return Number of Resource objects currently alive. */
+        [[nodiscard]] static int live_count() noexcept { return live_.load(); }
+
+    private:
         std::string name_;
         int id_;
-        static int counter_;
+        inline static std::atomic<int> live_{0};
+        inline static std::atomic<int> next_id_{1};
     };
 
     /**
      * @class SpaceStation
-     * @brief Concrete resource representing a space station
+     * @brief Resource with a bounded population.
      */
-    class SpaceStation : public Resource {
+    class SpaceStation final : public Resource {
     public:
-        explicit SpaceStation(const std::string& name, int capacity = 1000)
-            : Resource(name), capacity_(capacity), current_population_(0) {}
-        
-        void process() override {
-            std::cout << "Processing space station '" << name_ 
-                      << "' - Population: " << current_population_ 
-                      << "/" << capacity_ << "\n";
-        }
-        
-        void addInhabitants(int count) {
-            current_population_ = std::min(current_population_ + count, capacity_);
-        }
-        
-        int getCapacity() const { return capacity_; }
-        int getPopulation() const { return current_population_; }
-        
+        /**
+         * @brief Construct a station.
+         * @param name Station name.
+         * @param capacity Maximum population.
+         */
+        SpaceStation(std::string name, int capacity);
+
+        /** @brief @return "station". */
+        [[nodiscard]] std::string_view kind() const noexcept override { return "station"; }
+        /** @brief One step: population grows by one up to capacity. */
+        void process() override;
+
+        /**
+         * @brief Add crew, clamped to capacity.
+         * @param count People arriving (negative values are ignored).
+         * @return Number actually admitted.
+         */
+        int add_population(int count) noexcept;
+
+        /** @brief @return Current population. */
+        [[nodiscard]] int population() const noexcept { return population_; }
+        /** @brief @return Capacity. */
+        [[nodiscard]] int capacity() const noexcept { return capacity_; }
+
     private:
         int capacity_;
-        int current_population_;
-    };
-
-    /**
-     * @class Spacecraft
-     * @brief Resource with observer pattern using weak_ptr
-     */
-    class Spacecraft : public Resource {
-    public:
-        explicit Spacecraft(const std::string& name, double fuel_capacity = 100.0)
-            : Resource(name), fuel_capacity_(fuel_capacity), current_fuel_(fuel_capacity) {}
-        
-        void process() override {
-            std::cout << "Processing spacecraft '" << name_ 
-                      << "' - Fuel: " << current_fuel_ 
-                      << "/" << fuel_capacity_ << "\n";
-            
-            // Notify observers
-            notifyObservers();
-        }
-        
-        void consumeFuel(double amount) {
-            current_fuel_ = std::max(0.0, current_fuel_ - amount);
-        }
-        
-        void refuel(double amount) {
-            current_fuel_ = std::min(fuel_capacity_, current_fuel_ + amount);
-        }
-        
-        double getFuelLevel() const { return current_fuel_; }
-        
-        // Observer pattern with weak_ptr
-        void addObserver(std::weak_ptr<class FuelObserver> observer) {
-            observers_.push_back(observer);
-        }
-        
-    private:
-        double fuel_capacity_;
-        double current_fuel_;
-        std::vector<std::weak_ptr<class FuelObserver>> observers_;
-        
-        void notifyObservers();
+        int population_ = 0;
     };
 
     /**
      * @class FuelObserver
-     * @brief Observer for spacecraft fuel levels
+     * @brief Interface for receivers of low-fuel notifications.
      */
     class FuelObserver {
     public:
-        explicit FuelObserver(const std::string& name) : name_(name) {}
+        FuelObserver() = default;
+        FuelObserver(const FuelObserver&) = default;
+        FuelObserver& operator=(const FuelObserver&) = default;
+        FuelObserver(FuelObserver&&) = default;
+        FuelObserver& operator=(FuelObserver&&) = default;
+        /** @brief Virtual destructor. */
         virtual ~FuelObserver() = default;
-        
-        virtual void onFuelLevelChanged(const std::string& spacecraft_name, double fuel_level) = 0;
-        const std::string& getName() const { return name_; }
-        
+
+        /**
+         * @brief Called when a craft's fuel falls below its threshold.
+         * @param craft Craft name.
+         * @param fuel Remaining fuel.
+         */
+        virtual void on_low_fuel(const std::string& craft, double fuel) = 0;
+    };
+
+    /**
+     * @class Spacecraft
+     * @brief Resource that notifies weakly-held observers about low fuel.
+     */
+    class Spacecraft final : public Resource {
+    public:
+        /**
+         * @brief Construct a craft with a full tank.
+         * @param name Craft name.
+         * @param fuel_capacity Tank size (> 0).
+         * @param low_fuel_ratio Fraction of capacity below which observers are notified.
+         */
+        Spacecraft(std::string name, double fuel_capacity, double low_fuel_ratio = 0.2);
+
+        /** @brief @return "spacecraft". */
+        [[nodiscard]] std::string_view kind() const noexcept override { return "spacecraft"; }
+        /** @brief One step: burn 10% of capacity. */
+        void process() override;
+
+        /**
+         * @brief Burn fuel (clamped at zero) and notify observers if low.
+         * @param amount Fuel to burn.
+         */
+        void consume_fuel(double amount);
+
+        /**
+         * @brief Refuel (clamped at capacity).
+         * @param amount Fuel to add.
+         */
+        void refuel(double amount) noexcept;
+
+        /**
+         * @brief Register an observer without taking ownership.
+         * @param observer Observer; expired observers are pruned automatically.
+         */
+        void add_observer(std::weak_ptr<FuelObserver> observer);
+
+        /** @brief @return Observers that are still alive (prunes expired ones). */
+        std::size_t live_observer_count();
+
+        /** @brief @return Current fuel. */
+        [[nodiscard]] double fuel() const noexcept { return fuel_; }
+        /** @brief @return Tank capacity. */
+        [[nodiscard]] double fuel_capacity() const noexcept { return capacity_; }
+
     private:
-        std::string name_;
+        void notify_if_low();
+
+        double capacity_;
+        double fuel_;
+        double threshold_;
+        std::vector<std::weak_ptr<FuelObserver>> observers_;
     };
 
     /**
      * @class MissionControl
-     * @brief Concrete observer for monitoring spacecraft
+     * @brief FuelObserver that records alerts; uses enable_shared_from_this to self-register.
      */
-    class MissionControl : public FuelObserver {
+    class MissionControl final : public FuelObserver, public std::enable_shared_from_this<MissionControl> {
     public:
-        explicit MissionControl(const std::string& name) : FuelObserver(name) {}
-        
-        void onFuelLevelChanged(const std::string& spacecraft_name, double fuel_level) override {
-            std::cout << "Mission Control '" << getName() << "' notified: " 
-                      << spacecraft_name << " fuel level: " << fuel_level << "\n";
-            
-            if (fuel_level < 20.0) {
-                std::cout << "WARNING: Low fuel alert for " << spacecraft_name << "!\n";
-            }
+        /**
+         * @brief Create a MissionControl (must be owned by shared_ptr for watch()).
+         * @return Shared owner.
+         */
+        [[nodiscard]] static std::shared_ptr<MissionControl> create() {
+            return std::shared_ptr<MissionControl>(new MissionControl());
         }
+
+        /**
+         * @brief Subscribe to @p craft's fuel alerts using a weak reference to *this.
+         * @param craft Craft to observe.
+         */
+        void watch(Spacecraft& craft) { craft.add_observer(weak_from_this()); }
+
+        /**
+         * @brief Record an alert.
+         * @param craft Craft name.
+         * @param fuel Remaining fuel.
+         */
+        void on_low_fuel(const std::string& craft, double fuel) override;
+
+        /** @brief @return Alerts received, formatted as "name:fuel". */
+        [[nodiscard]] const std::vector<std::string>& alerts() const noexcept { return alerts_; }
+
+    private:
+        MissionControl() = default;
+        std::vector<std::string> alerts_;
     };
 
     /**
      * @class ResourceFactory
-     * @brief Factory class demonstrating smart pointer factory patterns
+     * @brief Factory functions returning owning smart pointers.
      */
     class ResourceFactory {
     public:
-        // Unique pointer factory
-        template<typename T, typename... Args>
-        static std::unique_ptr<T> createUnique(Args&&... args) {
-            return std::make_unique<T>(std::forward<Args>(args)...);
-        }
-        
-        // Shared pointer factory
-        template<typename T, typename... Args>
-        static std::shared_ptr<T> createShared(Args&&... args) {
-            return std::make_shared<T>(std::forward<Args>(args)...);
-        }
-        
-        // Custom deleter example
-        static std::unique_ptr<Resource, std::function<void(Resource*)>> 
-        createWithCustomDeleter(const std::string& type, const std::string& name);
+        /**
+         * @brief Create a resource by kind.
+         * @param kind "station" or "spacecraft".
+         * @param name Resource name.
+         * @return Owning pointer, or nullptr for an unknown kind.
+         */
+        [[nodiscard]] static std::unique_ptr<Resource> create(std::string_view kind, std::string name);
+
+        /** @brief Deleter type used by create_counted(). */
+        using CountingDeleter = std::function<void(Resource*)>;
+
+        /**
+         * @brief Create a resource whose custom deleter increments @p deletions.
+         * @param kind "station" or "spacecraft".
+         * @param name Resource name.
+         * @param deletions Counter incremented when the resource is deleted; must outlive it.
+         * @return Owning pointer with custom deleter (empty for an unknown kind).
+         */
+        [[nodiscard]] static std::unique_ptr<Resource, CountingDeleter>
+        create_counted(std::string_view kind, std::string name, int& deletions);
     };
 
     /**
-     * @class SmartPointerManager
-     * @brief Comprehensive smart pointer usage examples
+     * @class ResourceCache
+     * @brief Name -> resource cache holding weak references (does not extend lifetimes).
      */
-    class SmartPointerManager {
+    class ResourceCache {
     public:
-        SmartPointerManager() = default;
-        ~SmartPointerManager() = default;
+        using Factory = std::function<std::shared_ptr<Resource>()>;
 
-        // Unique pointer demonstrations
-        void demonstrateUniquePtr();
-        void demonstrateUniquePtrArrays();
-        void demonstrateUniquePtrPolymorphism();
-        void demonstrateUniquePtrCustomDeleter();
-        
-        // Shared pointer demonstrations
-        void demonstrateSharedPtr();
-        void demonstrateSharedPtrCircularReference();
-        void demonstrateSharedPtrCustomDeleter();
-        void demonstrateSharedPtrAliasing();
-        
-        // Weak pointer demonstrations
-        void demonstrateWeakPtr();
-        void demonstrateWeakPtrObserver();
-        void demonstrateWeakPtrCache();
-        
-        // Advanced patterns
-        void demonstrateSmartPtrConversions();
-        void demonstrateSmartPtrPerformance();
-        void demonstratePimplIdiom();
-        void demonstrateSmartPtrThreadSafety();
-        
-        // Utility functions
-        void runAllDemonstrations();
-        void printStatistics() const;
-        
+        /**
+         * @brief Return the cached resource or create it with @p factory.
+         * @param name Cache key.
+         * @param factory Called on a miss.
+         * @return Shared owner (the cache itself only keeps a weak_ptr).
+         */
+        std::shared_ptr<Resource> get_or_create(const std::string& name, const Factory& factory);
+
+        /**
+         * @brief Look up without creating.
+         * @param name Cache key.
+         * @return Resource if still alive, else nullptr.
+         */
+        [[nodiscard]] std::shared_ptr<Resource> find(const std::string& name) const;
+
+        /** @brief Remove expired entries. @return Number removed. */
+        std::size_t purge_expired();
+
+        /** @brief @return Number of entries (including expired). */
+        [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }
+        /** @brief @return Cache hits so far. */
+        [[nodiscard]] std::size_t hits() const noexcept { return hits_; }
+        /** @brief @return Cache misses so far. */
+        [[nodiscard]] std::size_t misses() const noexcept { return misses_; }
+
     private:
-        // Cached resources using weak_ptr
-        std::unordered_map<std::string, std::weak_ptr<Resource>> resource_cache_;
-        
-        // Statistics
-        mutable size_t unique_ptr_count_ = 0;
-        mutable size_t shared_ptr_count_ = 0;
-        mutable size_t weak_ptr_count_ = 0;
-        
-        // Helper functions
-        void cleanupExpiredReferences();
-        std::shared_ptr<Resource> getCachedResource(const std::string& name);
-        void addToCache(const std::string& name, std::shared_ptr<Resource> resource);
+        std::unordered_map<std::string, std::weak_ptr<Resource>> entries_;
+        std::size_t hits_ = 0;
+        std::size_t misses_ = 0;
+    };
+
+    /**
+     * @class TreeNode
+     * @brief Tree whose children are owned (shared_ptr) and parents observed (weak_ptr).
+     */
+    class TreeNode : public std::enable_shared_from_this<TreeNode> {
+    public:
+        /**
+         * @brief Create a node.
+         * @param label Node label.
+         * @return Shared owner.
+         */
+        [[nodiscard]] static std::shared_ptr<TreeNode> create(std::string label);
+
+        /**
+         * @brief Create and attach a child.
+         * @param label Child label.
+         * @return The new child.
+         */
+        std::shared_ptr<TreeNode> add_child(std::string label);
+
+        /** @brief @return Parent, or nullptr for a root (or if the parent died). */
+        [[nodiscard]] std::shared_ptr<TreeNode> parent() const { return parent_.lock(); }
+        /** @brief @return Children. */
+        [[nodiscard]] const std::vector<std::shared_ptr<TreeNode>>& children() const noexcept { return children_; }
+        /** @brief @return Label. */
+        [[nodiscard]] const std::string& label() const noexcept { return label_; }
+        /** @brief @return "root/child/..." path built by walking weak parent links. */
+        [[nodiscard]] std::string path() const;
+        /** @brief @return Number of live TreeNode objects. */
+        [[nodiscard]] static int live_count() noexcept { return live_.load(); }
+
+        TreeNode(const TreeNode&) = delete;
+        TreeNode& operator=(const TreeNode&) = delete;
+        TreeNode(TreeNode&&) = delete;
+        TreeNode& operator=(TreeNode&&) = delete;
+        /** @brief Destructor (decrements the live counter). */
+        ~TreeNode();
+
+    private:
+        explicit TreeNode(std::string label);
+
+        std::string label_;
+        std::weak_ptr<TreeNode> parent_;
+        std::vector<std::shared_ptr<TreeNode>> children_;
+        inline static std::atomic<int> live_{0};
     };
 
     /**
      * @class PimplExample
-     * @brief Demonstrates PIMPL (Pointer to Implementation) idiom
+     * @brief Value type whose implementation is hidden behind `std::unique_ptr<Impl>`.
+     *
+     * Copy operations deep-copy the implementation; moves are noexcept. The special
+     * members are defined in the .cpp where Impl is complete.
      */
     class PimplExample {
     public:
+        /** @brief Construct with value 0 and no history. */
         PimplExample();
-        ~PimplExample();
-        
-        // Non-copyable by default due to unique_ptr
-        PimplExample(const PimplExample&) = delete;
-        PimplExample& operator=(const PimplExample&) = delete;
-        
-        // Movable
+        /**
+         * @brief Deep copy.
+         * @param other Source.
+         */
+        PimplExample(const PimplExample& other);
+        /**
+         * @brief Deep-copy assignment.
+         * @param other Source.
+         * @return *this.
+         */
+        PimplExample& operator=(const PimplExample& other);
+        /** @brief Move constructor. */
         PimplExample(PimplExample&&) noexcept;
+        /** @brief Move assignment. @return *this. */
         PimplExample& operator=(PimplExample&&) noexcept;
-        
-        void doSomething();
-        void setValue(int value);
-        int getValue() const;
-        
+        /** @brief Destructor (defined where Impl is complete). */
+        ~PimplExample();
+
+        /**
+         * @brief Set the value (recorded in history).
+         * @param value New value.
+         */
+        void set_value(int value);
+        /** @brief @return Current value (0 for a moved-from object). */
+        [[nodiscard]] int value() const noexcept;
+        /** @brief @return Number of set_value calls. */
+        [[nodiscard]] std::size_t history_size() const noexcept;
+        /** @brief @return False for a moved-from object. */
+        [[nodiscard]] bool valid() const noexcept { return impl_ != nullptr; }
+
     private:
-        // Forward declaration and unique_ptr for PIMPL
-        class Implementation;
-        std::unique_ptr<Implementation> pImpl_;
+        class Impl;
+        std::unique_ptr<Impl> impl_;
     };
 
     /**
-     * @class SmartPtrBenchmark
-     * @brief Performance benchmarking for smart pointers
+     * @brief Helpers for converting between smart pointer types.
      */
-    class SmartPtrBenchmark {
-    public:
-        struct BenchmarkResult {
-            std::chrono::microseconds creation_time;
-            std::chrono::microseconds access_time;
-            std::chrono::microseconds destruction_time;
-            size_t memory_usage;
-        };
-        
-        static BenchmarkResult benchmarkRawPointer(size_t iterations);
-        static BenchmarkResult benchmarkUniquePtr(size_t iterations);
-        static BenchmarkResult benchmarkSharedPtr(size_t iterations);
-        
-        static void comparePerformance(size_t iterations = 10000);
-    };
-
-    // Utility functions
     namespace SmartPtrUtils {
-        
+
         /**
-         * @brief Safe dynamic cast for smart pointers
+         * @brief Ownership-transferring dynamic_cast for unique_ptr.
+         *
+         * On success ownership moves to the result; on failure @p ptr keeps ownership.
+         *
+         * @param ptr Source pointer.
+         * @return Derived pointer, or nullptr if the dynamic type is not Derived.
          */
-        template<typename Derived, typename Base>
-        std::unique_ptr<Derived> dynamic_unique_cast(std::unique_ptr<Base> ptr) {
-            if (auto* derived = dynamic_cast<Derived*>(ptr.get())) {
-                ptr.release();
-                return std::unique_ptr<Derived>(derived);
+        template <typename Derived, typename Base>
+        [[nodiscard]] std::unique_ptr<Derived> dynamic_unique_cast(std::unique_ptr<Base>& ptr) noexcept {
+            if (auto* d = dynamic_cast<Derived*>(ptr.get())) {
+                static_cast<void>(ptr.release());
+                return std::unique_ptr<Derived>(d);
             }
             return nullptr;
         }
-        
+
         /**
-         * @brief Convert unique_ptr to shared_ptr
+         * @brief Convert unique ownership into shared ownership.
+         * @param ptr Source (left empty).
+         * @return Shared owner.
          */
-        template<typename T>
-        std::shared_ptr<T> to_shared(std::unique_ptr<T> ptr) {
-            return std::shared_ptr<T>(ptr.release());
+        template <typename T, typename D>
+        [[nodiscard]] std::shared_ptr<T> to_shared(std::unique_ptr<T, D>&& ptr) {
+            return std::shared_ptr<T>(std::move(ptr));
         }
-        
+
         /**
-         * @brief Check if weak_ptr is expired safely
+         * @brief Aliasing constructor: share ownership of @p owner while pointing at a member.
+         * @param owner Owning pointer.
+         * @param member Pointer-to-member to expose.
+         * @return Pointer to the member that keeps @p owner alive.
          */
-        template<typename T>
-        bool is_expired(const std::weak_ptr<T>& weak) {
-            return weak.expired();
+        template <typename T, typename M>
+        [[nodiscard]] std::shared_ptr<M> member_alias(const std::shared_ptr<T>& owner, M T::*member) noexcept {
+            return std::shared_ptr<M>(owner, &((*owner).*member));
         }
-        
-        /**
-         * @brief Get use count safely
-         */
-        template<typename T>
-        long get_use_count(const std::shared_ptr<T>& shared) {
-            return shared.use_count();
-        }
-    }
+
+    } // namespace SmartPtrUtils
+
+    /**
+     * @brief Showcase: unique/shared/weak ownership, observers, caches, trees and pimpl.
+     * @param out Stream receiving the narration.
+     */
+    void demonstrateSmartPointers(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Memory
 
-#endif // SMARTPOINTERS_HPP
+#endif // CPPVERSEHUB_MEMORY_SMART_POINTERS_HPP

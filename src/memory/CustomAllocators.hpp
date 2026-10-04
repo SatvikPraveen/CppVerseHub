@@ -1,549 +1,631 @@
 /**
  * @file CustomAllocators.hpp
- * @brief Custom memory allocator implementations for advanced memory management
- * @details File location: src/memory/CustomAllocators.hpp
- * 
- * This file demonstrates various custom allocator implementations including
- * stack allocators, pool allocators, and tracking allocators.
+ * @brief Standard-conforming custom allocators and memory resources.
+ *
+ * Demonstrates how to plug custom memory strategies into the standard library:
+ *  - AllocatorUtils: alignment arithmetic and an `Allocator` concept that checks the
+ *    minimal standard Allocator requirements at compile time.
+ *  - AllocationStats / TrackingAllocator: a stateful, rebindable STL allocator that counts
+ *    allocations and bytes so tests can prove containers release everything (leak detection).
+ *  - TrackingMemoryResource: the same idea for `std::pmr`, wrapping an upstream resource.
+ *  - StackAllocator: a fixed in-object LIFO arena with markers (rewind to a checkpoint).
+ *  - MonotonicArena / ArenaAllocator: a chunked bump-pointer arena that is both a
+ *    `std::pmr::memory_resource` and the backing store of a classic STL allocator.
+ *
+ * Why: allocation is often the dominant cost of container-heavy code. Arenas turn many
+ * small heap allocations into pointer bumps, and tracking allocators make memory behaviour
+ * observable. Every allocator here honours alignment (via `std::align` or aligned
+ * `operator new`) and provides the strong exception guarantee on allocation failure.
  */
 
-#ifndef CUSTOM_ALLOCATORS_HPP
-#define CUSTOM_ALLOCATORS_HPP
+#ifndef CPPVERSEHUB_MEMORY_CUSTOM_ALLOCATORS_HPP
+#define CPPVERSEHUB_MEMORY_CUSTOM_ALLOCATORS_HPP
 
-#include <memory>
-#include <vector>
-#include <list>
-#include <map>
-#include <cstddef>
-#include <cassert>
-#include <iostream>
-#include <type_traits>
-#include <algorithm>
-#include <chrono>
-#include <unordered_map>
-#include <mutex>
 #include <atomic>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <limits>
+#include <memory>
+#include <memory_resource>
+#include <new>
+#include <stdexcept>
+#include <type_traits>
+#include <vector>
 
 namespace CppVerseHub::Memory {
 
     /**
-     * @class StackAllocator
-     * @brief Stack-based allocator for fast allocation/deallocation
-     * @details Allocates memory from a pre-allocated stack buffer
-     */
-    template<size_t Size>
-    class StackAllocator {
-    public:
-        StackAllocator() : top_(0) {}
-
-        void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
-            // Align the allocation
-            size_t aligned_top = align(top_, alignment);
-            
-            if (aligned_top + size > Size) {
-                throw std::bad_alloc{};
-            }
-            
-            void* result = buffer_ + aligned_top;
-            top_ = aligned_top + size;
-            
-            std::cout << "StackAllocator: Allocated " << size 
-                      << " bytes at offset " << aligned_top << "\n";
-            
-            return result;
-        }
-
-        void deallocate(void* ptr, size_t size) noexcept {
-            // Stack allocator: can only deallocate in reverse order
-            if (static_cast<char*>(ptr) + size == buffer_ + top_) {
-                top_ -= size;
-                std::cout << "StackAllocator: Deallocated " << size 
-                          << " bytes, top now at " << top_ << "\n";
-            } else {
-                std::cout << "StackAllocator: Cannot deallocate out of order!\n";
-            }
-        }
-
-        void reset() {
-            top_ = 0;
-            std::cout << "StackAllocator: Reset to beginning\n";
-        }
-
-        size_t bytes_used() const { return top_; }
-        size_t bytes_remaining() const { return Size - top_; }
-
-    private:
-        alignas(std::max_align_t) char buffer_[Size];
-        size_t top_;
-
-        size_t align(size_t n, size_t alignment) {
-            return (n + alignment - 1) & ~(alignment - 1);
-        }
-    };
-
-    /**
-     * @class PoolAllocator
-     * @brief Fixed-size block allocator for efficient allocation of same-sized objects
-     */
-    template<size_t BlockSize, size_t BlockCount>
-    class PoolAllocator {
-    private:
-        struct Block {
-            Block* next;
-        };
-
-    public:
-        PoolAllocator() {
-            // Initialize the free list
-            for (size_t i = 0; i < BlockCount - 1; ++i) {
-                reinterpret_cast<Block*>(&buffer_[i * BlockSize])->next =
-                    reinterpret_cast<Block*>(&buffer_[(i + 1) * BlockSize]);
-            }
-            reinterpret_cast<Block*>(&buffer_[(BlockCount - 1) * BlockSize])->next = nullptr;
-            
-            free_head_ = reinterpret_cast<Block*>(buffer_);
-            allocated_count_ = 0;
-            
-            std::cout << "PoolAllocator: Initialized with " << BlockCount 
-                      << " blocks of " << BlockSize << " bytes each\n";
-        }
-
-        void* allocate() {
-            if (!free_head_) {
-                throw std::bad_alloc{};
-            }
-
-            void* result = free_head_;
-            free_head_ = free_head_->next;
-            ++allocated_count_;
-
-            std::cout << "PoolAllocator: Allocated block (" 
-                      << allocated_count_ << "/" << BlockCount << " used)\n";
-
-            return result;
-        }
-
-        void deallocate(void* ptr) noexcept {
-            if (!ptr) return;
-
-            // Add back to free list
-            Block* block = static_cast<Block*>(ptr);
-            block->next = free_head_;
-            free_head_ = block;
-            --allocated_count_;
-
-            std::cout << "PoolAllocator: Deallocated block (" 
-                      << allocated_count_ << "/" << BlockCount << " used)\n";
-        }
-
-        bool is_from_pool(void* ptr) const {
-            return ptr >= buffer_ && ptr < buffer_ + (BlockCount * BlockSize);
-        }
-
-        size_t allocated_count() const { return allocated_count_; }
-        size_t available_count() const { return BlockCount - allocated_count_; }
-
-    private:
-        alignas(std::max_align_t) char buffer_[BlockCount * BlockSize];
-        Block* free_head_;
-        size_t allocated_count_;
-    };
-
-    /**
-     * @class TrackingAllocator
-     * @brief STL-compatible allocator that tracks memory usage
-     */
-    template<typename T>
-    class TrackingAllocator {
-    public:
-        using value_type = T;
-        using pointer = T*;
-        using const_pointer = const T*;
-        using reference = T&;
-        using const_reference = const T&;
-        using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
-
-        template<typename U>
-        struct rebind {
-            using other = TrackingAllocator<U>;
-        };
-
-        TrackingAllocator() noexcept = default;
-
-        template<typename U>
-        TrackingAllocator(const TrackingAllocator<U>&) noexcept {}
-
-        pointer allocate(size_type n) {
-            if (n > std::numeric_limits<size_type>::max() / sizeof(T)) {
-                throw std::bad_alloc{};
-            }
-
-            size_t bytes = n * sizeof(T);
-            pointer result = static_cast<pointer>(std::malloc(bytes));
-            
-            if (!result) {
-                throw std::bad_alloc{};
-            }
-
-            // Track allocation
-            {
-                std::lock_guard<std::mutex> lock(stats_mutex_);
-                allocations_[result] = bytes;
-                total_allocated_ += bytes;
-                ++allocation_count_;
-                peak_usage_ = std::max(peak_usage_, total_allocated_ - total_deallocated_);
-            }
-
-            std::cout << "TrackingAllocator: Allocated " << bytes << " bytes for " 
-                      << n << " objects of type " << typeid(T).name() << "\n";
-
-            return result;
-        }
-
-        void deallocate(pointer ptr, size_type n) noexcept {
-            if (!ptr) return;
-
-            size_t bytes = 0;
-            {
-                std::lock_guard<std::mutex> lock(stats_mutex_);
-                auto it = allocations_.find(ptr);
-                if (it != allocations_.end()) {
-                    bytes = it->second;
-                    total_deallocated_ += bytes;
-                    allocations_.erase(it);
-                    ++deallocation_count_;
-                }
-            }
-
-            std::free(ptr);
-
-            std::cout << "TrackingAllocator: Deallocated " << bytes << " bytes for " 
-                      << n << " objects of type " << typeid(T).name() << "\n";
-        }
-
-        // Static methods for statistics
-        static void print_statistics() {
-            std::lock_guard<std::mutex> lock(stats_mutex_);
-            std::cout << "\n=== TrackingAllocator Statistics ===\n";
-            std::cout << "Total allocations: " << allocation_count_ << "\n";
-            std::cout << "Total deallocations: " << deallocation_count_ << "\n";
-            std::cout << "Active allocations: " << allocations_.size() << "\n";
-            std::cout << "Total allocated: " << total_allocated_ << " bytes\n";
-            std::cout << "Total deallocated: " << total_deallocated_ << " bytes\n";
-            std::cout << "Currently allocated: " << (total_allocated_ - total_deallocated_) << " bytes\n";
-            std::cout << "Peak usage: " << peak_usage_ << " bytes\n";
-        }
-
-        static void reset_statistics() {
-            std::lock_guard<std::mutex> lock(stats_mutex_);
-            allocations_.clear();
-            total_allocated_ = 0;
-            total_deallocated_ = 0;
-            allocation_count_ = 0;
-            deallocation_count_ = 0;
-            peak_usage_ = 0;
-        }
-
-        // Comparison operators
-        template<typename U>
-        bool operator==(const TrackingAllocator<U>&) const noexcept {
-            return true;
-        }
-
-        template<typename U>
-        bool operator!=(const TrackingAllocator<U>&) const noexcept {
-            return false;
-        }
-
-    private:
-        static std::mutex stats_mutex_;
-        static std::unordered_map<void*, size_t> allocations_;
-        static std::atomic<size_t> total_allocated_;
-        static std::atomic<size_t> total_deallocated_;
-        static std::atomic<size_t> allocation_count_;
-        static std::atomic<size_t> deallocation_count_;
-        static std::atomic<size_t> peak_usage_;
-    };
-
-    // Static member definitions
-    template<typename T>
-    std::mutex TrackingAllocator<T>::stats_mutex_;
-
-    template<typename T>
-    std::unordered_map<void*, size_t> TrackingAllocator<T>::allocations_;
-
-    template<typename T>
-    std::atomic<size_t> TrackingAllocator<T>::total_allocated_{0};
-
-    template<typename T>
-    std::atomic<size_t> TrackingAllocator<T>::total_deallocated_{0};
-
-    template<typename T>
-    std::atomic<size_t> TrackingAllocator<T>::allocation_count_{0};
-
-    template<typename T>
-    std::atomic<size_t> TrackingAllocator<T>::deallocation_count_{0};
-
-    template<typename T>
-    std::atomic<size_t> TrackingAllocator<T>::peak_usage_{0};
-
-    /**
-     * @class MonotonicAllocator
-     * @brief Allocator that only grows, never deallocates individual objects
-     */
-    template<size_t ChunkSize = 4096>
-    class MonotonicAllocator {
-    private:
-        struct Chunk {
-            std::unique_ptr<char[]> memory;
-            size_t used;
-            std::unique_ptr<Chunk> next;
-
-            Chunk() : memory(std::make_unique<char[]>(ChunkSize)), used(0) {}
-        };
-
-    public:
-        MonotonicAllocator() : current_chunk_(std::make_unique<Chunk>()) {
-            std::cout << "MonotonicAllocator: Initialized with chunk size " 
-                      << ChunkSize << "\n";
-        }
-
-        void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
-            size_t aligned_size = align(size, alignment);
-            
-            // Check if current chunk has enough space
-            if (current_chunk_->used + aligned_size > ChunkSize) {
-                // Need a new chunk
-                auto new_chunk = std::make_unique<Chunk>();
-                new_chunk->next = std::move(current_chunk_);
-                current_chunk_ = std::move(new_chunk);
-                
-                std::cout << "MonotonicAllocator: Allocated new chunk\n";
-            }
-
-            void* result = current_chunk_->memory.get() + current_chunk_->used;
-            current_chunk_->used += aligned_size;
-            total_allocated_ += aligned_size;
-
-            std::cout << "MonotonicAllocator: Allocated " << size 
-                      << " bytes (aligned to " << aligned_size << ")\n";
-
-            return result;
-        }
-
-        // No individual deallocation - only reset all
-        void reset() {
-            current_chunk_ = std::make_unique<Chunk>();
-            total_allocated_ = 0;
-            std::cout << "MonotonicAllocator: Reset all allocations\n";
-        }
-
-        size_t total_allocated() const { return total_allocated_; }
-
-    private:
-        std::unique_ptr<Chunk> current_chunk_;
-        size_t total_allocated_ = 0;
-
-        size_t align(size_t n, size_t alignment) {
-            return (n + alignment - 1) & ~(alignment - 1);
-        }
-    };
-
-    /**
-     * @class CustomAllocatorDemo
-     * @brief Demonstration class for all custom allocators
-     */
-    class CustomAllocatorDemo {
-    public:
-        // Type aliases for containers with custom allocators
-        using TrackedVector = std::vector<int, TrackingAllocator<int>>;
-        using TrackedList = std::list<std::string, TrackingAllocator<std::string>>;
-        using TrackedMap = std::map<int, std::string, std::less<int>, 
-                                   TrackingAllocator<std::pair<const int, std::string>>>;
-
-        CustomAllocatorDemo() = default;
-
-        void demonstrateStackAllocator();
-        void demonstratePoolAllocator();
-        void demonstrateTrackingAllocator();
-        void demonstrateMonotonicAllocator();
-        void demonstrateAllocatorPerformance();
-        void demonstrateSTLContainersWithCustomAllocators();
-        
-        void runAllDemonstrations();
-
-    private:
-        void benchmark_allocation_performance();
-    };
-
-    /**
-     * @class AllocatorBenchmark
-     * @brief Performance benchmarking for different allocator types
-     */
-    class AllocatorBenchmark {
-    public:
-        struct AllocationPattern {
-            std::vector<size_t> sizes;
-            std::vector<bool> deallocate_immediately;
-        };
-
-        struct BenchmarkResult {
-            std::chrono::nanoseconds total_time;
-            std::chrono::nanoseconds avg_allocation_time;
-            std::chrono::nanoseconds avg_deallocation_time;
-            size_t total_memory;
-            size_t fragmentation_waste;
-        };
-
-        static BenchmarkResult benchmark_standard_allocator(
-            const AllocationPattern& pattern, size_t iterations);
-        
-        static BenchmarkResult benchmark_pool_allocator(
-            const AllocationPattern& pattern, size_t iterations);
-        
-        static BenchmarkResult benchmark_stack_allocator(
-            const AllocationPattern& pattern, size_t iterations);
-
-        static void compare_allocators(size_t iterations = 1000);
-        
-        static AllocationPattern create_random_pattern(size_t count);
-        static AllocationPattern create_sequential_pattern(size_t count, size_t size);
-        static AllocationPattern create_mixed_pattern(size_t count);
-    };
-
-    /**
-     * @brief Utility functions for allocator management
+     * @brief Alignment helpers and allocator concepts.
      */
     namespace AllocatorUtils {
-        
-        /**
-         * @brief Calculate memory fragmentation
-         */
-        double calculate_fragmentation(const std::vector<void*>& allocations,
-                                     const std::vector<size_t>& sizes);
 
         /**
-         * @brief Align memory address
+         * @brief Check whether a value is a (non-zero) power of two.
+         * @param value Value to test.
+         * @return True if exactly one bit is set.
          */
-        template<typename T>
-        constexpr T align_up(T value, size_t alignment) {
+        [[nodiscard]] constexpr bool is_power_of_two(std::size_t value) noexcept {
+            return value != 0 && (value & (value - 1)) == 0;
+        }
+
+        /**
+         * @brief Round @p value up to the next multiple of @p alignment.
+         * @param value Value to round.
+         * @param alignment Power-of-two alignment.
+         * @return Smallest multiple of @p alignment that is >= @p value.
+         */
+        [[nodiscard]] constexpr std::size_t align_up(std::size_t value, std::size_t alignment) noexcept {
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
         /**
-         * @brief Check if pointer is aligned
+         * @brief Check whether a pointer is aligned to @p alignment.
+         * @param ptr Pointer to test.
+         * @param alignment Power-of-two alignment.
+         * @return True if the address is a multiple of @p alignment.
          */
-        template<typename T>
-        constexpr bool is_aligned(T* ptr, size_t alignment) {
-            return (reinterpret_cast<uintptr_t>(ptr) % alignment) == 0;
+        [[nodiscard]] inline bool is_aligned(const void* ptr, std::size_t alignment) noexcept {
+            return reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0;
         }
 
         /**
-         * @brief Memory usage tracker
+         * @brief Minimal standard Allocator requirements (value_type, allocate, deallocate,
+         *        rebinding conversion and equality).
          */
-        class MemoryTracker {
-        public:
-            static MemoryTracker& instance() {
-                static MemoryTracker tracker;
-                return tracker;
-            }
-
-            void record_allocation(void* ptr, size_t size);
-            void record_deallocation(void* ptr);
-            void print_report() const;
-            void reset();
-
-        private:
-            MemoryTracker() = default;
-            
-            mutable std::mutex mutex_;
-            std::unordered_map<void*, size_t> active_allocations_;
-            size_t total_allocated_ = 0;
-            size_t total_deallocated_ = 0;
-            size_t peak_usage_ = 0;
-            size_t allocation_count_ = 0;
-            size_t deallocation_count_ = 0;
+        template <typename A>
+        concept Allocator = requires(A a, typename A::value_type* p, std::size_t n) {
+            typename A::value_type;
+            { a.allocate(n) } -> std::same_as<typename A::value_type*>;
+            { a.deallocate(p, n) };
+            { a == a } -> std::convertible_to<bool>;
+            { a != a } -> std::convertible_to<bool>;
+            requires std::copy_constructible<A>;
+            requires std::is_nothrow_copy_constructible_v<A>;
         };
+
+    } // namespace AllocatorUtils
+
+    namespace detail {
+
+        /**
+         * @brief Allocate raw bytes from the global heap honouring an arbitrary alignment.
+         * @param bytes Number of bytes.
+         * @param alignment Power-of-two alignment.
+         * @return Pointer to at least @p bytes of suitably aligned storage.
+         */
+        [[nodiscard]] inline void* allocate_bytes(std::size_t bytes, std::size_t alignment) {
+            if (alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+                return ::operator new(bytes, std::align_val_t{alignment});
+            }
+            return ::operator new(bytes);
+        }
+
+        /**
+         * @brief Release storage obtained from allocate_bytes().
+         * @param ptr Pointer previously returned by allocate_bytes().
+         * @param alignment Same alignment that was passed to allocate_bytes().
+         */
+        inline void deallocate_bytes(void* ptr, std::size_t alignment) noexcept {
+            if (alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+                ::operator delete(ptr, std::align_val_t{alignment});
+            } else {
+                ::operator delete(ptr);
+            }
+        }
+
+    } // namespace detail
+
+    /**
+     * @class AllocationStats
+     * @brief Thread-safe counters describing allocation activity.
+     *
+     * Shared by TrackingAllocator instances (and TrackingMemoryResource). All counters are
+     * atomics, so allocators may be used from several threads at once.
+     */
+    class AllocationStats {
+    public:
+        /** @brief Construct zeroed counters. */
+        AllocationStats() noexcept = default;
+        AllocationStats(const AllocationStats&) = delete;
+        AllocationStats& operator=(const AllocationStats&) = delete;
+        AllocationStats(AllocationStats&&) = delete;
+        AllocationStats& operator=(AllocationStats&&) = delete;
+        ~AllocationStats() = default;
+
+        /**
+         * @brief Record a successful allocation.
+         * @param bytes Size of the allocation.
+         */
+        void record_allocation(std::size_t bytes) noexcept {
+            allocations_.fetch_add(1, std::memory_order_relaxed);
+            bytes_allocated_.fetch_add(bytes, std::memory_order_relaxed);
+            const std::size_t now = in_use_.fetch_add(bytes, std::memory_order_relaxed) + bytes;
+            std::size_t peak = peak_.load(std::memory_order_relaxed);
+            while (now > peak && !peak_.compare_exchange_weak(peak, now, std::memory_order_relaxed)) {
+            }
+        }
+
+        /**
+         * @brief Record a deallocation.
+         * @param bytes Size of the released block.
+         */
+        void record_deallocation(std::size_t bytes) noexcept {
+            deallocations_.fetch_add(1, std::memory_order_relaxed);
+            bytes_deallocated_.fetch_add(bytes, std::memory_order_relaxed);
+            in_use_.fetch_sub(bytes, std::memory_order_relaxed);
+        }
+
+        /** @brief @return Number of allocate calls. */
+        [[nodiscard]] std::size_t allocations() const noexcept { return allocations_.load(); }
+        /** @brief @return Number of deallocate calls. */
+        [[nodiscard]] std::size_t deallocations() const noexcept { return deallocations_.load(); }
+        /** @brief @return Total bytes ever allocated. */
+        [[nodiscard]] std::size_t bytes_allocated() const noexcept { return bytes_allocated_.load(); }
+        /** @brief @return Total bytes ever deallocated. */
+        [[nodiscard]] std::size_t bytes_deallocated() const noexcept { return bytes_deallocated_.load(); }
+        /** @brief @return Bytes currently allocated and not yet released. */
+        [[nodiscard]] std::size_t bytes_in_use() const noexcept { return in_use_.load(); }
+        /** @brief @return Highest value bytes_in_use() has reached. */
+        [[nodiscard]] std::size_t peak_bytes() const noexcept { return peak_.load(); }
+        /** @brief @return Number of allocations not yet matched by a deallocation. */
+        [[nodiscard]] std::size_t outstanding() const noexcept { return allocations() - deallocations(); }
+        /** @brief @return True if any allocation is still outstanding. */
+        [[nodiscard]] bool has_leaks() const noexcept { return outstanding() != 0 || bytes_in_use() != 0; }
+
+        /** @brief Zero all counters (not synchronised with concurrent allocation). */
+        void reset() noexcept {
+            allocations_ = 0;
+            deallocations_ = 0;
+            bytes_allocated_ = 0;
+            bytes_deallocated_ = 0;
+            in_use_ = 0;
+            peak_ = 0;
+        }
+
+        /**
+         * @brief Process-wide statistics used by default-constructed TrackingAllocators.
+         * @return Reference to the global instance.
+         */
+        [[nodiscard]] static AllocationStats& global() noexcept {
+            static AllocationStats instance;
+            return instance;
+        }
+
+    private:
+        std::atomic<std::size_t> allocations_{0};
+        std::atomic<std::size_t> deallocations_{0};
+        std::atomic<std::size_t> bytes_allocated_{0};
+        std::atomic<std::size_t> bytes_deallocated_{0};
+        std::atomic<std::size_t> in_use_{0};
+        std::atomic<std::size_t> peak_{0};
+    };
+
+    /**
+     * @class TrackingAllocator
+     * @brief Stateful STL allocator that forwards to the global heap and records statistics.
+     *
+     * Over-aligned types (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__) are served through
+     * aligned `operator new`. Two allocators compare equal iff they share the same
+     * AllocationStats, which is what a container needs to know to free memory it did not
+     * allocate itself.
+     *
+     * @tparam T Value type.
+     */
+    template <typename T>
+    class TrackingAllocator {
+    public:
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using propagate_on_container_copy_assignment = std::true_type;
+        using propagate_on_container_move_assignment = std::true_type;
+        using propagate_on_container_swap = std::true_type;
+        using is_always_equal = std::false_type;
+
+        /** @brief Rebind to another value type. */
+        template <typename U>
+        struct rebind {
+            using other = TrackingAllocator<U>;
+        };
+
+        /** @brief Construct an allocator reporting to AllocationStats::global(). */
+        TrackingAllocator() noexcept : stats_(&AllocationStats::global()) {}
+
+        /**
+         * @brief Construct an allocator reporting to @p stats.
+         * @param stats Statistics sink; must outlive every copy of this allocator.
+         */
+        explicit TrackingAllocator(AllocationStats& stats) noexcept : stats_(&stats) {}
+
+        /**
+         * @brief Rebinding converting constructor.
+         * @param other Allocator for another value type; shares its statistics.
+         */
+        template <typename U>
+        TrackingAllocator(const TrackingAllocator<U>& other) noexcept // NOLINT(google-explicit-constructor)
+            : stats_(other.stats()) {}
+
+        /**
+         * @brief Allocate storage for @p n objects (uninitialised).
+         * @param n Number of objects.
+         * @return Pointer to storage aligned for T.
+         * @throws std::bad_array_new_length if n * sizeof(T) overflows; std::bad_alloc on failure.
+         */
+        [[nodiscard]] T* allocate(size_type n) {
+            if (n > max_size()) {
+                throw std::bad_array_new_length();
+            }
+            const std::size_t bytes = n * sizeof(T);
+            void* p = detail::allocate_bytes(bytes, alignof(T));
+            stats_->record_allocation(bytes); // only after success: strong guarantee
+            return static_cast<T*>(p);
+        }
+
+        /**
+         * @brief Release storage obtained from allocate().
+         * @param p Pointer returned by allocate(n).
+         * @param n The same @p n passed to allocate().
+         */
+        void deallocate(T* p, size_type n) noexcept {
+            if (p == nullptr) {
+                return;
+            }
+            detail::deallocate_bytes(p, alignof(T));
+            stats_->record_deallocation(n * sizeof(T));
+        }
+
+        /** @brief @return Largest @p n that allocate() can accept. */
+        [[nodiscard]] static constexpr size_type max_size() noexcept {
+            return std::numeric_limits<size_type>::max() / sizeof(T);
+        }
+
+        /** @brief @return The statistics sink shared by this allocator and its copies. */
+        [[nodiscard]] AllocationStats* stats() const noexcept { return stats_; }
+
+    private:
+        AllocationStats* stats_;
+    };
+
+    /**
+     * @brief Equality: allocators are interchangeable iff they share statistics.
+     * @param lhs First allocator.
+     * @param rhs Second allocator.
+     * @return True if memory from one may be released through the other.
+     */
+    template <typename T, typename U>
+    [[nodiscard]] bool operator==(const TrackingAllocator<T>& lhs, const TrackingAllocator<U>& rhs) noexcept {
+        return lhs.stats() == rhs.stats();
     }
 
     /**
-     * @class SmallObjectAllocator
-     * @brief Specialized allocator for small objects using multiple pools
+     * @class TrackingMemoryResource
+     * @brief `std::pmr::memory_resource` decorator that records statistics and verifies alignment.
      */
-    template<size_t MaxObjectSize = 256, size_t PoolSize = 4096>
-    class SmallObjectAllocator {
+    class TrackingMemoryResource final : public std::pmr::memory_resource {
+    public:
+        /**
+         * @brief Wrap an upstream resource.
+         * @param upstream Resource that performs the real allocations.
+         */
+        explicit TrackingMemoryResource(
+            std::pmr::memory_resource* upstream = std::pmr::new_delete_resource()) noexcept
+            : upstream_(upstream) {}
+
+        /** @brief @return Statistics collected so far. */
+        [[nodiscard]] const AllocationStats& stats() const noexcept { return stats_; }
+        /** @brief @return Mutable statistics (e.g. to reset them). */
+        [[nodiscard]] AllocationStats& stats() noexcept { return stats_; }
+        /** @brief @return Number of allocations whose result violated the requested alignment. */
+        [[nodiscard]] std::size_t misaligned_count() const noexcept { return misaligned_.load(); }
+        /** @brief @return The wrapped upstream resource. */
+        [[nodiscard]] std::pmr::memory_resource* upstream() const noexcept { return upstream_; }
+
     private:
-        static constexpr size_t NumPools = MaxObjectSize / sizeof(void*);
-        
-        struct Pool {
-            char* memory;
-            void* free_list;
-            size_t block_size;
-            size_t blocks_per_pool;
-            
-            Pool(size_t size) : block_size(size) {
-                blocks_per_pool = PoolSize / block_size;
-                memory = new char[PoolSize];
-                
-                // Initialize free list
-                free_list = memory;
-                for (size_t i = 0; i < blocks_per_pool - 1; ++i) {
-                    void** current = reinterpret_cast<void**>(memory + i * block_size);
-                    *current = memory + (i + 1) * block_size;
-                }
-                void** last = reinterpret_cast<void**>(memory + (blocks_per_pool - 1) * block_size);
-                *last = nullptr;
+        void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+            void* p = upstream_->allocate(bytes, alignment);
+            if (!AllocatorUtils::is_aligned(p, alignment)) {
+                misaligned_.fetch_add(1, std::memory_order_relaxed);
             }
-            
-            ~Pool() {
-                delete[] memory;
-            }
-        };
+            stats_.record_allocation(bytes);
+            return p;
+        }
+
+        void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override {
+            upstream_->deallocate(p, bytes, alignment);
+            stats_.record_deallocation(bytes);
+        }
+
+        [[nodiscard]] bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+            return this == &other;
+        }
+
+        std::pmr::memory_resource* upstream_;
+        AllocationStats stats_;
+        std::atomic<std::size_t> misaligned_{0};
+    };
+
+    /**
+     * @class StackAllocator
+     * @brief Fixed-capacity LIFO arena whose storage lives inside the object.
+     *
+     * Allocation bumps a top-of-stack offset (aligned with `std::align`); only the most
+     * recent allocation can be freed individually. Markers allow rewinding to a checkpoint,
+     * which is the classic "frame allocator" pattern used for per-frame scratch memory.
+     *
+     * @tparam Capacity Size of the internal buffer in bytes.
+     */
+    template <std::size_t Capacity>
+    class StackAllocator {
+        static_assert(Capacity > 0, "StackAllocator needs a non-empty buffer");
 
     public:
-        SmallObjectAllocator() {
-            for (size_t i = 0; i < NumPools; ++i) {
-                size_t block_size = (i + 1) * sizeof(void*);
-                pools_[i] = std::make_unique<Pool>(block_size);
+        /** @brief Opaque checkpoint produced by mark(). */
+        using Marker = std::size_t;
+
+        /** @brief Construct an empty arena. */
+        StackAllocator() noexcept = default;
+        StackAllocator(const StackAllocator&) = delete;
+        StackAllocator& operator=(const StackAllocator&) = delete;
+        StackAllocator(StackAllocator&&) = delete;
+        StackAllocator& operator=(StackAllocator&&) = delete;
+        ~StackAllocator() = default;
+
+        /**
+         * @brief Allocate @p bytes aligned to @p alignment.
+         * @param bytes Size in bytes (0 is treated as 1).
+         * @param alignment Power-of-two alignment.
+         * @return Pointer into the internal buffer.
+         * @throws std::invalid_argument for a non power-of-two alignment; std::bad_alloc when full.
+         */
+        [[nodiscard]] void* allocate(std::size_t bytes, std::size_t alignment = alignof(std::max_align_t)) {
+            if (!AllocatorUtils::is_power_of_two(alignment)) {
+                throw std::invalid_argument("StackAllocator: alignment must be a power of two");
+            }
+            bytes = bytes == 0 ? 1 : bytes;
+            void* p = buffer_ + top_;
+            std::size_t space = Capacity - top_;
+            if (std::align(alignment, bytes, p, space) == nullptr) {
+                throw std::bad_alloc();
+            }
+            top_ = static_cast<std::size_t>(static_cast<std::byte*>(p) - buffer_) + bytes;
+            ++live_;
+            return p;
+        }
+
+        /**
+         * @brief Free the most recent allocation. Out-of-order frees are ignored
+         *        (the memory is reclaimed by reset() or rewind()).
+         * @param p Pointer returned by allocate().
+         * @param bytes Size passed to allocate().
+         * @return True if the stack top moved back.
+         */
+        bool deallocate(void* p, std::size_t bytes) noexcept {
+            if (p == nullptr || !owns(p)) {
+                return false;
+            }
+            bytes = bytes == 0 ? 1 : bytes;
+            const auto offset = static_cast<std::size_t>(static_cast<std::byte*>(p) - buffer_);
+            if (live_ > 0) {
+                --live_;
+            }
+            if (offset + bytes == top_) {
+                top_ = offset;
+                return true;
+            }
+            return false;
+        }
+
+        /** @brief @return A checkpoint for rewind(). */
+        [[nodiscard]] Marker mark() const noexcept { return top_; }
+
+        /**
+         * @brief Release everything allocated after @p marker.
+         * @param marker Value previously returned by mark().
+         */
+        void rewind(Marker marker) noexcept {
+            if (marker <= top_) {
+                top_ = marker;
             }
         }
 
-        void* allocate(size_t size) {
-            if (size > MaxObjectSize) {
-                return std::malloc(size); // Fall back to standard allocator
-            }
-
-            size_t pool_index = (size - 1) / sizeof(void*);
-            Pool& pool = *pools_[pool_index];
-
-            if (!pool.free_list) {
-                throw std::bad_alloc{};
-            }
-
-            void* result = pool.free_list;
-            pool.free_list = *static_cast<void**>(pool.free_list);
-
-            return result;
+        /** @brief Release everything. */
+        void reset() noexcept {
+            top_ = 0;
+            live_ = 0;
         }
 
-        void deallocate(void* ptr, size_t size) {
-            if (size > MaxObjectSize) {
-                std::free(ptr);
-                return;
-            }
-
-            size_t pool_index = (size - 1) / sizeof(void*);
-            Pool& pool = *pools_[pool_index];
-
-            *static_cast<void**>(ptr) = pool.free_list;
-            pool.free_list = ptr;
+        /**
+         * @brief Check whether @p p points into the internal buffer.
+         * @param p Pointer to test.
+         * @return True if owned.
+         */
+        [[nodiscard]] bool owns(const void* p) const noexcept {
+            const auto* b = static_cast<const std::byte*>(p);
+            return !std::less<const std::byte*>{}(b, buffer_) &&
+                   std::less<const std::byte*>{}(b, buffer_ + Capacity);
         }
+
+        /** @brief @return Bytes consumed including alignment padding. */
+        [[nodiscard]] std::size_t bytes_used() const noexcept { return top_; }
+        /** @brief @return Bytes still available (before alignment padding). */
+        [[nodiscard]] std::size_t bytes_remaining() const noexcept { return Capacity - top_; }
+        /** @brief @return Total capacity in bytes. */
+        [[nodiscard]] static constexpr std::size_t capacity() noexcept { return Capacity; }
 
     private:
-        std::unique_ptr<Pool> pools_[NumPools];
+        alignas(std::max_align_t) std::byte buffer_[Capacity]{};
+        std::size_t top_ = 0;
+        std::size_t live_ = 0;
     };
+
+    /**
+     * @class MonotonicArena
+     * @brief Chunked bump-pointer arena usable as a `std::pmr::memory_resource`.
+     *
+     * Memory is obtained from an upstream resource in geometrically growing chunks
+     * (optionally starting with a caller-supplied buffer) and released all at once by
+     * release() or the destructor; individual deallocation is a no-op. Requests of any
+     * power-of-two alignment are satisfied with `std::align`.
+     */
+    class MonotonicArena final : public std::pmr::memory_resource {
+    public:
+        /** @brief Default size of the first heap chunk. */
+        static constexpr std::size_t kDefaultChunkSize = 1024;
+
+        /**
+         * @brief Construct an arena that allocates chunks from @p upstream.
+         * @param initial_chunk_size Size of the first chunk (subsequent chunks double).
+         * @param upstream Resource providing chunk memory.
+         */
+        explicit MonotonicArena(std::size_t initial_chunk_size = kDefaultChunkSize,
+                                std::pmr::memory_resource* upstream = std::pmr::get_default_resource());
+
+        /**
+         * @brief Construct an arena that first consumes a caller-provided buffer.
+         * @param buffer Initial buffer (not owned, must outlive the arena).
+         * @param size Size of @p buffer in bytes.
+         * @param upstream Resource providing overflow chunks.
+         */
+        MonotonicArena(void* buffer, std::size_t size,
+                       std::pmr::memory_resource* upstream = std::pmr::get_default_resource());
+
+        MonotonicArena(const MonotonicArena&) = delete;
+        MonotonicArena& operator=(const MonotonicArena&) = delete;
+        MonotonicArena(MonotonicArena&&) = delete;
+        MonotonicArena& operator=(MonotonicArena&&) = delete;
+
+        /** @brief Release all chunks to the upstream resource. */
+        ~MonotonicArena() override;
+
+        /** @brief Return every chunk to upstream and restart from the initial buffer. */
+        void release() noexcept;
+
+        /** @brief @return Bytes handed out (excluding padding). */
+        [[nodiscard]] std::size_t bytes_allocated() const noexcept { return bytes_allocated_; }
+        /** @brief @return Bytes still available in the current chunk. */
+        [[nodiscard]] std::size_t bytes_remaining() const noexcept { return remaining_; }
+        /** @brief @return Number of heap chunks obtained from upstream. */
+        [[nodiscard]] std::size_t chunk_count() const noexcept { return chunks_.size(); }
+        /** @brief @return Number of allocate requests served. */
+        [[nodiscard]] std::size_t allocation_count() const noexcept { return allocation_count_; }
+        /** @brief @return Upstream resource. */
+        [[nodiscard]] std::pmr::memory_resource* upstream() const noexcept { return upstream_; }
+
+    private:
+        struct Chunk {
+            void* memory;
+            std::size_t size;
+            std::size_t alignment;
+        };
+
+        void* do_allocate(std::size_t bytes, std::size_t alignment) override;
+        void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override;
+        [[nodiscard]] bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override;
+
+        [[nodiscard]] void* try_bump(std::size_t bytes, std::size_t alignment) noexcept;
+        void grow(std::size_t bytes, std::size_t alignment);
+
+        std::pmr::memory_resource* upstream_;
+        std::vector<Chunk> chunks_;
+        void* initial_buffer_ = nullptr;
+        std::size_t initial_size_ = 0;
+        std::size_t next_chunk_size_;
+        std::byte* cursor_ = nullptr;
+        std::size_t remaining_ = 0;
+        std::size_t bytes_allocated_ = 0;
+        std::size_t allocation_count_ = 0;
+    };
+
+    /**
+     * @class ArenaAllocator
+     * @brief Classic (non-polymorphic) STL allocator drawing from a MonotonicArena.
+     *
+     * deallocate() is a no-op: the arena reclaims memory in bulk. Ideal for build-once,
+     * discard-together data structures.
+     *
+     * @tparam T Value type.
+     */
+    template <typename T>
+    class ArenaAllocator {
+    public:
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using propagate_on_container_copy_assignment = std::true_type;
+        using propagate_on_container_move_assignment = std::true_type;
+        using propagate_on_container_swap = std::true_type;
+        using is_always_equal = std::false_type;
+
+        /** @brief Rebind to another value type. */
+        template <typename U>
+        struct rebind {
+            using other = ArenaAllocator<U>;
+        };
+
+        /**
+         * @brief Bind to an arena.
+         * @param arena Arena that must outlive every container using this allocator.
+         */
+        explicit ArenaAllocator(MonotonicArena& arena) noexcept : arena_(&arena) {}
+
+        /**
+         * @brief Rebinding converting constructor.
+         * @param other Allocator for another type sharing the same arena.
+         */
+        template <typename U>
+        ArenaAllocator(const ArenaAllocator<U>& other) noexcept // NOLINT(google-explicit-constructor)
+            : arena_(other.arena()) {}
+
+        /**
+         * @brief Allocate storage for @p n objects from the arena.
+         * @param n Number of objects.
+         * @return Pointer aligned for T.
+         * @throws std::bad_array_new_length on overflow; std::bad_alloc if upstream fails.
+         */
+        [[nodiscard]] T* allocate(size_type n) {
+            if (n > std::numeric_limits<size_type>::max() / sizeof(T)) {
+                throw std::bad_array_new_length();
+            }
+            return static_cast<T*>(arena_->allocate(n * sizeof(T), alignof(T)));
+        }
+
+        /**
+         * @brief No-op; memory is reclaimed when the arena is released.
+         * @param p Pointer from allocate().
+         * @param n Count passed to allocate().
+         */
+        void deallocate(T* p, size_type n) noexcept { arena_->deallocate(p, n * sizeof(T), alignof(T)); }
+
+        /** @brief @return The bound arena. */
+        [[nodiscard]] MonotonicArena* arena() const noexcept { return arena_; }
+
+    private:
+        MonotonicArena* arena_;
+    };
+
+    /**
+     * @brief Equality: allocators are interchangeable iff they share the same arena.
+     * @param lhs First allocator.
+     * @param rhs Second allocator.
+     * @return True if both use the same arena.
+     */
+    template <typename T, typename U>
+    [[nodiscard]] bool operator==(const ArenaAllocator<T>& lhs, const ArenaAllocator<U>& rhs) noexcept {
+        return lhs.arena() == rhs.arena();
+    }
+
+    static_assert(AllocatorUtils::Allocator<TrackingAllocator<int>>);
+    static_assert(AllocatorUtils::Allocator<ArenaAllocator<double>>);
+
+    /**
+     * @brief Showcase: tracking, stack, arena and pmr allocators with standard containers.
+     * @param out Stream receiving the narration.
+     */
+    void demonstrateCustomAllocators(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Memory
 
-#endif // CUSTOM_ALLOCATORS_HPP
+#endif // CPPVERSEHUB_MEMORY_CUSTOM_ALLOCATORS_HPP
