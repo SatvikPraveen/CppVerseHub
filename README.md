@@ -12,6 +12,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/release-v2.0.0-blue.svg)](CHANGELOG.md)
 
+[GitHub repository](https://github.com/SatvikPraveen/CppVerseHub) ·
+[API reference](https://satvikpraveen.github.io/CppVerseHub/) ·
 [Overview](#overview) ·
 [Quick start](#quick-start) ·
 [Modules](#modules) ·
