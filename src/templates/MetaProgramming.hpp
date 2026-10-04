@@ -108,17 +108,16 @@ template <std::size_t N, typename... Types>
 using type_at_t = typename type_at<N, Types...>::type;
 
 /**
- * @brief Index of T in Types (first match) or npos, computed by a constexpr loop instead of recursion.
+ * @brief Index of T in Types (first match) or npos, computed by a short-circuiting fold instead of recursion.
+ *
+ * The `||` fold stops at the first match; `index` counts the non-matching types before it. An empty pack
+ * folds to `false`, so no loop bound is ever compared against zero.
  */
 template <typename T, typename... Types>
 inline constexpr std::size_t type_index_v = [] {
-    constexpr std::array<bool, sizeof...(Types) + 1> matches{std::is_same_v<T, Types>..., false};
-    for (std::size_t i = 0; i < sizeof...(Types); ++i) {
-        if (matches[i]) {
-            return i;
-        }
-    }
-    return npos;
+    std::size_t index = 0;
+    const bool found = ((std::is_same_v<T, Types> ? true : (++index, false)) || ...);
+    return found ? index : npos;
 }();
 
 /** @brief True if T occurs in Types. */

@@ -131,11 +131,11 @@ TEST_CASE("overload builds visitor sets from lambdas", "[templates][variadic]") 
 
 TEST_CASE("multifunction dispatches to the first viable callable", "[templates][variadic]") {
     const V::multifunction dispatch(
-        [](const std::string& s) { return "string " + s; }, [](int i) { return "int " + std::to_string(i); },
-        [](auto&&) { return std::string("other"); });
+        [](const std::string& s) { return "string " + s; }, [](double) { return std::string("double"); },
+        [](int) { return std::string("int"); }, [](auto&&) { return std::string("other"); });
     CHECK(dispatch(std::string("s")) == "string s");
-    CHECK(dispatch(3) == "int 3");
-    CHECK(dispatch(2.5) == "int 2"); // first match, not best match: double converts to int
+    CHECK(dispatch(2.5) == "double");
+    CHECK(dispatch(3) == "double"); // first match, not best match: int converts to double before int is tried
     CHECK(dispatch(std::vector<int>{}) == "other");
 }
 
