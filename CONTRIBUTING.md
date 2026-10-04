@@ -40,7 +40,7 @@ ctest --preset default -L concurrency --output-on-failure
 3. Library code must not print. Demonstrations take a `std::ostream&`.
 4. Add tests in `tests/<module>/` and, for performance-sensitive code, a benchmark in `benchmarks/<module>/`.
 5. The build must stay warning-free: `cmake --preset strict && cmake --build --preset strict`.
-6. Format with `clang-format -i` using the repository `.clang-format`.
+6. Format with clang-format 18.1.8 (`pipx install clang-format==18.1.8`) and the repository `.clang-format`; CI rejects unformatted code.
 
 ## Commit messages
 

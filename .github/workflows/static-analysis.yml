@@ -14,12 +14,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - name: Install clang-format 18.1.8
+        # Pinned to the version used to format the tree; Ubuntu's 18.1.3 package can differ.
+        run: pipx install clang-format==18.1.8
       - name: Check formatting
         run: |
-          sudo apt-get update && sudo apt-get install -y clang-format-18
-          find src tests benchmarks examples -name '*.cpp' -o -name '*.hpp' \
-            | xargs clang-format-18 --dry-run --Werror --style=file
-        continue-on-error: true
+          find src tests benchmarks examples \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
+            | xargs -0 clang-format --dry-run --Werror --style=file
 
   clang-tidy:
     runs-on: ubuntu-24.04
