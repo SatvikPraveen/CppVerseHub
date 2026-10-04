@@ -1,559 +1,573 @@
 /**
  * @file CoroutinesDemo.hpp
- * @brief Comprehensive C++20 coroutines showcase and demonstrations
+ * @brief C++20 coroutines: a lazy `Generator<T>`, a lazy `Task<T>`, `sync_wait`, a
+ *        cooperative scheduler and an awaitable that hops onto a `ThreadPool`.
  * @details File location: src/concurrency/CoroutinesDemo.hpp
- * 
- * This file demonstrates C++20 coroutines including generators, tasks,
- * async operations, and advanced coroutine patterns for concurrent programming.
- * Requires C++20 compiler support with coroutines.
+ *
+ * C++20 ships the coroutine *machinery* but almost no coroutine *types*; this header
+ * builds the two fundamental ones and shows the design points that matter:
+ *
+ *  - `Generator<T>` is a synchronous, lazily evaluated input range. It stores a pointer
+ *    to the yielded object (no copy), forbids `co_await` inside the body, and re-throws
+ *    exceptions from the body to the consumer on the next increment.
+ *  - `Task<T>` is lazy (starts when awaited) and uses *symmetric transfer*
+ *    (`await_suspend` returning a handle) so deep `co_await` chains do not grow the stack.
+ *  - `sync_wait()` bridges coroutine and blocking worlds; its completion signal is raised
+ *    only *after* the wrapper coroutine has suspended, so destroying the frame is safe.
+ *  - `RoundRobinScheduler` interleaves tasks deterministically on one thread via `yield()`.
+ *  - `schedule_on(pool)` resumes the awaiting coroutine on a `ThreadPool` worker.
+ *
+ * Portability: requires C++20 coroutine support (GCC 11+, Clang 14+, MSVC 19.28+).
  */
 
-#ifndef COROUTINESDEMO_HPP
-#define COROUTINESDEMO_HPP
+#ifndef CPPVERSEHUB_CONCURRENCY_COROUTINESDEMO_HPP
+#define CPPVERSEHUB_CONCURRENCY_COROUTINESDEMO_HPP
 
+#include <condition_variable>
 #include <coroutine>
-#include <thread>
-#include <vector>
-#include <queue>
-#include <memory>
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <random>
-#include <functional>
-#include <optional>
-#include <variant>
-#include <future>
-#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
 #include <exception>
+#include <iostream>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "concurrency/ThreadPool.hpp"
 
 namespace CppVerseHub::Concurrency {
 
+    // =====================================================================================
+    // Generator
+    // =====================================================================================
+
     /**
-     * @class Generator
-     * @brief Basic generator implementation using coroutines
+     * @brief Lazily evaluated, move-only, single-pass coroutine generator (an input range).
+     *
+     * @code
+     * Generator<int> count_to(int n) { for (int i = 1; i <= n; ++i) co_yield i; }
+     * for (int v : count_to(3)) { ... }   // 1 2 3
+     * @endcode
+     * @tparam T Yielded value type.
      */
-    template<typename T>
-    class Generator {
+    template <typename T>
+    class [[nodiscard]] Generator {
     public:
+        using value_type = std::remove_cvref_t<T>;  ///< Element type.
+        using reference = const value_type&;        ///< Type returned by dereferencing.
+
+        /** @brief Coroutine promise: holds a pointer to the current yielded object. */
         struct promise_type {
-            T current_value;
-            
-            Generator get_return_object() {
+            const value_type* current = nullptr;
+            std::exception_ptr error;
+
+            Generator get_return_object() noexcept {
                 return Generator{std::coroutine_handle<promise_type>::from_promise(*this)};
             }
-            
-            std::suspend_always initial_suspend() { return {}; }
-            std::suspend_always final_suspend() noexcept { return {}; }
-            
-            std::suspend_always yield_value(T value) {
-                current_value = value;
+            std::suspend_always initial_suspend() const noexcept { return {}; }
+            std::suspend_always final_suspend() const noexcept { return {}; }
+            // The yielded object (even a temporary) lives until the coroutine is resumed,
+            // so storing its address is safe and avoids a copy.
+            std::suspend_always yield_value(const value_type& value) noexcept {
+                current = std::addressof(value);
                 return {};
             }
-            
-            void return_void() {}
-            void unhandled_exception() { std::terminate(); }
+            std::suspend_always yield_value(value_type&& value) noexcept {
+                current = std::addressof(value);
+                return {};
+            }
+            void return_void() const noexcept {}
+            void unhandled_exception() noexcept { error = std::current_exception(); }
+            /// Generators are synchronous: `co_await` inside a generator body is ill-formed.
+            template <typename U>
+            std::suspend_never await_transform(U&&) = delete;
+
+            void rethrow_if_failed() {
+                if (error) {
+                    std::rethrow_exception(std::exchange(error, nullptr));
+                }
+            }
         };
 
-        using handle_type = std::coroutine_handle<promise_type>;
+        using handle_type = std::coroutine_handle<promise_type>;  ///< Underlying handle type.
 
-        Generator(handle_type h) : coro_handle_(h) {}
-        
-        ~Generator() {
-            if (coro_handle_) {
-                coro_handle_.destroy();
-            }
-        }
-        
-        // Move only
-        Generator(const Generator&) = delete;
-        Generator& operator=(const Generator&) = delete;
-        
-        Generator(Generator&& other) noexcept : coro_handle_(other.coro_handle_) {
-            other.coro_handle_ = {};
-        }
-        
-        Generator& operator=(Generator&& other) noexcept {
-            if (this != &other) {
-                if (coro_handle_) {
-                    coro_handle_.destroy();
-                }
-                coro_handle_ = other.coro_handle_;
-                other.coro_handle_ = {};
-            }
-            return *this;
-        }
-
-        bool next() {
-            if (coro_handle_ && !coro_handle_.done()) {
-                coro_handle_.resume();
-                return !coro_handle_.done();
-            }
-            return false;
-        }
-
-        T value() const {
-            return coro_handle_.promise().current_value;
-        }
-
-        bool done() const {
-            return coro_handle_.done();
-        }
-
-        // Iterator support
+        /** @brief Input iterator over the generated sequence. */
         class iterator {
         public:
-            iterator(Generator& gen, bool is_end = false) : gen_(gen), is_end_(is_end) {
-                if (!is_end_ && gen_.coro_handle_ && !gen_.coro_handle_.done()) {
-                    gen_.coro_handle_.resume();
-                    is_end_ = gen_.coro_handle_.done();
-                }
-            }
+            using iterator_concept = std::input_iterator_tag;   ///< C++20 iterator concept.
+            using iterator_category = std::input_iterator_tag;  ///< Legacy iterator category.
+            using difference_type = std::ptrdiff_t;             ///< Required by input_iterator.
+            using value_type = Generator::value_type;           ///< Element type.
+            using reference = Generator::reference;             ///< Dereference type.
+            using pointer = const value_type*;                  ///< Arrow type.
 
+            /** @brief Singular iterator (compares equal to the end sentinel). */
+            iterator() noexcept = default;
+            /** @brief @param handle Generator coroutine. */
+            explicit iterator(handle_type handle) noexcept : handle_(handle) {}
+
+            /** @brief @return The current element. */
+            [[nodiscard]] reference operator*() const noexcept { return *handle_.promise().current; }
+            /** @brief @return Pointer to the current element. */
+            [[nodiscard]] pointer operator->() const noexcept { return handle_.promise().current; }
+
+            /** @brief Resumes the coroutine; re-throws if its body threw. @return *this. */
             iterator& operator++() {
-                if (gen_.coro_handle_ && !gen_.coro_handle_.done()) {
-                    gen_.coro_handle_.resume();
-                    is_end_ = gen_.coro_handle_.done();
+                handle_.resume();
+                if (handle_.done()) {
+                    handle_.promise().rethrow_if_failed();
                 }
                 return *this;
             }
+            /** @brief Post-increment (input iterators return void). */
+            void operator++(int) { ++*this; }
 
-            T operator*() const {
-                return gen_.coro_handle_.promise().current_value;
-            }
-
-            bool operator==(const iterator& other) const {
-                return is_end_ == other.is_end_;
-            }
-
-            bool operator!=(const iterator& other) const {
-                return !(*this == other);
+            /** @brief @return true when the coroutine has run to completion. */
+            friend bool operator==(const iterator& it, std::default_sentinel_t) noexcept {
+                return !it.handle_ || it.handle_.done();
             }
 
         private:
-            Generator& gen_;
-            bool is_end_;
+            handle_type handle_{};
         };
 
-        iterator begin() { return iterator(*this); }
-        iterator end() { return iterator(*this, true); }
-
-    private:
-        handle_type coro_handle_;
-    };
-
-    /**
-     * @class Task
-     * @brief Async task implementation using coroutines
-     */
-    template<typename T>
-    class Task {
-    public:
-        struct promise_type {
-            std::variant<std::monostate, T, std::exception_ptr> result_;
-
-            Task get_return_object() {
-                return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
+        Generator(const Generator&) = delete;
+        Generator& operator=(const Generator&) = delete;
+        /** @brief Transfers ownership of the coroutine frame. */
+        Generator(Generator&& other) noexcept : handle_(std::exchange(other.handle_, {})) {}
+        /** @brief Destroys the current frame and takes ownership of `other`'s. */
+        Generator& operator=(Generator&& other) noexcept {
+            if (this != &other) {
+                if (handle_) {
+                    handle_.destroy();
+                }
+                handle_ = std::exchange(other.handle_, {});
             }
-
-            std::suspend_never initial_suspend() { return {}; }
-            std::suspend_always final_suspend() noexcept { return {}; }
-
-            template<typename U>
-            void return_value(U&& value) {
-                result_ = std::forward<U>(value);
-            }
-
-            void unhandled_exception() {
-                result_ = std::current_exception();
-            }
-        };
-
-        using handle_type = std::coroutine_handle<promise_type>;
-
-        Task(handle_type h) : coro_handle_(h) {}
-
-        ~Task() {
-            if (coro_handle_) {
-                coro_handle_.destroy();
+            return *this;
+        }
+        /** @brief Destroys the coroutine frame (and every local in it). */
+        ~Generator() {
+            if (handle_) {
+                handle_.destroy();
             }
         }
 
-        // Move only
+        /**
+         * @brief Starts the coroutine and returns an iterator to the first element.
+         * @return Iterator; call at most once (single pass).
+         */
+        [[nodiscard]] iterator begin() {
+            if (handle_) {
+                handle_.resume();
+                if (handle_.done()) {
+                    handle_.promise().rethrow_if_failed();
+                }
+            }
+            return iterator{handle_};
+        }
+        /** @brief @return End sentinel. */
+        [[nodiscard]] std::default_sentinel_t end() const noexcept { return {}; }
+
+    private:
+        explicit Generator(handle_type handle) noexcept : handle_(handle) {}
+        handle_type handle_;
+    };
+
+    /**
+     * @brief Yields the half-open integer range [first, last).
+     * @param first First value.
+     * @param last One past the last value.
+     * @return Generator of the range.
+     */
+    [[nodiscard]] Generator<int> iota_range(int first, int last);
+
+    /**
+     * @brief Infinite Fibonacci sequence 0, 1, 1, 2, 3, ... (stops before overflowing 64 bits).
+     * @return Generator of Fibonacci numbers.
+     */
+    [[nodiscard]] Generator<std::uint64_t> fibonacci();
+
+    /**
+     * @brief Collatz trajectory of `start` down to 1 (inclusive).
+     * @param start Starting value (> 0).
+     * @return Generator of the trajectory.
+     * @throws std::invalid_argument (on first iteration) if `start == 0`.
+     */
+    [[nodiscard]] Generator<std::uint64_t> collatz(std::uint64_t start);
+
+    /**
+     * @brief Yields at most `count` elements of `source`.
+     * @param source Generator to draw from (consumed).
+     * @param count Maximum number of elements.
+     * @return Truncated generator.
+     */
+    template <typename T>
+    [[nodiscard]] Generator<T> take(Generator<T> source, std::size_t count) {
+        if (count == 0) {
+            co_return;
+        }
+        std::size_t produced = 0;
+        for (const auto& value : source) {
+            co_yield value;
+            if (++produced == count) {
+                co_return;
+            }
+        }
+    }
+
+    /**
+     * @brief Yields the elements of `source` that satisfy `pred`.
+     * @param source Generator to draw from (consumed).
+     * @param pred Predicate (copied into the coroutine frame).
+     * @return Filtered generator.
+     */
+    template <typename T, typename Pred>
+    [[nodiscard]] Generator<T> filter(Generator<T> source, Pred pred) {
+        for (const auto& value : source) {
+            if (pred(value)) {
+                co_yield value;
+            }
+        }
+    }
+
+    // =====================================================================================
+    // Task
+    // =====================================================================================
+
+    template <typename T = void>
+    class Task;
+
+    namespace detail {
+
+        /** @brief State shared by every `Task` promise: continuation + captured exception. */
+        struct TaskPromiseBase {
+            std::coroutine_handle<> continuation = std::noop_coroutine();
+            std::exception_ptr error;
+
+            struct FinalAwaiter {
+                [[nodiscard]] bool await_ready() const noexcept { return false; }
+                // Symmetric transfer: resume whoever awaited us without growing the stack.
+                template <typename Promise>
+                std::coroutine_handle<> await_suspend(std::coroutine_handle<Promise> handle) const noexcept {
+                    return handle.promise().continuation;
+                }
+                void await_resume() const noexcept {}
+            };
+
+            std::suspend_always initial_suspend() const noexcept { return {}; }
+            FinalAwaiter final_suspend() const noexcept { return {}; }
+            void unhandled_exception() noexcept { error = std::current_exception(); }
+        };
+
+        template <typename T>
+        struct TaskPromise : TaskPromiseBase {
+            std::optional<T> value;
+
+            Task<T> get_return_object() noexcept;
+            template <typename U>
+                requires std::constructible_from<T, U&&>
+            void return_value(U&& v) {
+                value.emplace(std::forward<U>(v));
+            }
+            T take_result() {
+                if (error) {
+                    std::rethrow_exception(error);
+                }
+                return std::move(*value);
+            }
+        };
+
+        template <>
+        struct TaskPromise<void> : TaskPromiseBase {
+            Task<void> get_return_object() noexcept;
+            void return_void() const noexcept {}
+            void take_result() const {
+                if (error) {
+                    std::rethrow_exception(error);
+                }
+            }
+        };
+
+    }  // namespace detail
+
+    /**
+     * @brief Lazy, move-only, awaitable unit of asynchronous work producing a `T`.
+     *
+     * The body starts running only when the task is `co_await`ed (or passed to
+     * `sync_wait` / `RoundRobinScheduler::spawn`). A task may be awaited once.
+     * Exceptions thrown by the body are re-thrown from `co_await`.
+     * @tparam T Result type (`void` allowed, references not).
+     */
+    template <typename T>
+    class [[nodiscard]] Task {
+        static_assert(!std::is_reference_v<T>, "Task<T&> is not supported; use std::reference_wrapper");
+
+    public:
+        using promise_type = detail::TaskPromise<T>;                ///< Coroutine promise.
+        using handle_type = std::coroutine_handle<promise_type>;  ///< Underlying handle.
+
         Task(const Task&) = delete;
         Task& operator=(const Task&) = delete;
-
-        Task(Task&& other) noexcept : coro_handle_(other.coro_handle_) {
-            other.coro_handle_ = {};
-        }
-
+        /** @brief Transfers ownership of the frame. */
+        Task(Task&& other) noexcept : handle_(std::exchange(other.handle_, {})) {}
+        /** @brief Destroys the current frame and takes `other`'s. */
         Task& operator=(Task&& other) noexcept {
             if (this != &other) {
-                if (coro_handle_) {
-                    coro_handle_.destroy();
+                if (handle_) {
+                    handle_.destroy();
                 }
-                coro_handle_ = other.coro_handle_;
-                other.coro_handle_ = {};
+                handle_ = std::exchange(other.handle_, {});
             }
             return *this;
         }
-
-        bool is_ready() const {
-            return coro_handle_ && coro_handle_.done();
+        /** @brief Destroys the frame. */
+        ~Task() {
+            if (handle_) {
+                handle_.destroy();
+            }
         }
 
-        T get() {
-            if (!coro_handle_) {
-                throw std::runtime_error("Task has no coroutine handle");
+        /** @brief @return true if the body has finished. */
+        [[nodiscard]] bool done() const noexcept { return !handle_ || handle_.done(); }
+
+        /** @brief Awaiter: starts the task and resumes the awaiting coroutine when it finishes. */
+        struct Awaiter {
+            handle_type handle;
+            [[nodiscard]] bool await_ready() const noexcept { return handle.done(); }
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<> awaiting) noexcept {
+                handle.promise().continuation = awaiting;
+                return handle;
             }
-
-            if (!coro_handle_.done()) {
-                throw std::runtime_error("Task is not completed");
-            }
-
-            auto& result = coro_handle_.promise().result_;
-            
-            if (std::holds_alternative<std::exception_ptr>(result)) {
-                std::rethrow_exception(std::get<std::exception_ptr>(result));
-            }
-            
-            if (std::holds_alternative<T>(result)) {
-                return std::get<T>(result);
-            }
-            
-            throw std::runtime_error("Task has no result");
-        }
-
-        // Awaitable interface
-        bool await_ready() const { return is_ready(); }
-        
-        void await_suspend(std::coroutine_handle<> continuation) {
-            // In a full implementation, this would schedule the continuation
-            // For this demo, we'll just resume immediately
-            if (coro_handle_ && !coro_handle_.done()) {
-                coro_handle_.resume();
-            }
-            continuation.resume();
-        }
-        
-        T await_resume() { return get(); }
-
-    private:
-        handle_type coro_handle_;
-    };
-
-    /**
-     * @class AsyncGenerator
-     * @brief Asynchronous generator using coroutines
-     */
-    template<typename T>
-    class AsyncGenerator {
-    public:
-        struct promise_type {
-            T current_value;
-            std::coroutine_handle<> continuation_;
-
-            AsyncGenerator get_return_object() {
-                return AsyncGenerator{std::coroutine_handle<promise_type>::from_promise(*this)};
-            }
-
-            std::suspend_always initial_suspend() { return {}; }
-            std::suspend_always final_suspend() noexcept { return {}; }
-
-            std::suspend_always yield_value(T value) {
-                current_value = value;
-                return {};
-            }
-
-            void return_void() {}
-            void unhandled_exception() { std::terminate(); }
+            T await_resume() { return handle.promise().take_result(); }
         };
 
-        using handle_type = std::coroutine_handle<promise_type>;
+        /** @brief @return Awaiter for `co_await task`. @pre The task is valid. */
+        Awaiter operator co_await() & noexcept { return Awaiter{handle_}; }
+        /** @brief @return Awaiter for `co_await std::move(task)`. @pre The task is valid. */
+        Awaiter operator co_await() && noexcept { return Awaiter{handle_}; }
 
-        AsyncGenerator(handle_type h) : coro_handle_(h) {}
+    private:
+        friend promise_type;
+        explicit Task(handle_type handle) noexcept : handle_(handle) {}
+        handle_type handle_;
+    };
 
-        ~AsyncGenerator() {
-            if (coro_handle_) {
-                coro_handle_.destroy();
-            }
+    namespace detail {
+
+        template <typename T>
+        Task<T> TaskPromise<T>::get_return_object() noexcept {
+            return Task<T>{std::coroutine_handle<TaskPromise<T>>::from_promise(*this)};
         }
 
-        // Move only
-        AsyncGenerator(const AsyncGenerator&) = delete;
-        AsyncGenerator& operator=(const AsyncGenerator&) = delete;
-
-        AsyncGenerator(AsyncGenerator&& other) noexcept : coro_handle_(other.coro_handle_) {
-            other.coro_handle_ = {};
+        inline Task<void> TaskPromise<void>::get_return_object() noexcept {
+            return Task<void>{std::coroutine_handle<TaskPromise<void>>::from_promise(*this)};
         }
 
-        AsyncGenerator& operator=(AsyncGenerator&& other) noexcept {
-            if (this != &other) {
-                if (coro_handle_) {
-                    coro_handle_.destroy();
-                }
-                coro_handle_ = other.coro_handle_;
-                other.coro_handle_ = {};
-            }
-            return *this;
-        }
-
-        // Async iterator
-        class async_iterator {
+        /** @brief One-shot blocking signal; `set()` notifies under the lock so the waiter may
+         *         destroy the event as soon as `wait()` returns. */
+        class SyncWaitEvent {
         public:
-            async_iterator(AsyncGenerator& gen, bool is_end = false) : gen_(gen), is_end_(is_end) {}
-
-            Task<bool> next() {
-                if (gen_.coro_handle_ && !gen_.coro_handle_.done()) {
-                    gen_.coro_handle_.resume();
-                    co_return !gen_.coro_handle_.done();
-                }
-                co_return false;
+            void set() noexcept {
+                std::lock_guard lock(mutex_);
+                done_ = true;
+                cv_.notify_all();
             }
-
-            T value() const {
-                return gen_.coro_handle_.promise().current_value;
+            void wait() {
+                std::unique_lock lock(mutex_);
+                cv_.wait(lock, [this] { return done_; });
             }
 
         private:
-            AsyncGenerator& gen_;
-            bool is_end_;
+            std::mutex mutex_;
+            std::condition_variable cv_;
+            bool done_ = false;
         };
 
-        async_iterator begin() { return async_iterator(*this); }
-        async_iterator end() { return async_iterator(*this, true); }
+        /** @brief Eager wrapper coroutine used by `sync_wait`. */
+        template <typename R>
+        class SyncWaitTask {
+        public:
+            struct promise_type {
+                SyncWaitEvent* event = nullptr;
+                std::optional<R> value;
+                std::exception_ptr error;
+
+                SyncWaitTask get_return_object() noexcept {
+                    return SyncWaitTask{std::coroutine_handle<promise_type>::from_promise(*this)};
+                }
+                std::suspend_always initial_suspend() const noexcept { return {}; }
+                auto final_suspend() const noexcept {
+                    struct Signal {
+                        [[nodiscard]] bool await_ready() const noexcept { return false; }
+                        // Runs after the coroutine is suspended: the waiter may now destroy it.
+                        void await_suspend(std::coroutine_handle<promise_type> h) const noexcept {
+                            h.promise().event->set();
+                        }
+                        void await_resume() const noexcept {}
+                    };
+                    return Signal{};
+                }
+                template <typename U>
+                void return_value(U&& v) {
+                    value.emplace(std::forward<U>(v));
+                }
+                void unhandled_exception() noexcept { error = std::current_exception(); }
+            };
+
+            SyncWaitTask(const SyncWaitTask&) = delete;
+            SyncWaitTask& operator=(const SyncWaitTask&) = delete;
+            SyncWaitTask(SyncWaitTask&& other) noexcept : handle_(std::exchange(other.handle_, {})) {}
+            SyncWaitTask& operator=(SyncWaitTask&&) = delete;
+            ~SyncWaitTask() {
+                if (handle_) {
+                    handle_.destroy();
+                }
+            }
+
+            R run() {
+                SyncWaitEvent event;
+                handle_.promise().event = &event;
+                handle_.resume();
+                event.wait();
+                if (handle_.promise().error) {
+                    std::rethrow_exception(handle_.promise().error);
+                }
+                return std::move(*handle_.promise().value);
+            }
+
+        private:
+            explicit SyncWaitTask(std::coroutine_handle<promise_type> h) noexcept : handle_(h) {}
+            std::coroutine_handle<promise_type> handle_;
+        };
+
+        template <typename T>
+        using SyncWaitStorage = std::conditional_t<std::is_void_v<T>, std::monostate, T>;
+
+        template <typename T>
+        SyncWaitTask<SyncWaitStorage<T>> make_sync_wait_task(Task<T> task) {
+            if constexpr (std::is_void_v<T>) {
+                co_await std::move(task);
+                co_return std::monostate{};
+            } else {
+                co_return co_await std::move(task);
+            }
+        }
+
+    }  // namespace detail
+
+    /**
+     * @brief Runs a task to completion, blocking the calling thread.
+     *
+     * The task may hop to other threads (e.g. via `schedule_on`); the caller is woken when
+     * it completes. Must not be called from a thread the task needs in order to finish.
+     * @param task Task to run (consumed).
+     * @return The task's result; its exception is re-thrown.
+     */
+    template <typename T>
+    T sync_wait(Task<T> task) {
+        auto wrapper = detail::make_sync_wait_task(std::move(task));
+        if constexpr (std::is_void_v<T>) {
+            static_cast<void>(wrapper.run());
+        } else {
+            return wrapper.run();
+        }
+    }
+
+    /**
+     * @brief Awaitable that resumes the awaiting coroutine on a `ThreadPool` worker.
+     *
+     * @code co_await schedule_on(pool);  // execution continues on a pool thread @endcode
+     */
+    class ScheduleOnAwaiter {
+    public:
+        /** @brief @param pool Target pool (must outlive the suspension). */
+        explicit ScheduleOnAwaiter(ThreadPool& pool) noexcept : pool_(&pool) {}
+        /** @brief @return false: always suspend. */
+        [[nodiscard]] bool await_ready() const noexcept { return false; }
+        /**
+         * @brief Posts the resumption to the pool.
+         * @param handle Awaiting coroutine.
+         * @throws PoolShutdownError if the pool is shut down (propagates out of `co_await`).
+         */
+        void await_suspend(std::coroutine_handle<> handle) const {
+            pool_->post(UniqueTask([handle] { handle.resume(); }));
+        }
+        /** @brief Nothing to return. */
+        void await_resume() const noexcept {}
 
     private:
-        handle_type coro_handle_;
+        ThreadPool* pool_;
     };
 
     /**
-     * @class CoroutineScheduler
-     * @brief Simple scheduler for coroutines
+     * @brief @param pool Pool to resume on. @return Awaitable that transfers execution to `pool`.
      */
-    class CoroutineScheduler {
+    [[nodiscard]] inline ScheduleOnAwaiter schedule_on(ThreadPool& pool) noexcept { return ScheduleOnAwaiter{pool}; }
+
+    /**
+     * @brief Single-threaded cooperative scheduler with deterministic round-robin interleaving.
+     *
+     * Spawned tasks run only inside `run()`. Inside a task, `co_await scheduler.yield()` moves
+     * the task to the back of the ready queue. Exceptions escaping a task are counted, not
+     * propagated. Not thread safe: use from one thread.
+     */
+    class RoundRobinScheduler {
     public:
-        CoroutineScheduler(size_t num_threads = std::thread::hardware_concurrency());
-        ~CoroutineScheduler();
+        RoundRobinScheduler() = default;
+        RoundRobinScheduler(const RoundRobinScheduler&) = delete;
+        RoundRobinScheduler& operator=(const RoundRobinScheduler&) = delete;
+        RoundRobinScheduler(RoundRobinScheduler&&) = delete;
+        RoundRobinScheduler& operator=(RoundRobinScheduler&&) = delete;
+        /** @brief Destroys every remaining (possibly unfinished) task. */
+        ~RoundRobinScheduler();
 
-        void schedule(std::coroutine_handle<> coro);
-        void start();
-        void stop();
-        
-        size_t pending_tasks() const;
-        bool is_running() const { return running_; }
+        /**
+         * @brief Registers a task; it starts at the next `run()`.
+         * @param task Task to run (consumed).
+         */
+        void spawn(Task<void> task);
 
-        // Awaitable for yielding execution
-        struct yield_awaitable {
-            CoroutineScheduler* scheduler_;
-
-            bool await_ready() const noexcept { return false; }
-            
-            void await_suspend(std::coroutine_handle<> coro) const {
-                scheduler_->schedule(coro);
-            }
-            
+        /** @brief Awaitable returned by `yield()`. */
+        struct YieldAwaiter {
+            RoundRobinScheduler* scheduler;
+            [[nodiscard]] bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> handle) const { scheduler->ready_.push_back(handle); }
             void await_resume() const noexcept {}
         };
 
-        yield_awaitable yield() { return yield_awaitable{this}; }
+        /** @brief @return Awaitable that re-queues the current task behind the others. */
+        [[nodiscard]] YieldAwaiter yield() noexcept { return YieldAwaiter{this}; }
+
+        /**
+         * @brief Resumes ready coroutines until none is left.
+         * @return Number of resumptions performed.
+         */
+        std::size_t run();
+
+        /** @brief @return Number of spawned tasks that have not finished. */
+        [[nodiscard]] std::size_t live_tasks() const noexcept { return drivers_.size(); }
+        /** @brief @return Number of tasks that finished by throwing. */
+        [[nodiscard]] std::size_t failed_tasks() const noexcept { return failures_; }
 
     private:
-        std::vector<std::thread> workers_;
-        std::queue<std::coroutine_handle<>> task_queue_;
-        std::mutex queue_mutex_;
-        std::condition_variable queue_condition_;
-        std::atomic<bool> running_{false};
-
-        void worker_thread();
+        std::deque<std::coroutine_handle<>> ready_;
+        std::vector<std::coroutine_handle<>> drivers_;
+        std::size_t failures_ = 0;
     };
 
     /**
-     * @class AsyncFileReader
-     * @brief Simulated async file reader using coroutines
+     * @brief Showcase: generators and combinators, task composition, sync_wait, thread hop,
+     *        round-robin interleaving.
+     * @param out Destination stream.
      */
-    class AsyncFileReader {
-    public:
-        struct FileData {
-            std::string filename;
-            std::string content;
-            bool success;
-            std::string error_message;
-        };
+    void demonstrate_coroutines(std::ostream& out = std::cout);
 
-        static Task<FileData> read_file_async(const std::string& filename);
-        static Task<std::vector<FileData>> read_multiple_files(const std::vector<std::string>& filenames);
+}  // namespace CppVerseHub::Concurrency
 
-    private:
-        static FileData simulate_file_read(const std::string& filename);
-    };
-
-    /**
-     * @class NetworkClient
-     * @brief Simulated async network client using coroutines
-     */
-    class NetworkClient {
-    public:
-        struct Response {
-            int status_code;
-            std::string body;
-            std::chrono::milliseconds latency;
-            bool success;
-        };
-
-        Task<Response> get_async(const std::string& url);
-        Task<Response> post_async(const std::string& url, const std::string& data);
-        Task<std::vector<Response>> batch_requests(const std::vector<std::string>& urls);
-
-    private:
-        Response simulate_http_request(const std::string& url, const std::string& method = "GET", const std::string& data = "");
-        std::random_device rd_;
-        std::mt19937 gen_{rd_()};
-    };
-
-    /**
-     * @class ProducerConsumerCoroutines
-     * @brief Producer-consumer pattern using coroutines
-     */
-    class ProducerConsumerCoroutines {
-    public:
-        struct Message {
-            int id;
-            std::string content;
-            std::chrono::steady_clock::time_point timestamp;
-        };
-
-        ProducerConsumerCoroutines(size_t buffer_capacity = 10);
-        
-        Task<void> producer_task(const std::string& producer_name, int message_count);
-        Task<void> consumer_task(const std::string& consumer_name, int message_count);
-        
-        void start_demo(int num_producers = 2, int num_consumers = 3, int messages_per_producer = 10);
-        void print_statistics() const;
-
-    private:
-        std::queue<Message> buffer_;
-        std::mutex buffer_mutex_;
-        std::condition_variable not_empty_;
-        std::condition_variable not_full_;
-        size_t capacity_;
-        std::atomic<int> message_id_counter_{0};
-        std::atomic<int> total_produced_{0};
-        std::atomic<int> total_consumed_{0};
-
-        struct MessageAwaitable {
-            ProducerConsumerCoroutines* parent_;
-            std::optional<Message> message_;
-
-            bool await_ready() const;
-            void await_suspend(std::coroutine_handle<> coro);
-            std::optional<Message> await_resume() const { return message_; }
-        };
-
-        MessageAwaitable try_consume();
-    };
-
-    /**
-     * @class WebCrawler
-     * @brief Async web crawler simulation using coroutines
-     */
-    class WebCrawler {
-    public:
-        struct CrawlResult {
-            std::string url;
-            std::vector<std::string> found_links;
-            size_t word_count;
-            std::chrono::milliseconds processing_time;
-            bool success;
-            std::string error;
-        };
-
-        WebCrawler(size_t max_concurrent_requests = 5);
-
-        Task<CrawlResult> crawl_page(const std::string& url);
-        Task<std::vector<CrawlResult>> crawl_website(const std::string& base_url, int max_depth = 2);
-        
-        void start_crawl_demo();
-
-    private:
-        size_t max_concurrent_;
-        std::atomic<size_t> active_requests_{0};
-        NetworkClient network_client_;
-
-        CrawlResult simulate_page_crawl(const std::string& url);
-        std::vector<std::string> extract_links(const std::string& url, const std::string& content);
-    };
-
-    /**
-     * @class DataProcessor
-     * @brief Pipeline data processor using coroutines
-     */
-    class DataProcessor {
-    public:
-        struct ProcessingStage {
-            std::string name;
-            std::function<std::string(const std::string&)> transform;
-            std::chrono::milliseconds processing_time;
-        };
-
-        DataProcessor();
-        
-        Task<std::string> process_data_async(const std::string& input);
-        Generator<std::string> process_stream(const std::vector<std::string>& inputs);
-        AsyncGenerator<std::string> process_stream_async(const std::vector<std::string>& inputs);
-        
-        void demonstrate_pipeline();
-
-    private:
-        std::vector<ProcessingStage> pipeline_;
-        CoroutineScheduler scheduler_;
-    };
-
-    /**
-     * @class BasicCoroutinesDemo
-     * @brief Basic coroutine demonstrations and examples
-     */
-    class BasicCoroutinesDemo {
-    public:
-        static void demonstrate_generators();
-        static void demonstrate_tasks();
-        static void demonstrate_async_generators();
-        static void demonstrate_coroutine_scheduler();
-
-        // Example generator functions
-        static Generator<int> fibonacci_generator(int count);
-        static Generator<std::string> string_generator(const std::vector<std::string>& strings);
-        static AsyncGenerator<int> async_number_generator(int start, int end);
-
-        // Example task functions
-        static Task<int> compute_factorial(int n);
-        static Task<std::string> async_string_operation(const std::string& input);
-        static Task<std::vector<int>> parallel_computation(const std::vector<int>& inputs);
-
-    private:
-        static void simulate_async_work(std::chrono::milliseconds duration);
-    };
-
-    /**
-     * @class CoroutinesDemo
-     * @brief Main demonstration coordinator for C++20 coroutines
-     */
-    class CoroutinesDemo {
-    public:
-        static void demonstrate_basic_coroutines();
-        static void demonstrate_async_file_operations();
-        static void demonstrate_network_coroutines();
-        static void demonstrate_producer_consumer_coroutines();
-        static void demonstrate_web_crawler();
-        static void demonstrate_data_processing_pipeline();
-        static void run_all_demonstrations();
-
-    private:
-        static void print_section_header(const std::string& title);
-        static void print_section_footer();
-        static void simulate_work(std::chrono::milliseconds duration);
-    };
-
-} // namespace CppVerseHub::Concurrency
-
-#endif // COROUTINESDEMO_HPP
+#endif  // CPPVERSEHUB_CONCURRENCY_COROUTINESDEMO_HPP

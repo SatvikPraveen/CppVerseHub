@@ -1,328 +1,291 @@
 /**
  * @file AsyncComms.hpp
- * @brief Asynchronous communication patterns and message passing systems
+ * @brief Asynchronous communication patterns: publish/subscribe, actors, request/response.
  * @details File location: src/concurrency/AsyncComms.hpp
- * 
- * This file demonstrates various asynchronous communication patterns including
- * message queues, publish-subscribe systems, and actor-like communication.
+ *
+ * Message passing replaces shared mutable state with ownership transfer: each piece of
+ * state is touched by exactly one thread, and threads communicate by sending values
+ * through queues. This header shows three canonical shapes:
+ *
+ *  - `MessageBus`: topic-based publish/subscribe with one dispatcher thread, which gives
+ *    a total delivery order; handlers run without any bus lock held, so a handler may
+ *    itself publish or (un)subscribe without deadlocking.
+ *  - `Actor<Msg>`: a private mailbox drained by a private thread; the behaviour owns its
+ *    state, so it needs no locks. Combined with `std::variant` messages and a
+ *    `std::promise` reply slot this gives the "ask" pattern.
+ *  - `RequestResponseServer`: named request handlers served by a `ThreadPool`, each request
+ *    answered through a `std::future` (unknown request types fail the future).
  */
 
-#ifndef ASYNCCOMMS_HPP
-#define ASYNCCOMMS_HPP
+#ifndef CPPVERSEHUB_CONCURRENCY_ASYNCCOMMS_HPP
+#define CPPVERSEHUB_CONCURRENCY_ASYNCCOMMS_HPP
 
-#include <thread>
-#include <future>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
 #include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
 #include <functional>
-#include <memory>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <unordered_set>
+#include <future>
 #include <iostream>
-#include <chrono>
-#include <any>
-#include <variant>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include "concurrency/ConditionalVariables.hpp"
+#include "concurrency/ThreadPool.hpp"
 
 namespace CppVerseHub::Concurrency {
 
-    /**
-     * @class Message
-     * @brief Generic message structure for async communication
-     */
+    /** @brief A message routed by topic. */
     struct Message {
-        std::string type;
-        std::any payload;
-        std::string sender_id;
-        std::chrono::steady_clock::time_point timestamp;
-        std::optional<std::string> correlation_id;
-
-        template<typename T>
-        Message(const std::string& msg_type, T&& data, const std::string& sender = "")
-            : type(msg_type), payload(std::forward<T>(data)), sender_id(sender),
-              timestamp(std::chrono::steady_clock::now()) {}
-
-        template<typename T>
-        T get_payload() const {
-            try {
-                return std::any_cast<T>(payload);
-            } catch (const std::bad_any_cast& e) {
-                throw std::runtime_error("Invalid payload type cast: " + std::string(e.what()));
-            }
-        }
-
-        bool has_correlation_id() const { return correlation_id.has_value(); }
-        void set_correlation_id(const std::string& id) { correlation_id = id; }
+        std::string topic;                           ///< Routing key.
+        std::string payload;                         ///< Opaque body.
+        std::uint64_t sender_id = 0;                 ///< Logical sender.
+        std::optional<std::uint64_t> correlation_id; ///< Links a reply to its request.
     };
 
     /**
-     * @class MessageQueue
-     * @brief Thread-safe message queue with capacity management
+     * @brief Topic-based publish/subscribe bus with an internal dispatcher thread.
+     *
+     * Guarantees: messages are delivered in publication order (global FIFO); a handler
+     * subscribed when a message is *dispatched* receives it; `flush()` returns once the bus
+     * is idle, i.e. every message published before (or during) the call has been delivered. Exceptions thrown by a
+     * handler are caught and counted (`handler_failures()`).
+     *
+     * Re-entrancy: a handler may call `publish`, `subscribe` and `unsubscribe`. Publications
+     * made from the dispatcher thread bypass the bounded queue (into a dispatcher-private
+     * backlog delivered before the next queued message), so a handler can never block on
+     * a full queue that only it could drain. A handler must not call `flush()` or `shutdown()`.
      */
-    template<typename T>
-    class MessageQueue {
+    class MessageBus {
     public:
-        explicit MessageQueue(size_t max_capacity = 1000) : max_capacity_(max_capacity) {}
+        using Handler = std::function<void(const Message&)>;  ///< Subscriber callback.
+        using SubscriptionId = std::uint64_t;                 ///< Handle for `unsubscribe`.
 
-        bool send(T message, std::chrono::milliseconds timeout = std::chrono::milliseconds::zero()) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            if (timeout == std::chrono::milliseconds::zero()) {
-                not_full_.wait(lock, [this] { return queue_.size() < max_capacity_ || closed_; });
-            } else {
-                if (!not_full_.wait_for(lock, timeout, [this] { return queue_.size() < max_capacity_ || closed_; })) {
-                    return false; // Timeout
-                }
-            }
-            
-            if (closed_) return false;
-            
-            queue_.push(std::move(message));
-            not_empty_.notify_one();
-            return true;
-        }
+        /**
+         * @brief Starts the dispatcher.
+         * @param queue_capacity Maximum number of undelivered messages before `publish` blocks.
+         */
+        explicit MessageBus(std::size_t queue_capacity = 1024);
+        MessageBus(const MessageBus&) = delete;
+        MessageBus& operator=(const MessageBus&) = delete;
+        MessageBus(MessageBus&&) = delete;
+        MessageBus& operator=(MessageBus&&) = delete;
+        /** @brief Delivers everything already published, then stops. */
+        ~MessageBus();
 
-        std::optional<T> receive(std::chrono::milliseconds timeout = std::chrono::milliseconds::zero()) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            if (timeout == std::chrono::milliseconds::zero()) {
-                not_empty_.wait(lock, [this] { return !queue_.empty() || closed_; });
-            } else {
-                if (!not_empty_.wait_for(lock, timeout, [this] { return !queue_.empty() || closed_; })) {
-                    return std::nullopt; // Timeout
-                }
-            }
-            
-            if (queue_.empty() && closed_) return std::nullopt;
-            
-            T message = std::move(queue_.front());
-            queue_.pop();
-            not_full_.notify_one();
-            return message;
-        }
+        /**
+         * @brief Registers a handler for a topic.
+         * @param topic Topic to listen on.
+         * @param handler Callback, invoked on the dispatcher thread.
+         * @return Subscription identifier.
+         */
+        SubscriptionId subscribe(const std::string& topic, Handler handler);
 
-        void close() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            closed_ = true;
-            not_empty_.notify_all();
-            not_full_.notify_all();
-        }
+        /**
+         * @brief Removes a subscription. A delivery already in progress may still complete.
+         * @param id Identifier returned by `subscribe`.
+         * @return true if it existed.
+         */
+        bool unsubscribe(SubscriptionId id);
 
-        size_t size() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return queue_.size();
-        }
+        /**
+         * @brief Queues a message for asynchronous delivery.
+         * @param message Message (its `topic` selects the subscribers).
+         * @return false if the bus has been shut down.
+         */
+        bool publish(Message message);
 
-        bool is_closed() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return closed_;
-        }
+        /**
+         * @brief Blocks until the bus is idle (all published messages, including those published
+         *        by handlers in the meantime, delivered). May wait indefinitely under a continuous
+         *        stream of publications.
+         */
+        void flush();
 
-    private:
-        std::queue<T> queue_;
-        mutable std::mutex mutex_;
-        std::condition_variable not_empty_;
-        std::condition_variable not_full_;
-        size_t max_capacity_;
-        bool closed_{false};
-    };
-
-    /**
-     * @class PubSubSystem
-     * @brief Publish-Subscribe messaging system
-     */
-    class PubSubSystem {
-    public:
-        using MessageHandler = std::function<void(const Message&)>;
-        using SubscriptionId = size_t;
-
-        PubSubSystem() = default;
-        ~PubSubSystem() { shutdown(); }
-
-        SubscriptionId subscribe(const std::string& topic, MessageHandler handler);
-        bool unsubscribe(const std::string& topic, SubscriptionId sub_id);
-        void publish(const std::string& topic, const Message& message);
-        
-        void start_processing();
+        /** @brief Stops accepting messages, delivers the backlog and joins the dispatcher. */
         void shutdown();
-        
-        size_t subscriber_count(const std::string& topic) const;
-        std::vector<std::string> get_topics() const;
+
+        /** @brief @param topic Topic. @return Number of subscribers on `topic`. */
+        [[nodiscard]] std::size_t subscriber_count(const std::string& topic) const;
+        /** @brief @return Topics with at least one subscriber, sorted. */
+        [[nodiscard]] std::vector<std::string> topics() const;
+        /** @brief @return Number of (message, handler) deliveries performed. */
+        [[nodiscard]] std::uint64_t deliveries() const noexcept { return deliveries_.load(); }
+        /** @brief @return Number of handler invocations that threw. */
+        [[nodiscard]] std::uint64_t handler_failures() const noexcept { return failures_.load(); }
 
     private:
         struct Subscription {
             SubscriptionId id;
-            MessageHandler handler;
+            std::string topic;
+            std::shared_ptr<const Handler> handler;
         };
 
-        std::unordered_map<std::string, std::vector<Subscription>> subscriptions_;
-        MessageQueue<std::pair<std::string, Message>> message_queue_;
-        std::thread processing_thread_;
-        std::atomic<SubscriptionId> next_sub_id_{1};
-        mutable std::mutex subscriptions_mutex_;
-        std::atomic<bool> running_{false};
+        void dispatch_loop();
 
-        void process_messages();
+        mutable std::shared_mutex subs_mutex_;
+        std::map<SubscriptionId, Subscription> subscriptions_;
+        SubscriptionId next_id_ = 1;
+
+        BoundedQueue<Message> queue_;
+        std::deque<Message> reentrant_;  // only touched by the dispatcher thread
+        std::mutex progress_mutex_;
+        std::condition_variable progress_cv_;
+        std::uint64_t published_ = 0;  // guarded by progress_mutex_
+        std::uint64_t delivered_ = 0;  // guarded by progress_mutex_
+
+        std::atomic<std::uint64_t> deliveries_{0};
+        std::atomic<std::uint64_t> failures_{0};
+        std::mutex join_mutex_;
+        std::thread dispatcher_;
     };
 
     /**
-     * @class AsyncChannel
-     * @brief Bidirectional async communication channel
+     * @brief An actor: a mailbox plus a dedicated thread running the behaviour on each message.
+     *
+     * The behaviour is only ever invoked from the actor's thread, one message at a time, so
+     * state captured by it needs no synchronisation. `stop()` (and the destructor) process
+     * every message accepted before the call.
+     * @tparam Msg Message type (typically a `std::variant` of commands).
      */
-    template<typename SendType, typename ReceiveType = SendType>
-    class AsyncChannel {
+    template <typename Msg>
+    class Actor {
     public:
-        explicit AsyncChannel(size_t buffer_size = 100)
-            : send_queue_(buffer_size), receive_queue_(buffer_size) {}
+        using Behaviour = std::function<void(Msg&)>;  ///< Message handler.
 
-        std::future<bool> async_send(SendType message) {
-            return std::async(std::launch::async, [this, msg = std::move(message)]() mutable {
-                return send_queue_.send(std::move(msg), std::chrono::milliseconds(1000));
-            });
+        /**
+         * @brief Starts the actor thread.
+         * @param behaviour Handler run for every message (exceptions are caught and counted).
+         * @param mailbox_capacity Mailbox bound; `tell` blocks when full.
+         */
+        explicit Actor(Behaviour behaviour, std::size_t mailbox_capacity = 256)
+            : behaviour_(std::move(behaviour)), mailbox_(mailbox_capacity), thread_([this] { run(); }) {}
+
+        Actor(const Actor&) = delete;
+        Actor& operator=(const Actor&) = delete;
+        Actor(Actor&&) = delete;
+        Actor& operator=(Actor&&) = delete;
+        /** @brief Drains the mailbox and joins the thread. */
+        ~Actor() { stop(); }
+
+        /**
+         * @brief Sends a message (fire and forget).
+         * @param message Message to enqueue.
+         * @return false if the actor has been stopped.
+         */
+        template <typename U = Msg>
+        bool tell(U&& message) {
+            return mailbox_.push(std::forward<U>(message));
         }
 
-        std::future<std::optional<ReceiveType>> async_receive() {
-            return std::async(std::launch::async, [this]() {
-                return receive_queue_.receive(std::chrono::milliseconds(1000));
-            });
+        /** @brief Closes the mailbox, processes the backlog and joins. Idempotent. */
+        void stop() {
+            mailbox_.close();
+            std::lock_guard lock(join_mutex_);
+            if (thread_.joinable()) {
+                thread_.join();
+            }
         }
 
-        bool send(SendType message, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-            return send_queue_.send(std::move(message), timeout);
-        }
-
-        std::optional<ReceiveType> receive(std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-            return receive_queue_.receive(timeout);
-        }
-
-        void close() {
-            send_queue_.close();
-            receive_queue_.close();
-        }
-
-        // For bidirectional communication
-        MessageQueue<SendType>& get_send_queue() { return send_queue_; }
-        MessageQueue<ReceiveType>& get_receive_queue() { return receive_queue_; }
+        /** @brief @return Messages processed so far. */
+        [[nodiscard]] std::uint64_t processed() const noexcept { return processed_.load(); }
+        /** @brief @return Messages whose handler threw. */
+        [[nodiscard]] std::uint64_t failures() const noexcept { return failures_.load(); }
 
     private:
-        MessageQueue<SendType> send_queue_;
-        MessageQueue<ReceiveType> receive_queue_;
+        void run() {
+            while (auto message = mailbox_.pop()) {
+                try {
+                    behaviour_(*message);
+                } catch (...) {
+                    failures_.fetch_add(1);
+                }
+                processed_.fetch_add(1);
+            }
+        }
+
+        Behaviour behaviour_;
+        BoundedQueue<Msg> mailbox_;
+        std::atomic<std::uint64_t> processed_{0};
+        std::atomic<std::uint64_t> failures_{0};
+        std::mutex join_mutex_;
+        std::thread thread_;  // last member: starts after everything it uses is constructed
     };
 
     /**
-     * @class ActorSystem
-     * @brief Simple actor-based communication system
+     * @brief Thrown (through the future) when no handler is registered for a request type.
      */
-    class ActorSystem {
+    class UnknownRequestError : public std::runtime_error {
     public:
-        class Actor {
-        public:
-            Actor(const std::string& name, ActorSystem* system)
-                : name_(name), system_(system), mailbox_(1000) {}
-            
-            virtual ~Actor() { stop(); }
+        /** @brief @param type The unrecognised request type. */
+        explicit UnknownRequestError(const std::string& type)
+            : std::runtime_error("no handler registered for request type '" + type + "'") {}
+    };
 
-            void start();
-            void stop();
-            void send_message(const Message& message);
-            const std::string& name() const { return name_; }
+    /**
+     * @brief Request/response server: handlers keyed by request type, executed on a thread pool.
+     */
+    class RequestResponseServer {
+    public:
+        using Handler = std::function<std::string(const std::string&)>;  ///< payload -> reply.
 
-        protected:
-            virtual void handle_message(const Message& message) = 0;
-            virtual void on_start() {}
-            virtual void on_stop() {}
-            
-            void send_to_actor(const std::string& actor_name, const Message& message);
-
-        private:
-            std::string name_;
-            ActorSystem* system_;
-            MessageQueue<Message> mailbox_;
-            std::thread actor_thread_;
-            std::atomic<bool> running_{false};
-
-            void actor_loop();
+        /** @brief Reply to a request. */
+        struct Response {
+            std::uint64_t correlation_id = 0;  ///< Matches `Ticket::correlation_id`.
+            std::string payload;               ///< Handler output.
         };
 
-        void register_actor(std::shared_ptr<Actor> actor);
-        void unregister_actor(const std::string& name);
-        void send_message(const std::string& actor_name, const Message& message);
-        void shutdown();
-
-        size_t actor_count() const;
-        std::vector<std::string> get_actor_names() const;
-
-    private:
-        std::unordered_map<std::string, std::shared_ptr<Actor>> actors_;
-        mutable std::mutex actors_mutex_;
-    };
-
-    /**
-     * @class RequestResponseSystem
-     * @brief Async request-response communication pattern
-     */
-    class RequestResponseSystem {
-    public:
-        using RequestHandler = std::function<Message(const Message&)>;
-        using ResponseCallback = std::function<void(const Message&)>;
-
-        void register_handler(const std::string& request_type, RequestHandler handler);
-        void unregister_handler(const std::string& request_type);
-
-        std::future<Message> send_request(const Message& request);
-        void send_request_async(const Message& request, ResponseCallback callback);
-
-        void start_processing();
-        void shutdown();
-
-    private:
-        std::unordered_map<std::string, RequestHandler> handlers_;
-        std::unordered_map<std::string, std::promise<Message>> pending_requests_;
-        std::unordered_map<std::string, ResponseCallback> pending_callbacks_;
-        
-        MessageQueue<Message> request_queue_;
-        std::thread processing_thread_;
-        std::atomic<bool> running_{false};
-        mutable std::mutex handlers_mutex_;
-        mutable std::mutex pending_mutex_;
-
-        void process_requests();
-        std::string generate_correlation_id();
-    };
-
-    /**
-     * @class AsyncCommDemo
-     * @brief Comprehensive demonstration of async communication patterns
-     */
-    class AsyncCommDemo {
-    public:
-        static void demonstrate_message_queue();
-        static void demonstrate_pubsub_system();
-        static void demonstrate_async_channel();
-        static void demonstrate_actor_system();
-        static void demonstrate_request_response();
-        static void demonstrate_space_communication_network();
-        static void run_all_demonstrations();
-
-    private:
-        // Space-themed demonstration classes
-        class SpaceStationActor;
-        class MissionControlActor;
-        class SatelliteActor;
-        
-        struct SpaceMessage {
-            std::string mission_id;
-            std::string data;
-            double coordinates[3];
+        /** @brief Handle for an in-flight request. */
+        struct Ticket {
+            std::uint64_t correlation_id = 0;  ///< Unique id assigned by the server.
+            std::future<Response> response;    ///< Becomes ready when the handler finishes.
         };
 
-        static void simulate_network_delay();
+        /** @brief @param workers Number of worker threads serving requests. */
+        explicit RequestResponseServer(std::size_t workers = 2) : pool_(workers) {}
+
+        /**
+         * @brief Registers or replaces the handler for a request type.
+         * @param type Request type.
+         * @param handler Handler.
+         */
+        void register_handler(const std::string& type, Handler handler);
+        /** @brief @param type Request type. @return true if a handler was removed. */
+        bool unregister_handler(const std::string& type);
+
+        /**
+         * @brief Sends a request.
+         * @param type Request type (resolved when the request executes).
+         * @param payload Request body.
+         * @return Ticket whose future yields the response or `UnknownRequestError`.
+         * @throws PoolShutdownError after `shutdown()`.
+         */
+        [[nodiscard]] Ticket request(const std::string& type, std::string payload);
+
+        /** @brief Completes in-flight requests and stops the workers. */
+        void shutdown() { pool_.shutdown(); }
+
+    private:
+        mutable std::shared_mutex handlers_mutex_;
+        std::map<std::string, std::shared_ptr<const Handler>> handlers_;
+        std::atomic<std::uint64_t> next_correlation_{1};
+        ThreadPool pool_;  // last: destroyed (and drained) first, while handlers_ is alive
     };
 
-} // namespace CppVerseHub::Concurrency
+    /**
+     * @brief Showcase: pub/sub fan-out, an actor with the ask pattern, request/response.
+     * @param out Destination stream.
+     */
+    void demonstrate_async_comms(std::ostream& out = std::cout);
 
-#endif // ASYNCCOMMS_HPP
+}  // namespace CppVerseHub::Concurrency
+
+#endif  // CPPVERSEHUB_CONCURRENCY_ASYNCCOMMS_HPP

@@ -1,409 +1,478 @@
 /**
  * @file AsyncMissions.hpp
- * @brief Parallel mission execution and async task coordination patterns
+ * @brief Futures-based task orchestration: `std::async`, promises, cooperative cancellation,
+ *        dependency graphs, data-parallel map, `when_all` and staged pipelines.
  * @details File location: src/concurrency/AsyncMissions.hpp
- * 
- * This file demonstrates advanced async patterns for coordinating parallel
- * mission execution, task dependencies, and distributed computation scenarios.
+ *
+ * Futures decouple *starting* work from *consuming* its result. This header builds the
+ * higher-level patterns on top of them, using a space-mission vocabulary:
+ *
+ *  - `CancellationSource`/`CancellationToken`: cooperative cancellation (threads cannot be
+ *    killed safely; work must poll a flag).
+ *  - `AsyncMission<T>`: a named unit of work launched with `std::async`, observable status,
+ *    results/errors captured in a `MissionResult<T>`.
+ *  - `MissionCoordinator`: executes a DAG of missions on a `ThreadPool` as soon as each
+ *    mission's prerequisites succeed; failures cancel all transitive dependents; cycles are
+ *    rejected up front (Kahn's algorithm).
+ *  - `parallel_transform`, `when_all`: fork/join helpers preserving input order.
+ *  - `Pipeline<T>`: one thread per stage connected by bounded queues (pipeline parallelism).
  */
 
-#ifndef ASYNCMISSIONS_HPP
-#define ASYNCMISSIONS_HPP
+#ifndef CPPVERSEHUB_CONCURRENCY_ASYNCMISSIONS_HPP
+#define CPPVERSEHUB_CONCURRENCY_ASYNCMISSIONS_HPP
 
-#include <future>
-#include <thread>
-#include <vector>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <atomic>
-#include <functional>
-#include <memory>
-#include <string>
-#include <chrono>
-#include <random>
-#include <unordered_map>
-#include <unordered_set>
-#include <iostream>
 #include <algorithm>
-#include <numeric>
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <future>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "concurrency/ConditionalVariables.hpp"
+#include "concurrency/ThreadPool.hpp"
 
 namespace CppVerseHub::Concurrency {
 
-    /**
-     * @enum MissionStatus
-     * @brief Status states for mission execution
-     */
-    enum class MissionStatus {
-        PENDING,
-        RUNNING,
-        COMPLETED,
-        FAILED,
-        CANCELLED
-    };
+    /** @brief Life-cycle state of a mission. */
+    enum class MissionStatus : std::uint8_t { Pending, Running, Succeeded, Failed, Cancelled };
 
-    /**
-     * @struct MissionResult
-     * @brief Result of a completed mission
-     */
-    template<typename T>
-    struct MissionResult {
-        T data;
-        MissionStatus status;
-        std::string error_message;
-        std::chrono::milliseconds execution_time;
-        
-        MissionResult() : status(MissionStatus::PENDING), execution_time(0) {}
-        MissionResult(T result_data) : data(std::move(result_data)), status(MissionStatus::COMPLETED), execution_time(0) {}
-        MissionResult(MissionStatus stat, const std::string& error) 
-            : status(stat), error_message(error), execution_time(0) {}
-    };
+    /** @brief @param status Status. @return Human-readable name. */
+    [[nodiscard]] std::string_view to_string(MissionStatus status) noexcept;
 
-    /**
-     * @class AsyncMission
-     * @brief Base class for asynchronous mission execution
-     */
-    template<typename ResultType>
-    class AsyncMission {
+    /** @brief Thrown by `CancellationToken::throw_if_cancelled()`. */
+    class MissionCancelled : public std::runtime_error {
     public:
-        using MissionFunction = std::function<ResultType()>;
-        
-        AsyncMission(const std::string& name, MissionFunction mission_func)
-            : name_(name), mission_func_(std::move(mission_func)), status_(MissionStatus::PENDING) {}
-        
-        virtual ~AsyncMission() = default;
+        /** @brief Constructs the exception. */
+        MissionCancelled() : std::runtime_error("mission cancelled") {}
+    };
 
-        // Start the mission asynchronously
-        std::future<MissionResult<ResultType>> start() {
-            if (status_.load() != MissionStatus::PENDING) {
-                throw std::runtime_error("Mission already started or completed");
-            }
-            
-            return std::async(std::launch::async, [this]() {
-                return execute_mission();
-            });
+    /** @brief Read side of a cancellation flag; cheap to copy and share between threads. */
+    class CancellationToken {
+    public:
+        /** @brief Token that is never cancelled. */
+        CancellationToken() = default;
+        /** @brief @return true once the owning source requested cancellation. */
+        [[nodiscard]] bool is_cancelled() const noexcept {
+            // acquire: pairs with the release in cancel(), so data written before cancel()
+            // (e.g. a reason) is visible to the observer.
+            return flag_ && flag_->load(std::memory_order_acquire);
         }
-
-        // Get current status
-        MissionStatus get_status() const { return status_.load(); }
-        const std::string& get_name() const { return name_; }
-        
-        // Cancel the mission (if possible)
-        void cancel() { 
-            auto expected = MissionStatus::PENDING;
-            status_.compare_exchange_strong(expected, MissionStatus::CANCELLED);
-        }
-
-    protected:
-        virtual MissionResult<ResultType> execute_mission() {
-            status_.store(MissionStatus::RUNNING);
-            auto start_time = std::chrono::high_resolution_clock::now();
-            
-            try {
-                std::cout << "Mission '" << name_ << "' starting execution\n";
-                ResultType result = mission_func_();
-                
-                auto end_time = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-                
-                status_.store(MissionStatus::COMPLETED);
-                std::cout << "Mission '" << name_ << "' completed in " << duration.count() << "ms\n";
-                
-                MissionResult<ResultType> mission_result(result);
-                mission_result.execution_time = duration;
-                return mission_result;
-                
-            } catch (const std::exception& e) {
-                auto end_time = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-                
-                status_.store(MissionStatus::FAILED);
-                std::cout << "Mission '" << name_ << "' failed: " << e.what() << "\n";
-                
-                MissionResult<ResultType> result(MissionStatus::FAILED, e.what());
-                result.execution_time = duration;
-                return result;
+        /** @brief @throws MissionCancelled if cancellation was requested. */
+        void throw_if_cancelled() const {
+            if (is_cancelled()) {
+                throw MissionCancelled{};
             }
         }
 
     private:
-        std::string name_;
-        MissionFunction mission_func_;
-        std::atomic<MissionStatus> status_;
+        friend class CancellationSource;
+        explicit CancellationToken(std::shared_ptr<const std::atomic<bool>> flag) noexcept : flag_(std::move(flag)) {}
+        std::shared_ptr<const std::atomic<bool>> flag_;
+    };
+
+    /** @brief Write side of a cancellation flag. */
+    class CancellationSource {
+    public:
+        /** @brief Creates a fresh, non-cancelled flag. */
+        CancellationSource() : flag_(std::make_shared<std::atomic<bool>>(false)) {}
+        /** @brief Requests cancellation (idempotent). */
+        void cancel() noexcept { flag_->store(true, std::memory_order_release); }
+        /** @brief @return true if `cancel()` was called. */
+        [[nodiscard]] bool is_cancelled() const noexcept { return flag_->load(std::memory_order_acquire); }
+        /** @brief @return Token observing this source. */
+        [[nodiscard]] CancellationToken token() const noexcept { return CancellationToken{flag_}; }
+
+    private:
+        std::shared_ptr<std::atomic<bool>> flag_;
     };
 
     /**
-     * @class MissionCoordinator
-     * @brief Coordinates execution of multiple related missions
+     * @brief Outcome of a mission.
+     * @tparam T Value type.
+     */
+    template <typename T>
+    struct MissionResult {
+        MissionStatus status = MissionStatus::Pending;  ///< Final status.
+        std::optional<T> value;                         ///< Set iff `status == Succeeded`.
+        std::string error;                              ///< Failure description, if any.
+        /** @brief @return true if the mission succeeded. */
+        [[nodiscard]] bool ok() const noexcept { return status == MissionStatus::Succeeded; }
+    };
+
+    /**
+     * @brief A named asynchronous computation launched with `std::async`.
+     *
+     * The callable receives a `CancellationToken` it should poll. Exceptions become a
+     * `Failed` result; `MissionCancelled` becomes `Cancelled`. The destructor waits for a
+     * started mission to finish, so the mission object can never dangle under its thread.
+     * @tparam T Result type.
+     */
+    template <typename T>
+    class AsyncMission {
+    public:
+        using Work = std::function<T(const CancellationToken&)>;  ///< Mission body.
+
+        /**
+         * @brief Creates a pending mission.
+         * @param name Mission name.
+         * @param work Mission body.
+         */
+        AsyncMission(std::string name, Work work) : name_(std::move(name)), work_(std::move(work)) {}
+
+        AsyncMission(const AsyncMission&) = delete;
+        AsyncMission& operator=(const AsyncMission&) = delete;
+        AsyncMission(AsyncMission&&) = delete;
+        AsyncMission& operator=(AsyncMission&&) = delete;
+        /** @brief Waits for a started mission to finish. */
+        ~AsyncMission() {
+            if (result_.valid()) {
+                result_.wait();
+            }
+        }
+
+        /**
+         * @brief Launches the mission.
+         * @param policy `std::launch::async` (new thread) or `std::launch::deferred` (lazy, runs on `get`).
+         * @return Shared future for the result (can be read by several consumers).
+         * @throws std::logic_error if already started.
+         */
+        std::shared_future<MissionResult<T>> start(std::launch policy = std::launch::async) {
+            if (result_.valid()) {
+                throw std::logic_error("mission '" + name_ + "' already started");
+            }
+            result_ = std::async(policy, [this] { return execute(); }).share();
+            return result_;
+        }
+
+        /** @brief Requests cooperative cancellation. */
+        void cancel() noexcept { cancel_.cancel(); }
+        /** @brief @return Current status. */
+        [[nodiscard]] MissionStatus status() const noexcept { return status_.load(); }
+        /** @brief @return Mission name. */
+        [[nodiscard]] const std::string& name() const noexcept { return name_; }
+
+    private:
+        MissionResult<T> execute() {
+            MissionResult<T> result;
+            if (cancel_.is_cancelled()) {
+                result.status = MissionStatus::Cancelled;
+                status_.store(result.status);
+                return result;
+            }
+            status_.store(MissionStatus::Running);
+            try {
+                result.value.emplace(work_(cancel_.token()));
+                result.status = MissionStatus::Succeeded;
+            } catch (const MissionCancelled& e) {
+                result.status = MissionStatus::Cancelled;
+                result.error = e.what();
+            } catch (const std::exception& e) {
+                result.status = MissionStatus::Failed;
+                result.error = e.what();
+            } catch (...) {
+                result.status = MissionStatus::Failed;
+                result.error = "unknown exception";
+            }
+            status_.store(result.status);
+            return result;
+        }
+
+        std::string name_;
+        Work work_;
+        CancellationSource cancel_;
+        std::atomic<MissionStatus> status_{MissionStatus::Pending};
+        std::shared_future<MissionResult<T>> result_;
+    };
+
+    /**
+     * @brief Executes a dependency graph of missions on a thread pool.
+     *
+     * A mission starts as soon as all of its prerequisites have *succeeded*. If a mission
+     * fails (throws), every mission that transitively depends on it is marked `Cancelled`
+     * without running. Independent branches keep running.
      */
     class MissionCoordinator {
     public:
-        using MissionId = size_t;
-        
-        template<typename T>
-        MissionId add_mission(std::unique_ptr<AsyncMission<T>> mission) {
-            std::lock_guard<std::mutex> lock(missions_mutex_);
-            MissionId id = next_mission_id_++;
-            
-            auto wrapper = std::make_unique<MissionWrapper<T>>(std::move(mission));
-            missions_[id] = std::move(wrapper);
-            
-            std::cout << "MissionCoordinator: Added mission " << id << "\n";
-            return id;
-        }
-        
-        void add_dependency(MissionId dependent, MissionId prerequisite) {
-            std::lock_guard<std::mutex> lock(dependencies_mutex_);
-            dependencies_[dependent].insert(prerequisite);
-            std::cout << "MissionCoordinator: Mission " << dependent 
-                      << " depends on mission " << prerequisite << "\n";
-        }
-        
-        void execute_all_missions();
-        void wait_for_completion();
-        
-        std::vector<MissionId> get_ready_missions() const;
-        bool all_missions_complete() const;
-        void print_mission_status() const;
-        
+        using MissionId = std::size_t;                              ///< Index of a mission.
+        using Work = std::function<void(const CancellationToken&)>;  ///< Mission body.
+
+        /**
+         * @brief Adds a mission.
+         * @param name Mission name.
+         * @param work Body.
+         * @param prerequisites Missions that must succeed first (must already exist).
+         * @return New mission's id.
+         * @throws std::out_of_range for an unknown prerequisite; std::logic_error while running.
+         */
+        MissionId add_mission(std::string name, Work work, const std::vector<MissionId>& prerequisites = {});
+
+        /**
+         * @brief Adds an edge `prerequisite -> dependent` (may create a cycle, detected by `run`).
+         * @param dependent Mission that waits.
+         * @param prerequisite Mission waited for.
+         * @throws std::out_of_range for unknown ids.
+         */
+        void add_dependency(MissionId dependent, MissionId prerequisite);
+
+        /**
+         * @brief Topological order of all missions (Kahn's algorithm, smallest id first).
+         * @return Order, or `std::nullopt` if the graph has a cycle.
+         */
+        [[nodiscard]] std::optional<std::vector<MissionId>> topological_order() const;
+
+        /**
+         * @brief Runs every mission and blocks until all are finished or cancelled.
+         * @param pool Executor (must not be shut down; must not be the calling thread's pool).
+         * @throws std::logic_error if the graph has a cycle or `run` was already called.
+         */
+        void run(ThreadPool& pool);
+
+        /** @brief Requests cancellation of every mission that has not started yet / polls the token. */
+        void cancel_all() noexcept { cancel_.cancel(); }
+
+        /** @brief @param id Mission. @return Its status. */
+        [[nodiscard]] MissionStatus status(MissionId id) const;
+        /** @brief @param id Mission. @return Its name. */
+        [[nodiscard]] const std::string& name(MissionId id) const;
+        /** @brief @param id Mission. @return Error message for failed missions. */
+        [[nodiscard]] std::string error(MissionId id) const;
+        /** @brief @return Ids in the order in which they finished running (succeeded or failed). */
+        [[nodiscard]] std::vector<MissionId> completion_order() const;
+        /** @brief @return Number of missions. */
+        [[nodiscard]] std::size_t size() const;
+
     private:
-        struct MissionWrapperBase {
-            virtual ~MissionWrapperBase() = default;
-            virtual std::future<void> start() = 0;
-            virtual bool is_complete() const = 0;
-            virtual MissionStatus get_status() const = 0;
-            virtual std::string get_name() const = 0;
+        struct Node {
+            std::string name;
+            Work work;
+            std::vector<MissionId> dependents;
+            std::size_t prerequisite_count = 0;
+            std::size_t remaining = 0;
+            MissionStatus status = MissionStatus::Pending;
+            std::string error;
         };
-        
-        template<typename T>
-        struct MissionWrapper : MissionWrapperBase {
-            std::unique_ptr<AsyncMission<T>> mission;
-            std::future<MissionResult<T>> future;
-            bool started = false;
-            
-            explicit MissionWrapper(std::unique_ptr<AsyncMission<T>> m) : mission(std::move(m)) {}
-            
-            std::future<void> start() override {
-                if (!started) {
-                    future = mission->start();
-                    started = true;
-                }
-                return std::async(std::launch::async, [this]() {
-                    future.wait();
-                });
-            }
-            
-            bool is_complete() const override {
-                return started && future.valid() && 
-                       future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-            }
-            
-            MissionStatus get_status() const override {
-                return mission->get_status();
-            }
-            
-            std::string get_name() const override {
-                return mission->get_name();
-            }
-        };
-        
-        std::unordered_map<MissionId, std::unique_ptr<MissionWrapperBase>> missions_;
-        std::unordered_map<MissionId, std::unordered_set<MissionId>> dependencies_;
-        std::unordered_set<MissionId> completed_missions_;
-        std::vector<std::future<void>> active_futures_;
-        
-        mutable std::mutex missions_mutex_;
-        mutable std::mutex dependencies_mutex_;
-        std::atomic<MissionId> next_mission_id_{1};
-        
-        bool can_start_mission(MissionId mission_id) const;
+
+        [[nodiscard]] std::optional<std::vector<MissionId>> topological_order_locked() const;
+        void launch(ThreadPool& pool, MissionId id);
+        void on_finished(ThreadPool& pool, MissionId id, MissionStatus status, std::string error);
+        void cancel_dependents_locked(MissionId id);
+
+        mutable std::mutex mutex_;
+        std::condition_variable done_cv_;
+        std::vector<Node> nodes_;
+        std::vector<MissionId> completion_order_;
+        std::size_t unfinished_ = 0;
+        bool started_ = false;
+        CancellationSource cancel_;
     };
 
     /**
-     * @class ParallelMissionExecutor
-     * @brief Execute missions in parallel with configurable concurrency
+     * @brief Applies `fn` to every element in parallel (chunked) and returns results in input order.
+     * @param pool Executor.
+     * @param inputs Input elements.
+     * @param fn Transformation `Out(const In&)`; invoked concurrently, so it must be thread safe.
+     * @param chunk_size Elements per task (0 = choose automatically).
+     * @return Transformed elements, `result[i] == fn(inputs[i])`.
+     * @throws Whatever `fn` threw for the lowest-indexed failing chunk (after all chunks finish).
      */
-    template<typename ResultType>
-    class ParallelMissionExecutor {
-    public:
-        using MissionFunc = std::function<ResultType(size_t)>;
-        
-        explicit ParallelMissionExecutor(size_t max_concurrent = std::thread::hardware_concurrency())
-            : max_concurrent_(max_concurrent) {}
+    template <typename In, typename F>
+    [[nodiscard]] auto parallel_transform(ThreadPool& pool, const std::vector<In>& inputs, F fn,
+                                          std::size_t chunk_size = 0)
+        -> std::vector<std::invoke_result_t<F&, const In&>> {
+        using Out = std::invoke_result_t<F&, const In&>;
+        static_assert(std::is_default_constructible_v<Out>, "parallel_transform requires a default-constructible result");
+        std::vector<Out> outputs(inputs.size());
+        if (inputs.empty()) {
+            return outputs;
+        }
+        if (chunk_size == 0) {
+            chunk_size = std::max<std::size_t>(1, inputs.size() / (pool.thread_count() * 4));
+        }
+        std::vector<std::future<void>> chunks;
+        std::exception_ptr first_error;
+        try {
+            for (std::size_t lo = 0; lo < inputs.size(); lo += chunk_size) {
+                const std::size_t hi = std::min(lo + chunk_size, inputs.size());
+                // Each chunk writes a disjoint index range of `outputs`: no data race.
+                chunks.push_back(pool.submit([&inputs, &outputs, &fn, lo, hi] {
+                    for (std::size_t i = lo; i < hi; ++i) {
+                        outputs[i] = fn(inputs[i]);
+                    }
+                }));
+            }
+        } catch (...) {
+            first_error = std::current_exception();  // e.g. PoolShutdownError; still join the rest
+        }
+        for (auto& chunk : chunks) {
+            try {
+                chunk.get();  // wait for every chunk: they reference our locals
+            } catch (...) {
+                if (!first_error) {
+                    first_error = std::current_exception();
+                }
+            }
+        }
+        if (first_error) {
+            std::rethrow_exception(first_error);
+        }
+        return outputs;
+    }
 
-        std::vector<std::future<MissionResult<ResultType>>> 
-        execute_batch(const std::vector<MissionFunc>& missions, const std::string& batch_name = "BatchMission") {
-            std::cout << "ParallelExecutor: Starting batch '" << batch_name 
-                      << "' with " << missions.size() << " missions\n";
-            
-            std::vector<std::future<MissionResult<ResultType>>> futures;
-            std::atomic<size_t> completed_count{0};
-            
-            // Execute missions with concurrency limit
-            for (size_t i = 0; i < missions.size(); ++i) {
-                // Wait if we've hit the concurrency limit
-                if (futures.size() >= max_concurrent_) {
-                    // Wait for at least one to complete
-                    for (auto& future : futures) {
-                        if (future.wait_for(std::chrono::milliseconds(10)) == std::future_status::ready) {
+    /**
+     * @brief Waits for every future and collects the values in order.
+     * @param futures Futures to join (consumed).
+     * @return Values in the same order.
+     * @throws The first (by index) stored exception, after all futures are ready.
+     */
+    template <typename T>
+    [[nodiscard]] std::vector<T> when_all(std::vector<std::future<T>> futures) {
+        std::vector<T> values;
+        values.reserve(futures.size());
+        std::exception_ptr first_error;
+        for (auto& f : futures) {
+            try {
+                values.push_back(f.get());
+            } catch (...) {
+                if (!first_error) {
+                    first_error = std::current_exception();
+                }
+            }
+        }
+        if (first_error) {
+            std::rethrow_exception(first_error);
+        }
+        return values;
+    }
+
+    /**
+     * @brief Linear pipeline where every stage runs on its own thread, connected by bounded queues.
+     *
+     * Different items occupy different stages at the same time (pipeline parallelism), while
+     * each stage processes items strictly in order, so output order equals input order.
+     * @tparam T Item type flowing through all stages.
+     */
+    template <typename T>
+    class Pipeline {
+    public:
+        using Stage = std::function<T(T)>;  ///< Stage transformation.
+
+        /**
+         * @brief Appends a stage.
+         * @param name Stage name (for diagnostics).
+         * @param stage Transformation.
+         * @return *this for chaining.
+         */
+        Pipeline& add_stage(std::string name, Stage stage) {
+            stages_.push_back(NamedStage{std::move(name), std::move(stage)});
+            return *this;
+        }
+
+        /** @brief @return Number of stages. */
+        [[nodiscard]] std::size_t stage_count() const noexcept { return stages_.size(); }
+
+        /** @brief @return Stage names in order. */
+        [[nodiscard]] std::vector<std::string> stage_names() const {
+            std::vector<std::string> names;
+            for (const auto& s : stages_) {
+                names.push_back(s.name);
+            }
+            return names;
+        }
+
+        /**
+         * @brief Pushes all inputs through the pipeline.
+         * @param inputs Items (consumed).
+         * @param queue_capacity Capacity of each inter-stage queue.
+         * @return Outputs in input order.
+         * @throws The first exception thrown by any stage (remaining items are discarded).
+         */
+        [[nodiscard]] std::vector<T> process(std::vector<T> inputs, std::size_t queue_capacity = 16) const {
+            if (stages_.empty()) {
+                return inputs;
+            }
+            std::vector<std::unique_ptr<BoundedQueue<T>>> queues;
+            for (std::size_t i = 0; i <= stages_.size(); ++i) {
+                queues.push_back(std::make_unique<BoundedQueue<T>>(queue_capacity));
+            }
+            std::mutex error_mutex;
+            std::exception_ptr error;
+            std::vector<std::thread> workers;
+            workers.reserve(stages_.size());
+            for (std::size_t s = 0; s < stages_.size(); ++s) {
+                workers.emplace_back([&, s] {
+                    BoundedQueue<T>& in = *queues[s];
+                    BoundedQueue<T>& out = *queues[s + 1];
+                    while (auto item = in.pop()) {
+                        try {
+                            if (!out.push(stages_[s].stage(std::move(*item)))) {
+                                break;
+                            }
+                        } catch (...) {
+                            {
+                                std::lock_guard lock(error_mutex);
+                                if (!error) {
+                                    error = std::current_exception();
+                                }
+                            }
+                            for (auto& q : queues) {
+                                q->close();  // unblock every stage, discard the rest
+                            }
                             break;
                         }
                     }
+                    out.close();
+                });
+            }
+            std::vector<T> outputs;
+            outputs.reserve(inputs.size());
+            std::thread feeder([&] {
+                for (auto& item : inputs) {
+                    if (!queues.front()->push(std::move(item))) {
+                        break;
+                    }
                 }
-                
-                futures.push_back(std::async(std::launch::async, 
-                    [mission = missions[i], i, &completed_count, batch_name]() {
-                        std::string mission_name = batch_name + "_" + std::to_string(i);
-                        auto start_time = std::chrono::high_resolution_clock::now();
-                        
-                        try {
-                            std::cout << "Executing " << mission_name << "\n";
-                            ResultType result = mission(i);
-                            
-                            auto end_time = std::chrono::high_resolution_clock::now();
-                            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-                            
-                            completed_count.fetch_add(1);
-                            std::cout << mission_name << " completed (" 
-                                      << completed_count.load() << " total)\n";
-                            
-                            MissionResult<ResultType> mission_result(result);
-                            mission_result.execution_time = duration;
-                            return mission_result;
-                            
-                        } catch (const std::exception& e) {
-                            auto end_time = std::chrono::high_resolution_clock::now();
-                            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-                            
-                            std::cout << mission_name << " failed: " << e.what() << "\n";
-                            
-                            MissionResult<ResultType> result(MissionStatus::FAILED, e.what());
-                            result.execution_time = duration;
-                            return result;
-                        }
-                    }));
-            }
-            
-            return futures;
-        }
-
-        void wait_for_all(std::vector<std::future<MissionResult<ResultType>>>& futures) {
-            for (auto& future : futures) {
-                future.wait();
-            }
-        }
-
-        std::vector<MissionResult<ResultType>> 
-        collect_results(std::vector<std::future<MissionResult<ResultType>>>& futures) {
-            std::vector<MissionResult<ResultType>> results;
-            results.reserve(futures.size());
-            
-            for (auto& future : futures) {
-                results.push_back(future.get());
-            }
-            
-            return results;
-        }
-
-    private:
-        size_t max_concurrent_;
-    };
-
-    /**
-     * @class PipelineMissionProcessor
-     * @brief Process missions through a pipeline of stages
-     */
-    template<typename InputType, typename OutputType>
-    class PipelineMissionProcessor {
-    public:
-        using StageProcessor = std::function<OutputType(const InputType&, size_t stage_id)>;
-        
-        void add_stage(const std::string& stage_name, StageProcessor processor) {
-            stages_.emplace_back(stage_name, std::move(processor));
-            std::cout << "Pipeline: Added stage '" << stage_name << "'\n";
-        }
-
-        std::future<std::vector<OutputType>> process_batch(std::vector<InputType> inputs) {
-            return std::async(std::launch::async, [this, inputs = std::move(inputs)]() mutable {
-                std::vector<OutputType> results;
-                results.reserve(inputs.size());
-                
-                for (size_t i = 0; i < inputs.size(); ++i) {
-                    auto result = process_single_item(inputs[i], i);
-                    results.push_back(result);
-                }
-                
-                return results;
+                queues.front()->close();
             });
-        }
-
-        OutputType process_single_item(InputType input, size_t item_id) {
-            std::cout << "Pipeline: Processing item " << item_id 
-                      << " through " << stages_.size() << " stages\n";
-            
-            // For simplicity, we'll process sequentially through stages
-            // In a real pipeline, stages could run in parallel
-            auto current_input = std::move(input);
-            
-            for (size_t stage_id = 0; stage_id < stages_.size(); ++stage_id) {
-                const auto& [stage_name, processor] = stages_[stage_id];
-                std::cout << "  Stage " << stage_id << " (" << stage_name 
-                          << ") processing item " << item_id << "\n";
-                
-                if (stage_id == stages_.size() - 1) {
-                    // Last stage produces final output
-                    return processor(current_input, stage_id);
-                } else {
-                    // Intermediate stages (would need different typing in real implementation)
-                    // This is simplified for demonstration
-                    auto intermediate_result = processor(current_input, stage_id);
-                    // In reality, we'd need to handle type transformations between stages
-                }
+            while (auto item = queues.back()->pop()) {
+                outputs.push_back(std::move(*item));
             }
-            
-            // This shouldn't be reached, but needed for compilation
-            throw std::runtime_error("Pipeline processing error");
+            feeder.join();
+            for (auto& w : workers) {
+                w.join();
+            }
+            if (error) {
+                std::rethrow_exception(error);
+            }
+            return outputs;
         }
 
     private:
-        std::vector<std::pair<std::string, StageProcessor>> stages_;
+        struct NamedStage {
+            std::string name;
+            Stage stage;
+        };
+        std::vector<NamedStage> stages_;
     };
 
     /**
-     * @class AsyncMissionDemo
-     * @brief Comprehensive demonstration of async mission patterns
+     * @brief Showcase: std::async/promise/packaged_task, cancellation, mission DAG, parallel map, pipeline.
+     * @param out Destination stream.
      */
-    class AsyncMissionDemo {
-    public:
-        static void demonstrate_basic_async_missions();
-        static void demonstrate_mission_coordinator();
-        static void demonstrate_parallel_executor();
-        static void demonstrate_pipeline_processor();
-        static void demonstrate_space_exploration_scenario();
-        static void run_all_demonstrations();
+    void demonstrate_async_missions(std::ostream& out = std::cout);
 
-    private:
-        struct SpaceExplorationData {
-            std::string planet_name;
-            double distance_from_earth;
-            std::vector<std::string> discovered_elements;
-            bool has_water;
-            double atmospheric_pressure;
-        };
+}  // namespace CppVerseHub::Concurrency
 
-        struct SatelliteData {
-            int satellite_id;
-            std::string mission_type;
-            double battery_level;
-            std::vector<double> sensor_readings;
-        };
-
-        static SpaceExplorationData simulate_planet_exploration(const std::string& planet_name);
-        static SatelliteData simulate_satellite_mission(int satellite_id);
-        static void simulate_mission_work(std::chrono::milliseconds duration);
-        static std::string generate_mission_report(const std::vector<SpaceExplorationData>& data);
-    };
-
-} // namespace CppVerseHub::Concurrency
-
-#endif // ASYNCMISSIONS_HPP
+#endif  // CPPVERSEHUB_CONCURRENCY_ASYNCMISSIONS_HPP

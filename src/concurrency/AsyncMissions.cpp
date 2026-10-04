@@ -1,519 +1,331 @@
 /**
  * @file AsyncMissions.cpp
- * @brief Implementation of parallel mission execution and async coordination
+ * @brief Mission DAG coordinator and the async-missions showcase.
  * @details File location: src/concurrency/AsyncMissions.cpp
  */
 
-#include "AsyncMissions.hpp"
-#include <iomanip>
-#include <sstream>
+#include "concurrency/AsyncMissions.hpp"
+
+#include <functional>
+#include <numeric>
+#include <queue>
 
 namespace CppVerseHub::Concurrency {
 
-    // MissionCoordinator Implementation
-    void MissionCoordinator::execute_all_missions() {
-        std::cout << "MissionCoordinator: Starting mission execution\n";
-        
-        while (!all_missions_complete()) {
-            auto ready_missions = get_ready_missions();
-            
-            if (ready_missions.empty() && !all_missions_complete()) {
-                std::cout << "MissionCoordinator: Waiting for dependencies to complete\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
+    std::string_view to_string(MissionStatus status) noexcept {
+        switch (status) {
+            case MissionStatus::Pending:
+                return "pending";
+            case MissionStatus::Running:
+                return "running";
+            case MissionStatus::Succeeded:
+                return "succeeded";
+            case MissionStatus::Failed:
+                return "failed";
+            case MissionStatus::Cancelled:
+                return "cancelled";
+        }
+        return "unknown";
+    }
+
+    // ---------------------------------------------------------------- MissionCoordinator
+
+    MissionCoordinator::MissionId MissionCoordinator::add_mission(std::string name, Work work,
+                                                                  const std::vector<MissionId>& prerequisites) {
+        std::lock_guard lock(mutex_);
+        if (started_) {
+            throw std::logic_error("cannot add missions after run()");
+        }
+        const MissionId id = nodes_.size();
+        for (const MissionId p : prerequisites) {
+            if (p >= id) {
+                throw std::out_of_range("unknown prerequisite mission id " + std::to_string(p));
             }
-            
-            // Start all ready missions
-            for (MissionId mission_id : ready_missions) {
-                std::lock_guard<std::mutex> lock(missions_mutex_);
-                auto it = missions_.find(mission_id);
-                if (it != missions_.end()) {
-                    std::cout << "MissionCoordinator: Starting mission " << mission_id 
-                              << " (" << it->second->get_name() << ")\n";
-                    auto future = it->second->start();
-                    active_futures_.push_back(std::move(future));
+        }
+        nodes_.push_back(Node{std::move(name), std::move(work), {}, prerequisites.size(), 0, MissionStatus::Pending, {}});
+        for (const MissionId p : prerequisites) {
+            nodes_[p].dependents.push_back(id);
+        }
+        return id;
+    }
+
+    void MissionCoordinator::add_dependency(MissionId dependent, MissionId prerequisite) {
+        std::lock_guard lock(mutex_);
+        if (started_) {
+            throw std::logic_error("cannot add dependencies after run()");
+        }
+        if (dependent >= nodes_.size() || prerequisite >= nodes_.size()) {
+            throw std::out_of_range("unknown mission id in add_dependency");
+        }
+        nodes_[prerequisite].dependents.push_back(dependent);
+        ++nodes_[dependent].prerequisite_count;
+    }
+
+    std::optional<std::vector<MissionCoordinator::MissionId>> MissionCoordinator::topological_order_locked() const {
+        std::vector<std::size_t> indegree(nodes_.size());
+        for (std::size_t i = 0; i < nodes_.size(); ++i) {
+            indegree[i] = nodes_[i].prerequisite_count;
+        }
+        std::priority_queue<MissionId, std::vector<MissionId>, std::greater<>> ready;
+        for (std::size_t i = 0; i < nodes_.size(); ++i) {
+            if (indegree[i] == 0) {
+                ready.push(i);
+            }
+        }
+        std::vector<MissionId> order;
+        order.reserve(nodes_.size());
+        while (!ready.empty()) {
+            const MissionId id = ready.top();
+            ready.pop();
+            order.push_back(id);
+            for (const MissionId d : nodes_[id].dependents) {
+                if (--indegree[d] == 0) {
+                    ready.push(d);
                 }
             }
-            
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (order.size() != nodes_.size()) {
+            return std::nullopt;  // some node never reached in-degree 0: cycle
+        }
+        return order;
+    }
+
+    std::optional<std::vector<MissionCoordinator::MissionId>> MissionCoordinator::topological_order() const {
+        std::lock_guard lock(mutex_);
+        return topological_order_locked();
+    }
+
+    void MissionCoordinator::run(ThreadPool& pool) {
+        std::vector<MissionId> roots;
+        {
+            std::lock_guard lock(mutex_);
+            if (started_) {
+                throw std::logic_error("MissionCoordinator::run() may only be called once");
+            }
+            if (!topological_order_locked()) {
+                throw std::logic_error("mission dependency graph contains a cycle");
+            }
+            started_ = true;
+            unfinished_ = nodes_.size();
+            for (std::size_t i = 0; i < nodes_.size(); ++i) {
+                nodes_[i].remaining = nodes_[i].prerequisite_count;
+                if (nodes_[i].remaining == 0) {
+                    roots.push_back(i);
+                }
+            }
+        }
+        for (const MissionId r : roots) {
+            launch(pool, r);
+        }
+        std::unique_lock lock(mutex_);
+        done_cv_.wait(lock, [this] { return unfinished_ == 0; });
+    }
+
+    void MissionCoordinator::launch(ThreadPool& pool, MissionId id) {
+        try {
+            pool.post(UniqueTask([this, &pool, id] {
+                const Work* work = nullptr;
+                {
+                    std::lock_guard lock(mutex_);
+                    nodes_[id].status = MissionStatus::Running;
+                    work = &nodes_[id].work;  // nodes_ is frozen once started_
+                }
+                if (cancel_.is_cancelled()) {
+                    on_finished(pool, id, MissionStatus::Cancelled, "cancelled before start");
+                    return;
+                }
+                MissionStatus status = MissionStatus::Succeeded;
+                std::string error;
+                try {
+                    (*work)(cancel_.token());
+                } catch (const MissionCancelled& e) {
+                    status = MissionStatus::Cancelled;
+                    error = e.what();
+                } catch (const std::exception& e) {
+                    status = MissionStatus::Failed;
+                    error = e.what();
+                } catch (...) {
+                    status = MissionStatus::Failed;
+                    error = "unknown exception";
+                }
+                on_finished(pool, id, status, std::move(error));
+                // No member may be touched past this point: run() may have returned.
+            }));
+        } catch (...) {
+            on_finished(pool, id, MissionStatus::Cancelled, "executor unavailable");
         }
     }
 
-    void MissionCoordinator::wait_for_completion() {
-        for (auto& future : active_futures_) {
-            future.wait();
-        }
-        std::cout << "MissionCoordinator: All missions completed\n";
-    }
-
-    std::vector<MissionCoordinator::MissionId> MissionCoordinator::get_ready_missions() const {
-        std::vector<MissionId> ready_missions;
-        
-        std::lock_guard<std::mutex> missions_lock(missions_mutex_);
-        std::lock_guard<std::mutex> deps_lock(dependencies_mutex_);
-        
-        for (const auto& [mission_id, mission] : missions_) {
-            if (mission->get_status() == MissionStatus::PENDING && can_start_mission(mission_id)) {
-                ready_missions.push_back(mission_id);
+    void MissionCoordinator::on_finished(ThreadPool& pool, MissionId id, MissionStatus status, std::string error) {
+        std::vector<MissionId> ready;
+        {
+            std::lock_guard lock(mutex_);
+            Node& node = nodes_[id];
+            node.status = status;
+            node.error = std::move(error);
+            if (status == MissionStatus::Succeeded || status == MissionStatus::Failed) {
+                completion_order_.push_back(id);
+            }
+            --unfinished_;
+            if (status == MissionStatus::Succeeded) {
+                for (const MissionId d : node.dependents) {
+                    if (--nodes_[d].remaining == 0 && nodes_[d].status == MissionStatus::Pending) {
+                        ready.push_back(d);
+                    }
+                }
+            } else {
+                cancel_dependents_locked(id);
+            }
+            if (unfinished_ == 0) {
+                done_cv_.notify_all();  // under the lock: run() cannot return before we release it
             }
         }
-        
-        return ready_missions;
-    }
-
-    bool MissionCoordinator::all_missions_complete() const {
-        std::lock_guard<std::mutex> lock(missions_mutex_);
-        
-        for (const auto& [mission_id, mission] : missions_) {
-            MissionStatus status = mission->get_status();
-            if (status != MissionStatus::COMPLETED && status != MissionStatus::FAILED) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool MissionCoordinator::can_start_mission(MissionId mission_id) const {
-        auto deps_it = dependencies_.find(mission_id);
-        if (deps_it == dependencies_.end()) {
-            return true; // No dependencies
-        }
-        
-        // Check if all dependencies are completed
-        for (MissionId dep_id : deps_it->second) {
-            auto mission_it = missions_.find(dep_id);
-            if (mission_it == missions_.end()) {
-                continue; // Dependency not found, assume it's okay
-            }
-            
-            MissionStatus dep_status = mission_it->second->get_status();
-            if (dep_status != MissionStatus::COMPLETED && dep_status != MissionStatus::FAILED) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    void MissionCoordinator::print_mission_status() const {
-        std::lock_guard<std::mutex> lock(missions_mutex_);
-        
-        std::cout << "\n=== Mission Status Report ===\n";
-        for (const auto& [mission_id, mission] : missions_) {
-            std::cout << "Mission " << mission_id << " (" << mission->get_name() << "): ";
-            
-            switch (mission->get_status()) {
-                case MissionStatus::PENDING: std::cout << "PENDING"; break;
-                case MissionStatus::RUNNING: std::cout << "RUNNING"; break;
-                case MissionStatus::COMPLETED: std::cout << "COMPLETED"; break;
-                case MissionStatus::FAILED: std::cout << "FAILED"; break;
-                case MissionStatus::CANCELLED: std::cout << "CANCELLED"; break;
-            }
-            std::cout << "\n";
-        }
-        std::cout << "==============================\n";
-    }
-
-    // AsyncMissionDemo Implementation
-    void AsyncMissionDemo::demonstrate_basic_async_missions() {
-        std::cout << "\n=== Basic Async Missions Demonstration ===\n";
-        
-        // Create different types of missions
-        auto exploration_mission = std::make_unique<AsyncMission<SpaceExplorationData>>(
-            "Mars_Exploration",
-            []() { return simulate_planet_exploration("Mars"); }
-        );
-        
-        auto satellite_mission = std::make_unique<AsyncMission<SatelliteData>>(
-            "Hubble_Observation",
-            []() { return simulate_satellite_mission(1); }
-        );
-        
-        auto calculation_mission = std::make_unique<AsyncMission<double>>(
-            "Orbital_Calculation",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(200));
-                return 42.7; // Mock orbital calculation result
-            }
-        );
-        
-        // Start missions and get futures
-        auto exploration_future = exploration_mission->start();
-        auto satellite_future = satellite_mission->start();
-        auto calculation_future = calculation_mission->start();
-        
-        // Wait for results
-        auto exploration_result = exploration_future.get();
-        auto satellite_result = satellite_future.get();
-        auto calculation_result = calculation_future.get();
-        
-        // Display results
-        std::cout << "Results summary:\n";
-        std::cout << "- Exploration mission: " 
-                  << (exploration_result.status == MissionStatus::COMPLETED ? "SUCCESS" : "FAILED") << "\n";
-        std::cout << "- Satellite mission: " 
-                  << (satellite_result.status == MissionStatus::COMPLETED ? "SUCCESS" : "FAILED") << "\n";
-        std::cout << "- Calculation mission: " 
-                  << (calculation_result.status == MissionStatus::COMPLETED ? "SUCCESS" : "FAILED") << "\n";
-        
-        if (exploration_result.status == MissionStatus::COMPLETED) {
-            const auto& data = exploration_result.data;
-            std::cout << "Explored planet: " << data.planet_name 
-                      << ", Found water: " << (data.has_water ? "Yes" : "No") << "\n";
+        for (const MissionId d : ready) {
+            launch(pool, d);
         }
     }
 
-    void AsyncMissionDemo::demonstrate_mission_coordinator() {
-        std::cout << "\n=== Mission Coordinator Demonstration ===\n";
-        
-        MissionCoordinator coordinator;
-        
-        // Create interdependent missions
-        auto prep_mission = std::make_unique<AsyncMission<std::string>>(
-            "Mission_Preparation",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(150));
-                return std::string("Equipment prepared and systems checked");
+    void MissionCoordinator::cancel_dependents_locked(MissionId id) {
+        std::vector<MissionId> stack(nodes_[id].dependents.begin(), nodes_[id].dependents.end());
+        while (!stack.empty()) {
+            const MissionId d = stack.back();
+            stack.pop_back();
+            Node& node = nodes_[d];
+            if (node.status != MissionStatus::Pending) {
+                continue;
             }
-        );
-        
-        auto launch_mission = std::make_unique<AsyncMission<std::string>>(
-            "Rocket_Launch",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(300));
-                return std::string("Rocket launched successfully");
-            }
-        );
-        
-        auto orbit_mission = std::make_unique<AsyncMission<std::string>>(
-            "Orbital_Insertion",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(200));
-                return std::string("Successfully entered orbit");
-            }
-        );
-        
-        auto science_mission = std::make_unique<AsyncMission<SpaceExplorationData>>(
-            "Science_Operations",
-            []() { return simulate_planet_exploration("Jupiter"); }
-        );
-        
-        // Add missions to coordinator
-        auto prep_id = coordinator.add_mission(std::move(prep_mission));
-        auto launch_id = coordinator.add_mission(std::move(launch_mission));
-        auto orbit_id = coordinator.add_mission(std::move(orbit_mission));
-        auto science_id = coordinator.add_mission(std::move(science_mission));
-        
-        // Define dependencies
-        coordinator.add_dependency(launch_id, prep_id);      // Launch depends on preparation
-        coordinator.add_dependency(orbit_id, launch_id);     // Orbit depends on launch
-        coordinator.add_dependency(science_id, orbit_id);    // Science depends on orbit
-        
-        // Execute all missions
-        coordinator.execute_all_missions();
-        coordinator.wait_for_completion();
-        coordinator.print_mission_status();
+            node.status = MissionStatus::Cancelled;
+            node.error = "prerequisite '" + nodes_[id].name + "' did not succeed";
+            --unfinished_;
+            stack.insert(stack.end(), node.dependents.begin(), node.dependents.end());
+        }
     }
 
-    void AsyncMissionDemo::demonstrate_parallel_executor() {
-        std::cout << "\n=== Parallel Mission Executor Demonstration ===\n";
-        
-        ParallelMissionExecutor<SatelliteData> executor(3); // Max 3 concurrent missions
-        
-        // Create batch of satellite missions
-        std::vector<std::function<SatelliteData(size_t)>> satellite_missions;
-        
-        for (int i = 0; i < 8; ++i) {
-            satellite_missions.push_back([](size_t mission_index) {
-                return simulate_satellite_mission(static_cast<int>(mission_index + 100));
+    MissionStatus MissionCoordinator::status(MissionId id) const {
+        std::lock_guard lock(mutex_);
+        return nodes_.at(id).status;
+    }
+
+    const std::string& MissionCoordinator::name(MissionId id) const {
+        std::lock_guard lock(mutex_);
+        return nodes_.at(id).name;  // names are immutable after insertion
+    }
+
+    std::string MissionCoordinator::error(MissionId id) const {
+        std::lock_guard lock(mutex_);
+        return nodes_.at(id).error;
+    }
+
+    std::vector<MissionCoordinator::MissionId> MissionCoordinator::completion_order() const {
+        std::lock_guard lock(mutex_);
+        return completion_order_;
+    }
+
+    std::size_t MissionCoordinator::size() const {
+        std::lock_guard lock(mutex_);
+        return nodes_.size();
+    }
+
+    // ---------------------------------------------------------------- showcase
+
+    void demonstrate_async_missions(std::ostream& out) {
+        out << "=== Async missions (futures) ===\n";
+
+        {
+            std::promise<double> fuel_reading;
+            std::future<double> fuel = fuel_reading.get_future();
+            std::thread sensor([&fuel_reading] { fuel_reading.set_value(87.5); });
+            out << "std::promise -> std::future: fuel level " << fuel.get() << "%\n";
+            sensor.join();
+
+            std::packaged_task<int(int, int)> burn([](int dv, int seconds) { return dv * seconds; });
+            std::future<int> impulse = burn.get_future();
+            std::thread engine(std::move(burn), 12, 30);
+            out << "std::packaged_task on a thread: impulse " << impulse.get() << '\n';
+            engine.join();
+
+            bool deferred_ran = false;
+            auto deferred = std::async(std::launch::deferred, [&deferred_ran] {
+                deferred_ran = true;
+                return 1;
             });
+            const bool before = deferred_ran;
+            static_cast<void>(deferred.get());
+            out << "std::launch::deferred runs lazily: before get() " << std::boolalpha << before << ", after "
+                << deferred_ran << '\n';
         }
-        
-        // Execute batch
-        auto futures = executor.execute_batch(satellite_missions, "SatelliteSwarm");
-        
-        // Wait and collect results
-        executor.wait_for_all(futures);
-        auto results = executor.collect_results(futures);
-        
-        // Analyze results
-        size_t successful = std::count_if(results.begin(), results.end(),
-            [](const MissionResult<SatelliteData>& result) {
-                return result.status == MissionStatus::COMPLETED;
+
+        {
+            AsyncMission<int> survey("asteroid-survey", [](const CancellationToken& token) {
+                int sum = 0;
+                for (int i = 1; i <= 100; ++i) {
+                    token.throw_if_cancelled();
+                    sum += i;
+                }
+                return sum;
             });
-        
-        auto total_time = std::accumulate(results.begin(), results.end(), std::chrono::milliseconds(0),
-            [](std::chrono::milliseconds sum, const MissionResult<SatelliteData>& result) {
-                return sum + result.execution_time;
+            const auto result = survey.start().get();
+            out << "AsyncMission '" << survey.name() << "' " << to_string(result.status) << " with value "
+                << result.value.value_or(-1) << '\n';
+
+            AsyncMission<int> aborted("deep-space-probe", [](const CancellationToken& token) {
+                token.throw_if_cancelled();
+                return 1;
             });
-        
-        std::cout << "Batch execution summary:\n";
-        std::cout << "- Successful missions: " << successful << "/" << results.size() << "\n";
-        std::cout << "- Total execution time: " << total_time.count() << "ms\n";
-        std::cout << "- Average mission time: " << (total_time.count() / results.size()) << "ms\n";
-    }
-
-    void AsyncMissionDemo::demonstrate_pipeline_processor() {
-        std::cout << "\n=== Pipeline Mission Processor Demonstration ===\n";
-        
-        PipelineMissionProcessor<std::string, std::string> pipeline;
-        
-        // Add processing stages
-        pipeline.add_stage("Data_Acquisition", [](const std::string& input, size_t stage_id) {
-            simulate_mission_work(std::chrono::milliseconds(50));
-            return "Acquired_" + input;
-        });
-        
-        pipeline.add_stage("Data_Processing", [](const std::string& input, size_t stage_id) {
-            simulate_mission_work(std::chrono::milliseconds(100));
-            return "Processed_" + input;
-        });
-        
-        pipeline.add_stage("Data_Analysis", [](const std::string& input, size_t stage_id) {
-            simulate_mission_work(std::chrono::milliseconds(75));
-            return "Analyzed_" + input;
-        });
-        
-        // Process batch of data
-        std::vector<std::string> input_data = {
-            "SensorData_1", "SensorData_2", "SensorData_3", "SensorData_4"
-        };
-        
-        auto results_future = pipeline.process_batch(input_data);
-        auto results = results_future.get();
-        
-        std::cout << "Pipeline processing results:\n";
-        for (size_t i = 0; i < results.size(); ++i) {
-            std::cout << "Item " << i << ": " << results[i] << "\n";
+            aborted.cancel();
+            const auto aborted_result = aborted.start().get();
+            out << "AsyncMission '" << aborted.name() << "' " << to_string(aborted_result.status) << '\n';
         }
-    }
 
-    void AsyncMissionDemo::demonstrate_space_exploration_scenario() {
-        std::cout << "\n=== Comprehensive Space Exploration Scenario ===\n";
-        
-        // Combine multiple async patterns for a complex scenario
-        MissionCoordinator mission_control;
-        ParallelMissionExecutor<SpaceExplorationData> explorer(4);
-        
-        // Phase 1: Preparation missions
-        auto systems_check = std::make_unique<AsyncMission<std::string>>(
-            "Systems_Check",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(100));
-                return std::string("All systems nominal");
+        {
+            ThreadPool pool(3);
+            MissionCoordinator coordinator;
+            std::atomic<int> work_done{0};
+            auto step = [&work_done](const CancellationToken&) { work_done.fetch_add(1); };
+            const auto fuel = coordinator.add_mission("fuel-up", step);
+            const auto crew = coordinator.add_mission("crew-boarding", step);
+            const auto launch = coordinator.add_mission("launch", step, {fuel, crew});
+            const auto orbit = coordinator.add_mission("orbit-insertion", step, {launch});
+            const auto broken = coordinator.add_mission("deploy-antenna", [](const CancellationToken&) {
+                throw std::runtime_error("hinge jammed");
+            }, {orbit});
+            const auto relay = coordinator.add_mission("relay-telemetry", step, {broken});
+            const auto science = coordinator.add_mission("science-ops", step, {orbit});
+            coordinator.run(pool);
+            out << "Mission DAG:";
+            for (MissionCoordinator::MissionId id : {fuel, crew, launch, orbit, broken, relay, science}) {
+                out << ' ' << coordinator.name(id) << '=' << to_string(coordinator.status(id));
             }
-        );
-        
-        auto fuel_loading = std::make_unique<AsyncMission<std::string>>(
-            "Fuel_Loading",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(150));
-                return std::string("Fuel tanks at 100%");
+            out << "\n  bodies executed: " << work_done.load() << ", relay-telemetry reason: "
+                << coordinator.error(relay) << '\n';
+
+            std::vector<int> radii(16);
+            std::iota(radii.begin(), radii.end(), 1);
+            const auto areas = parallel_transform(pool, radii, [](int r) { return r * r; });
+            out << "parallel_transform squares of 1..16, sum = " << std::accumulate(areas.begin(), areas.end(), 0)
+                << '\n';
+
+            std::vector<std::future<int>> probes;
+            for (int i = 0; i < 4; ++i) {
+                probes.push_back(pool.submit([i] { return 10 * i; }));
             }
-        );
-        
-        // Add preparation missions
-        auto systems_id = mission_control.add_mission(std::move(systems_check));
-        auto fuel_id = mission_control.add_mission(std::move(fuel_loading));
-        
-        // Phase 2: Launch mission (depends on preparation)
-        auto launch_mission = std::make_unique<AsyncMission<std::string>>(
-            "Multi_Planet_Launch",
-            []() {
-                simulate_mission_work(std::chrono::milliseconds(200));
-                return std::string("Multi-probe mission launched");
+            const auto readings = when_all(std::move(probes));
+            out << "when_all collected " << readings.size() << " probe readings, last = " << readings.back() << '\n';
+        }
+
+        {
+            Pipeline<int> pipeline;
+            pipeline.add_stage("calibrate", [](int x) { return x + 1; })
+                .add_stage("amplify", [](int x) { return x * 10; })
+                .add_stage("offset", [](int x) { return x - 3; });
+            const auto outputs = pipeline.process({1, 2, 3, 4, 5});
+            out << "Pipeline (" << pipeline.stage_count() << " threaded stages) output:";
+            for (int v : outputs) {
+                out << ' ' << v;
             }
-        );
-        
-        auto launch_id = mission_control.add_mission(std::move(launch_mission));
-        mission_control.add_dependency(launch_id, systems_id);
-        mission_control.add_dependency(launch_id, fuel_id);
-        
-        // Start preparation and launch sequence
-        std::thread mission_thread([&mission_control]() {
-            mission_control.execute_all_missions();
-            mission_control.wait_for_completion();
-        });
-        
-        // Phase 3: Parallel planetary exploration (after launch)
-        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Wait for launch
-        
-        std::vector<std::function<SpaceExplorationData(size_t)>> exploration_missions;
-        std::vector<std::string> target_planets = {
-            "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"
-        };
-        
-        for (const auto& planet : target_planets) {
-            exploration_missions.push_back([planet](size_t index) {
-                return simulate_planet_exploration(planet);
-            });
+            out << '\n';
         }
-        
-        std::cout << "Starting parallel planetary exploration...\n";
-        auto exploration_futures = explorer.execute_batch(exploration_missions, "PlanetaryExploration");
-        
-        // Wait for all missions to complete
-        mission_thread.join();
-        explorer.wait_for_all(exploration_futures);
-        auto exploration_results = explorer.collect_results(exploration_futures);
-        
-        // Generate comprehensive mission report
-        std::vector<SpaceExplorationData> successful_explorations;
-        for (const auto& result : exploration_results) {
-            if (result.status == MissionStatus::COMPLETED) {
-                successful_explorations.push_back(result.data);
-            }
-        }
-        
-        std::string final_report = generate_mission_report(successful_explorations);
-        std::cout << "\n" << final_report << "\n";
-        
-        mission_control.print_mission_status();
+        out << '\n';
     }
 
-    void AsyncMissionDemo::run_all_demonstrations() {
-        std::cout << "\n========== ASYNC MISSIONS COMPREHENSIVE DEMONSTRATION ==========\n";
-        
-        demonstrate_basic_async_missions();
-        demonstrate_mission_coordinator();
-        demonstrate_parallel_executor();
-        demonstrate_pipeline_processor();
-        demonstrate_space_exploration_scenario();
-        
-        std::cout << "\n========== ASYNC MISSIONS DEMONSTRATION COMPLETE ==========\n";
-    }
-
-    // Helper function implementations
-    AsyncMissionDemo::SpaceExplorationData 
-    AsyncMissionDemo::simulate_planet_exploration(const std::string& planet_name) {
-        // Simulate variable exploration time
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> time_dist(200, 800);
-        
-        simulate_mission_work(std::chrono::milliseconds(time_dist(gen)));
-        
-        SpaceExplorationData data;
-        data.planet_name = planet_name;
-        
-        // Generate mock exploration data based on planet name
-        std::uniform_real_distribution<> distance_dist(0.5, 50.0);
-        std::uniform_real_distribution<> pressure_dist(0.0, 2.0);
-        std::bernoulli_distribution water_dist(0.3); // 30% chance of water
-        
-        data.distance_from_earth = distance_dist(gen);
-        data.atmospheric_pressure = pressure_dist(gen);
-        data.has_water = water_dist(gen);
-        
-        // Generate discovered elements
-        std::vector<std::string> possible_elements = {
-            "Hydrogen", "Helium", "Oxygen", "Carbon", "Silicon", "Iron", "Magnesium", "Sulfur"
-        };
-        
-        std::uniform_int_distribution<> element_count_dist(1, 4);
-        int element_count = element_count_dist(gen);
-        
-        std::shuffle(possible_elements.begin(), possible_elements.end(), gen);
-        for (int i = 0; i < element_count && i < static_cast<int>(possible_elements.size()); ++i) {
-            data.discovered_elements.push_back(possible_elements[i]);
-        }
-        
-        return data;
-    }
-
-    AsyncMissionDemo::SatelliteData 
-    AsyncMissionDemo::simulate_satellite_mission(int satellite_id) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        
-        // Simulate mission time
-        std::uniform_int_distribution<> time_dist(100, 400);
-        simulate_mission_work(std::chrono::milliseconds(time_dist(gen)));
-        
-        SatelliteData data;
-        data.satellite_id = satellite_id;
-        
-        std::vector<std::string> mission_types = {
-            "Earth_Observation", "Communication_Relay", "Weather_Monitoring", 
-            "GPS_Navigation", "Scientific_Research"
-        };
-        
-        std::uniform_int_distribution<> mission_dist(0, static_cast<int>(mission_types.size() - 1));
-        data.mission_type = mission_types[mission_dist(gen)];
-        
-        std::uniform_real_distribution<> battery_dist(20.0, 100.0);
-        data.battery_level = battery_dist(gen);
-        
-        // Generate sensor readings
-        std::uniform_int_distribution<> reading_count_dist(3, 8);
-        int reading_count = reading_count_dist(gen);
-        
-        std::uniform_real_distribution<> reading_dist(-50.0, 50.0);
-        for (int i = 0; i < reading_count; ++i) {
-            data.sensor_readings.push_back(reading_dist(gen));
-        }
-        
-        return data;
-    }
-
-    void AsyncMissionDemo::simulate_mission_work(std::chrono::milliseconds duration) {
-        auto start = std::chrono::high_resolution_clock::now();
-        while (std::chrono::high_resolution_clock::now() - start < duration) {
-            // Simulate CPU-intensive work
-            volatile int dummy = 0;
-            for (int i = 0; i < 1000; ++i) {
-                dummy += i;
-            }
-            std::this_thread::yield();
-        }
-    }
-
-    std::string AsyncMissionDemo::generate_mission_report(const std::vector<SpaceExplorationData>& data) {
-        std::stringstream report;
-        
-        report << "=== SPACE EXPLORATION MISSION REPORT ===\n";
-        report << "Total planets explored: " << data.size() << "\n";
-        
-        if (data.empty()) {
-            report << "No successful explorations to report.\n";
-            return report.str();
-        }
-        
-        // Summary statistics
-        size_t planets_with_water = std::count_if(data.begin(), data.end(),
-            [](const SpaceExplorationData& planet) { return planet.has_water; });
-        
-        double avg_distance = std::accumulate(data.begin(), data.end(), 0.0,
-            [](double sum, const SpaceExplorationData& planet) {
-                return sum + planet.distance_from_earth;
-            }) / data.size();
-        
-        size_t total_elements = std::accumulate(data.begin(), data.end(), 0ULL,
-            [](size_t sum, const SpaceExplorationData& planet) {
-                return sum + planet.discovered_elements.size();
-            });
-        
-        report << "Planets with water: " << planets_with_water << "/" << data.size() << "\n";
-        report << "Average distance from Earth: " << std::fixed << std::setprecision(2) 
-               << avg_distance << " AU\n";
-        report << "Total unique elements discovered: " << total_elements << "\n";
-        
-        report << "\nDetailed exploration results:\n";
-        for (const auto& planet : data) {
-            report << "- " << planet.planet_name << ": ";
-            report << (planet.has_water ? "Water detected" : "No water");
-            report << ", Pressure: " << std::fixed << std::setprecision(2) 
-                   << planet.atmospheric_pressure << " atm";
-            report << ", Elements: ";
-            for (size_t i = 0; i < planet.discovered_elements.size(); ++i) {
-                report << planet.discovered_elements[i];
-                if (i < planet.discovered_elements.size() - 1) report << ", ";
-            }
-            report << "\n";
-        }
-        
-        report << "==========================================";
-        return report.str();
-    }
-
-} // namespace CppVerseHub::Concurrency
+}  // namespace CppVerseHub::Concurrency

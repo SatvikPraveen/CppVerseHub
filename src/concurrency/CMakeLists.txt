@@ -1,4 +1,5 @@
-# concurrency module
+# concurrency module: thread pools, synchronisation primitives, atomics and
+# lock-free structures, futures-based orchestration, message passing, coroutines.
 cppversehub_add_module(
     NAME  concurrency
     ALIAS Concurrency
@@ -8,6 +9,7 @@ cppversehub_add_module(
     Atomics.cpp
     ConditionalVariables.cpp
     CoroutinesDemo.cpp
+    Demo.cpp
     MutexExamples.cpp
     ThreadPool.cpp
 )

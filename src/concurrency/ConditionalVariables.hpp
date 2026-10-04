@@ -1,497 +1,455 @@
 /**
- * @file ConditionVariables.hpp
- * @brief Comprehensive condition variable demonstrations for thread coordination
- * @details File location: src/concurrency/ConditionVariables.hpp
- * 
- * This file demonstrates various condition variable patterns, thread coordination
- * strategies, and synchronization mechanisms including barriers, semaphores,
- * and complex multi-threaded workflows.
+ * @file ConditionalVariables.hpp
+ * @brief Blocking coordination primitives built from `std::mutex` + `std::condition_variable`.
+ * @details File location: src/concurrency/ConditionalVariables.hpp
+ *
+ * Condition variables are the general-purpose "wait until a predicate over shared
+ * state becomes true" primitive. Every type here follows the same discipline:
+ * the predicate's state is only touched under the mutex, every wait uses the
+ * predicate overload (robust against spurious wake-ups), and notification happens
+ * after the state change. The module shows:
+ *
+ *  - `BoundedQueue<T>`: a closable bounded multi-producer/multi-consumer queue
+ *    (back-pressure on producers, graceful drain for consumers).
+ *  - `CountingSemaphore`, `CountDownLatch`, `CyclicBarrier`, `ManualResetEvent`:
+ *    hand-rolled equivalents of the C++20 `<semaphore>`, `<latch>`, `<barrier>` types,
+ *    which makes their semantics explicit and works on every standard library.
+ *  - `ResourcePool<T>`: a blocking object pool that hands out RAII leases.
  */
 
-#ifndef CONDITIONVARIABLES_HPP
-#define CONDITIONVARIABLES_HPP
+#ifndef CPPVERSEHUB_CONCURRENCY_CONDITIONALVARIABLES_HPP
+#define CPPVERSEHUB_CONCURRENCY_CONDITIONALVARIABLES_HPP
 
-#include <condition_variable>
-#include <mutex>
-#include <shared_mutex>
-#include <thread>
-#include <vector>
-#include <queue>
-#include <deque>
-#include <stack>
-#include <unordered_map>
-#include <atomic>
 #include <chrono>
-#include <iostream>
-#include <string>
-#include <memory>
+#include <condition_variable>
+#include <cstddef>
+#include <deque>
 #include <functional>
-#include <random>
-#include <future>
+#include <iostream>
+#include <mutex>
 #include <optional>
-#include <array>
-#include <algorithm>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Concurrency {
 
     /**
-     * @class BasicConditionVariableDemo
-     * @brief Demonstrates fundamental condition variable usage patterns
+     * @brief Closable, bounded, blocking multi-producer/multi-consumer FIFO queue.
+     *
+     * - `push` blocks while the queue is full (back-pressure); `pop` blocks while empty.
+     * - After `close()`, pushes fail immediately and pops drain the remaining elements,
+     *   then return `std::nullopt`. This gives consumers a clean termination signal.
+     * - A failed `try_push`/`push_for` does not move from its argument.
+     *
+     * @tparam T Element type; must be move-constructible.
      */
-    class BasicConditionVariableDemo {
+    template <typename T>
+    class BoundedQueue {
     public:
-        void demonstrate_basic_wait_notify();
-        void demonstrate_predicate_wait();
-        void demonstrate_spurious_wakeup_handling();
-        void demonstrate_timeout_operations();
-        void demonstrate_notify_all_vs_notify_one();
-
-    private:
-        std::mutex mutex_;
-        std::condition_variable cv_;
-        bool ready_ = false;
-        std::string shared_data_;
-        int shared_counter_ = 0;
-        
-        void producer_task(const std::string& data);
-        void consumer_task();
-        void worker_task(int worker_id);
-    };
-
-    /**
-     * @class ProducerConsumerBuffer
-     * @brief Thread-safe bounded buffer using condition variables
-     */
-    template<typename T>
-    class ProducerConsumerBuffer {
-    public:
-        explicit ProducerConsumerBuffer(size_t capacity) 
-            : capacity_(capacity), buffer_(capacity) {}
-
-        void produce(T item) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            // Wait until buffer is not full
-            not_full_.wait(lock, [this] { return count_ < capacity_; });
-            
-            buffer_[write_index_] = std::move(item);
-            write_index_ = (write_index_ + 1) % capacity_;
-            count_++;
-            
-            not_empty_.notify_one();
+        /**
+         * @brief Creates an empty queue.
+         * @param capacity Maximum number of buffered elements (must be > 0).
+         * @throws std::invalid_argument if `capacity == 0`.
+         */
+        explicit BoundedQueue(std::size_t capacity) : capacity_(capacity) {
+            if (capacity_ == 0) {
+                throw std::invalid_argument("BoundedQueue capacity must be positive");
+            }
         }
 
-        T consume() {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            // Wait until buffer is not empty
-            not_empty_.wait(lock, [this] { return count_ > 0; });
-            
-            T item = std::move(buffer_[read_index_]);
-            read_index_ = (read_index_ + 1) % capacity_;
-            count_--;
-            
-            not_full_.notify_one();
-            return item;
+        /**
+         * @brief Blocks until there is space, then enqueues.
+         * @param value Element to enqueue.
+         * @return false if the queue was closed (the value is not consumed).
+         */
+        template <typename U = T>
+        bool push(U&& value) {
+            std::unique_lock lock(mutex_);
+            not_full_.wait(lock, [this] { return closed_ || items_.size() < capacity_; });
+            return emplace_locked(lock, std::forward<U>(value));
         }
 
-        bool try_produce(T item, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            if (!not_full_.wait_for(lock, timeout, [this] { return count_ < capacity_; })) {
+        /**
+         * @brief Enqueues without blocking.
+         * @param value Element to enqueue.
+         * @return false if full or closed (the value is not consumed).
+         */
+        template <typename U = T>
+        bool try_push(U&& value) {
+            std::unique_lock lock(mutex_);
+            if (items_.size() >= capacity_) {
                 return false;
             }
-            
-            buffer_[write_index_] = std::move(item);
-            write_index_ = (write_index_ + 1) % capacity_;
-            count_++;
-            
+            return emplace_locked(lock, std::forward<U>(value));
+        }
+
+        /**
+         * @brief Waits at most `timeout` for space, then enqueues.
+         * @param value Element to enqueue.
+         * @param timeout Maximum wait.
+         * @return false on timeout or if closed.
+         */
+        template <typename U, typename Rep, typename Period>
+        bool push_for(U&& value, const std::chrono::duration<Rep, Period>& timeout) {
+            std::unique_lock lock(mutex_);
+            if (!not_full_.wait_for(lock, timeout, [this] { return closed_ || items_.size() < capacity_; })) {
+                return false;
+            }
+            return emplace_locked(lock, std::forward<U>(value));
+        }
+
+        /**
+         * @brief Blocks until an element is available or the queue is closed and drained.
+         * @return The front element, or `std::nullopt` once closed and empty.
+         */
+        [[nodiscard]] std::optional<T> pop() {
+            std::unique_lock lock(mutex_);
+            not_empty_.wait(lock, [this] { return closed_ || !items_.empty(); });
+            return take_locked(lock);
+        }
+
+        /** @brief Non-blocking pop. @return Front element or `std::nullopt` if empty. */
+        [[nodiscard]] std::optional<T> try_pop() {
+            std::unique_lock lock(mutex_);
+            return take_locked(lock);
+        }
+
+        /**
+         * @brief Waits at most `timeout` for an element.
+         * @param timeout Maximum wait.
+         * @return Front element, or `std::nullopt` on timeout / closed-and-empty.
+         */
+        template <typename Rep, typename Period>
+        [[nodiscard]] std::optional<T> pop_for(const std::chrono::duration<Rep, Period>& timeout) {
+            std::unique_lock lock(mutex_);
+            not_empty_.wait_for(lock, timeout, [this] { return closed_ || !items_.empty(); });
+            return take_locked(lock);
+        }
+
+        /** @brief Closes the queue and wakes every waiter. Idempotent. */
+        void close() {
+            {
+                std::lock_guard lock(mutex_);
+                closed_ = true;
+            }
+            not_full_.notify_all();
+            not_empty_.notify_all();
+        }
+
+        /** @brief @return Number of buffered elements (a snapshot). */
+        [[nodiscard]] std::size_t size() const {
+            std::lock_guard lock(mutex_);
+            return items_.size();
+        }
+        /** @brief @return true if no element is buffered (a snapshot). */
+        [[nodiscard]] bool empty() const { return size() == 0; }
+        /** @brief @return Maximum number of buffered elements. */
+        [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
+        /** @brief @return true once `close()` has been called. */
+        [[nodiscard]] bool is_closed() const {
+            std::lock_guard lock(mutex_);
+            return closed_;
+        }
+
+    private:
+        template <typename U>
+        bool emplace_locked(std::unique_lock<std::mutex>& lock, U&& value) {
+            if (closed_) {
+                return false;
+            }
+            items_.emplace_back(std::forward<U>(value));
+            lock.unlock();
             not_empty_.notify_one();
             return true;
         }
 
-        std::optional<T> try_consume(std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            if (!not_empty_.wait_for(lock, timeout, [this] { return count_ > 0; })) {
+        std::optional<T> take_locked(std::unique_lock<std::mutex>& lock) {
+            if (items_.empty()) {
                 return std::nullopt;
             }
-            
-            T item = std::move(buffer_[read_index_]);
-            read_index_ = (read_index_ + 1) % capacity_;
-            count_--;
-            
+            std::optional<T> value(std::move(items_.front()));
+            items_.pop_front();
+            lock.unlock();
             not_full_.notify_one();
-            return item;
+            return value;
         }
 
-        size_t size() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return count_;
-        }
-
-        size_t capacity() const { return capacity_; }
-
-        bool empty() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return count_ == 0;
-        }
-
-        bool full() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return count_ == capacity_;
-        }
-
-    private:
-        const size_t capacity_;
-        std::vector<T> buffer_;
-        size_t read_index_ = 0;
-        size_t write_index_ = 0;
-        size_t count_ = 0;
-        
+        const std::size_t capacity_;
         mutable std::mutex mutex_;
-        std::condition_variable not_empty_;
         std::condition_variable not_full_;
+        std::condition_variable not_empty_;
+        std::deque<T> items_;
+        bool closed_ = false;
     };
 
     /**
-     * @class ThreadBarrier
-     * @brief Custom barrier implementation using condition variables
-     */
-    class ThreadBarrier {
-    public:
-        explicit ThreadBarrier(size_t thread_count) 
-            : thread_count_(thread_count), waiting_count_(0), barrier_generation_(0) {}
-
-        void wait() {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            size_t current_generation = barrier_generation_;
-            waiting_count_++;
-            
-            if (waiting_count_ == thread_count_) {
-                // Last thread to arrive - release all
-                waiting_count_ = 0;
-                barrier_generation_++;
-                condition_.notify_all();
-            } else {
-                // Wait for all threads to arrive
-                condition_.wait(lock, [this, current_generation] {
-                    return current_generation != barrier_generation_;
-                });
-            }
-        }
-
-        bool wait_for(const std::chrono::milliseconds& timeout) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            
-            size_t current_generation = barrier_generation_;
-            waiting_count_++;
-            
-            if (waiting_count_ == thread_count_) {
-                waiting_count_ = 0;
-                barrier_generation_++;
-                condition_.notify_all();
-                return true;
-            } else {
-                bool result = condition_.wait_for(lock, timeout, [this, current_generation] {
-                    return current_generation != barrier_generation_;
-                });
-                
-                if (!result) {
-                    waiting_count_--; // Remove from wait count if timeout
-                }
-                
-                return result;
-            }
-        }
-
-        size_t thread_count() const { return thread_count_; }
-
-    private:
-        const size_t thread_count_;
-        size_t waiting_count_;
-        size_t barrier_generation_;
-        std::mutex mutex_;
-        std::condition_variable condition_;
-    };
-
-    /**
-     * @class CountingSemaphore
-     * @brief Counting semaphore implementation using condition variables
+     * @brief Counting semaphore (cf. `std::counting_semaphore`) built on a condition variable.
      */
     class CountingSemaphore {
     public:
-        explicit CountingSemaphore(int initial_count = 0) : count_(initial_count) {}
+        /**
+         * @brief Creates the semaphore.
+         * @param initial Initial number of permits.
+         */
+        explicit CountingSemaphore(std::size_t initial = 0) noexcept : count_(initial) {}
 
-        void acquire() {
-            std::unique_lock<std::mutex> lock(mutex_);
-            condition_.wait(lock, [this] { return count_ > 0; });
-            count_--;
-        }
-
-        bool try_acquire() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (count_ > 0) {
-                count_--;
-                return true;
-            }
-            return false;
-        }
-
-        bool try_acquire_for(const std::chrono::milliseconds& timeout) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            if (condition_.wait_for(lock, timeout, [this] { return count_ > 0; })) {
-                count_--;
-                return true;
-            }
-            return false;
-        }
-
-        void release(int count = 1) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            count_ += count;
-            for (int i = 0; i < count; ++i) {
-                condition_.notify_one();
-            }
-        }
-
-        int available_count() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return count_;
-        }
+        /** @brief Blocks until a permit is available and takes it. */
+        void acquire();
+        /** @brief @return true if a permit was taken without blocking. */
+        [[nodiscard]] bool try_acquire();
+        /**
+         * @brief Waits at most `timeout` for a permit.
+         * @param timeout Maximum wait.
+         * @return true if a permit was taken.
+         */
+        [[nodiscard]] bool try_acquire_for(std::chrono::nanoseconds timeout);
+        /**
+         * @brief Returns permits and wakes waiters.
+         * @param permits Number of permits to add.
+         */
+        void release(std::size_t permits = 1);
+        /** @brief @return Currently available permits (a snapshot). */
+        [[nodiscard]] std::size_t available() const;
 
     private:
-        int count_;
         mutable std::mutex mutex_;
-        std::condition_variable condition_;
+        std::condition_variable cv_;
+        std::size_t count_;
     };
 
     /**
-     * @class ThreadPool
-     * @brief Simple thread pool implementation using condition variables
+     * @brief Single-use countdown latch (cf. `std::latch`).
      */
-    class ThreadPool {
+    class CountDownLatch {
     public:
-        explicit ThreadPool(size_t num_threads);
-        ~ThreadPool();
+        /**
+         * @brief Creates the latch.
+         * @param count Number of `count_down()` calls needed to open it.
+         */
+        explicit CountDownLatch(std::size_t count) noexcept : count_(count) {}
 
-        template<typename F>
-        auto submit(F&& task) -> std::future<decltype(task())> {
-            using ReturnType = decltype(task());
-            
-            auto task_ptr = std::make_shared<std::packaged_task<ReturnType()>>(
-                std::forward<F>(task)
-            );
-            
-            std::future<ReturnType> future = task_ptr->get_future();
-            
-            {
-                std::lock_guard<std::mutex> lock(queue_mutex_);
-                if (stop_) {
-                    throw std::runtime_error("ThreadPool is stopped");
+        /**
+         * @brief Decrements the counter (saturating at zero); opens the latch at zero.
+         * @param n Amount to subtract.
+         */
+        void count_down(std::size_t n = 1);
+        /** @brief Blocks until the counter reaches zero. */
+        void wait() const;
+        /**
+         * @brief Waits at most `timeout` for the latch to open.
+         * @param timeout Maximum wait.
+         * @return true if open.
+         */
+        [[nodiscard]] bool wait_for(std::chrono::nanoseconds timeout) const;
+        /** @brief @return true if the counter is zero. */
+        [[nodiscard]] bool try_wait() const;
+        /** @brief Equivalent to `count_down(); wait();`. */
+        void arrive_and_wait();
+        /** @brief @return Remaining count (a snapshot). */
+        [[nodiscard]] std::size_t count() const;
+
+    private:
+        mutable std::mutex mutex_;
+        mutable std::condition_variable cv_;
+        std::size_t count_;
+    };
+
+    /**
+     * @brief Reusable barrier for a fixed number of parties (cf. `std::barrier`).
+     *
+     * Uses a generation counter so that a fast thread re-entering the next phase cannot
+     * be confused with the stragglers of the previous phase.
+     */
+    class CyclicBarrier {
+    public:
+        /**
+         * @brief Creates the barrier.
+         * @param parties Number of threads that must arrive per phase (must be > 0).
+         * @param on_completion Run exactly once per phase by the last arriving thread,
+         *        before any waiter is released.
+         * @throws std::invalid_argument if `parties == 0`.
+         */
+        explicit CyclicBarrier(std::size_t parties, std::function<void()> on_completion = {});
+
+        /**
+         * @brief Arrives at the barrier and blocks until all parties of this phase have arrived.
+         * @return The index of the completed phase (0, 1, 2, ...).
+         */
+        std::size_t arrive_and_wait();
+        /** @brief @return Number of parties per phase. */
+        [[nodiscard]] std::size_t parties() const noexcept { return parties_; }
+        /** @brief @return Number of completed phases. */
+        [[nodiscard]] std::size_t generation() const;
+
+    private:
+        mutable std::mutex mutex_;
+        std::condition_variable cv_;
+        const std::size_t parties_;
+        std::size_t waiting_ = 0;
+        std::size_t generation_ = 0;
+        std::function<void()> on_completion_;
+    };
+
+    /**
+     * @brief Manual-reset event: once set, all current and future waiters pass until `reset()`.
+     */
+    class ManualResetEvent {
+    public:
+        /**
+         * @brief Creates the event.
+         * @param initially_set Initial state.
+         */
+        explicit ManualResetEvent(bool initially_set = false) noexcept : set_(initially_set) {}
+        /** @brief Signals the event and wakes all waiters. */
+        void set();
+        /** @brief Returns the event to the non-signalled state. */
+        void reset();
+        /** @brief Blocks until the event is set. */
+        void wait() const;
+        /**
+         * @brief Waits at most `timeout`.
+         * @param timeout Maximum wait.
+         * @return true if the event is set.
+         */
+        [[nodiscard]] bool wait_for(std::chrono::nanoseconds timeout) const;
+        /** @brief @return Current state. */
+        [[nodiscard]] bool is_set() const;
+
+    private:
+        mutable std::mutex mutex_;
+        mutable std::condition_variable cv_;
+        bool set_;
+    };
+
+    /**
+     * @brief Blocking pool of reusable objects (connections, buffers...) handed out as RAII leases.
+     *
+     * The pool must outlive every lease obtained from it.
+     * @tparam T Pooled object type.
+     */
+    template <typename T>
+    class ResourcePool {
+    public:
+        /**
+         * @brief Move-only RAII handle; returns the resource to the pool on destruction.
+         */
+        class Lease {
+        public:
+            Lease(const Lease&) = delete;
+            Lease& operator=(const Lease&) = delete;
+            /** @brief Transfers ownership of the lease. */
+            Lease(Lease&& other) noexcept : pool_(std::exchange(other.pool_, nullptr)), index_(other.index_) {}
+            /** @brief Releases the current resource, then takes over `other`'s. */
+            Lease& operator=(Lease&& other) noexcept {
+                if (this != &other) {
+                    reset();
+                    pool_ = std::exchange(other.pool_, nullptr);
+                    index_ = other.index_;
                 }
-                
-                tasks_.emplace([task_ptr] { (*task_ptr)(); });
+                return *this;
             }
-            
-            condition_.notify_one();
-            return future;
+            /** @brief Returns the resource to the pool. */
+            ~Lease() { reset(); }
+
+            /** @brief @return Reference to the leased resource. */
+            [[nodiscard]] T& operator*() const noexcept { return pool_->resources_[index_]; }
+            /** @brief @return Pointer to the leased resource. */
+            [[nodiscard]] T* operator->() const noexcept { return &pool_->resources_[index_]; }
+            /** @brief @return Slot index of the resource inside the pool. */
+            [[nodiscard]] std::size_t index() const noexcept { return index_; }
+            /** @brief Returns the resource early; the lease becomes empty. */
+            void reset() noexcept {
+                if (pool_ != nullptr) {
+                    pool_->give_back(index_);
+                    pool_ = nullptr;
+                }
+            }
+
+        private:
+            friend class ResourcePool;
+            Lease(ResourcePool* pool, std::size_t index) noexcept : pool_(pool), index_(index) {}
+            ResourcePool* pool_;
+            std::size_t index_;
+        };
+
+        /**
+         * @brief Takes ownership of the pooled objects.
+         * @param resources Objects to pool (must be non-empty).
+         * @throws std::invalid_argument if empty.
+         */
+        explicit ResourcePool(std::vector<T> resources) : resources_(std::move(resources)) {
+            if (resources_.empty()) {
+                throw std::invalid_argument("ResourcePool requires at least one resource");
+            }
+            free_.reserve(resources_.size());
+            for (std::size_t i = resources_.size(); i-- > 0;) {
+                free_.push_back(i);
+            }
         }
 
-        void shutdown();
-        size_t active_threads() const;
-        size_t pending_tasks() const;
+        ResourcePool(const ResourcePool&) = delete;
+        ResourcePool& operator=(const ResourcePool&) = delete;
+        ResourcePool(ResourcePool&&) = delete;
+        ResourcePool& operator=(ResourcePool&&) = delete;
+        ~ResourcePool() = default;
+
+        /** @brief Blocks until a resource is free. @return Lease on it. */
+        [[nodiscard]] Lease acquire() {
+            std::unique_lock lock(mutex_);
+            cv_.wait(lock, [this] { return !free_.empty(); });
+            return take_locked();
+        }
+
+        /**
+         * @brief Waits at most `timeout` for a resource.
+         * @param timeout Maximum wait.
+         * @return Lease, or `std::nullopt` on timeout.
+         */
+        template <typename Rep, typename Period>
+        [[nodiscard]] std::optional<Lease> try_acquire_for(const std::chrono::duration<Rep, Period>& timeout) {
+            std::unique_lock lock(mutex_);
+            if (!cv_.wait_for(lock, timeout, [this] { return !free_.empty(); })) {
+                return std::nullopt;
+            }
+            return take_locked();
+        }
+
+        /** @brief @return Number of free resources (a snapshot). */
+        [[nodiscard]] std::size_t available() const {
+            std::lock_guard lock(mutex_);
+            return free_.size();
+        }
+        /** @brief @return Total number of pooled resources. */
+        [[nodiscard]] std::size_t size() const noexcept { return resources_.size(); }
 
     private:
-        std::vector<std::thread> workers_;
-        std::queue<std::function<void()>> tasks_;
-        
-        std::mutex queue_mutex_;
-        std::condition_variable condition_;
-        std::atomic<bool> stop_{false};
-        std::atomic<size_t> active_count_{0};
-        
-        void worker_thread();
+        Lease take_locked() {
+            const std::size_t index = free_.back();
+            free_.pop_back();
+            return Lease(this, index);
+        }
+
+        void give_back(std::size_t index) noexcept {
+            {
+                std::lock_guard lock(mutex_);
+                free_.push_back(index);  // capacity reserved up front: cannot throw
+            }
+            cv_.notify_one();
+        }
+
+        std::vector<T> resources_;
+        mutable std::mutex mutex_;
+        std::condition_variable cv_;
+        std::vector<std::size_t> free_;
     };
 
     /**
-     * @class WorkflowCoordinator
-     * @brief Coordinates complex multi-stage workflows using condition variables
+     * @brief Showcase: producer/consumer pipeline, latch start signal, barrier phases, resource pool.
+     * @param out Destination stream.
      */
-    class WorkflowCoordinator {
-    public:
-        enum class Stage {
-            INITIALIZATION,
-            DATA_PROCESSING,
-            VALIDATION,
-            OUTPUT_GENERATION,
-            CLEANUP,
-            COMPLETED
-        };
+    void demonstrate_condition_variables(std::ostream& out = std::cout);
 
-        struct Task {
-            int id;
-            std::string name;
-            std::string data;
-            Stage current_stage;
-            std::chrono::steady_clock::time_point created_at;
-            std::chrono::steady_clock::time_point completed_at;
-        };
+}  // namespace CppVerseHub::Concurrency
 
-        WorkflowCoordinator(size_t num_workers_per_stage = 2);
-        ~WorkflowCoordinator();
-
-        void submit_task(const std::string& name, const std::string& data);
-        void start_workflow(std::chrono::seconds duration);
-        void stop_workflow();
-        void print_statistics() const;
-
-    private:
-        std::unordered_map<Stage, std::queue<std::shared_ptr<Task>>> stage_queues_;
-        std::unordered_map<Stage, std::mutex> stage_mutexes_;
-        std::unordered_map<Stage, std::condition_variable> stage_conditions_;
-        
-        std::vector<std::thread> worker_threads_;
-        std::atomic<bool> running_{false};
-        std::atomic<int> task_counter_{0};
-        
-        mutable std::mutex stats_mutex_;
-        std::unordered_map<Stage, std::atomic<int>> tasks_processed_;
-        std::vector<std::shared_ptr<Task>> completed_tasks_;
-        
-        void stage_worker(Stage stage, int worker_id);
-        void process_task_at_stage(std::shared_ptr<Task> task, Stage stage);
-        void advance_task_to_next_stage(std::shared_ptr<Task> task);
-        std::string stage_to_string(Stage stage) const;
-        Stage next_stage(Stage current) const;
-    };
-
-    /**
-     * @class EventNotificationSystem
-     * @brief Event-driven notification system using condition variables
-     */
-    class EventNotificationSystem {
-    public:
-        enum class EventType {
-            DATA_UPDATED,
-            USER_ACTION,
-            SYSTEM_ALERT,
-            TIMER_EXPIRED,
-            CUSTOM_EVENT
-        };
-
-        struct Event {
-            EventType type;
-            std::string source;
-            std::string message;
-            std::chrono::steady_clock::time_point timestamp;
-            std::unordered_map<std::string, std::string> metadata;
-        };
-
-        using EventHandler = std::function<void(const Event&)>;
-
-        EventNotificationSystem();
-        ~EventNotificationSystem();
-
-        void subscribe(EventType type, const std::string& subscriber_id, EventHandler handler);
-        void unsubscribe(EventType type, const std::string& subscriber_id);
-        void publish_event(const Event& event);
-        void start_system();
-        void stop_system();
-        void print_statistics() const;
-
-    private:
-        std::unordered_map<EventType, std::unordered_map<std::string, EventHandler>> subscribers_;
-        std::queue<Event> event_queue_;
-        
-        std::mutex queue_mutex_;
-        std::condition_variable event_available_;
-        std::atomic<bool> running_{false};
-        
-        std::vector<std::thread> processor_threads_;
-        mutable std::mutex stats_mutex_;
-        std::atomic<int> events_published_{0};
-        std::atomic<int> events_processed_{0};
-        
-        void event_processor(int processor_id);
-        std::string event_type_to_string(EventType type) const;
-    };
-
-    /**
-     * @class DatabaseConnectionPool
-     * @brief Database connection pool simulation using condition variables
-     */
-    class DatabaseConnectionPool {
-    public:
-        struct Connection {
-            int id;
-            std::string connection_string;
-            bool in_use;
-            std::chrono::steady_clock::time_point last_used;
-            int query_count;
-
-            Connection(int id, const std::string& conn_str) 
-                : id(id), connection_string(conn_str), in_use(false), 
-                  last_used(std::chrono::steady_clock::now()), query_count(0) {}
-        };
-
-        explicit DatabaseConnectionPool(size_t pool_size, size_t max_wait_time_ms = 5000);
-        ~DatabaseConnectionPool();
-
-        std::shared_ptr<Connection> acquire_connection(const std::string& client_id);
-        void release_connection(std::shared_ptr<Connection> connection);
-        void simulate_query(std::shared_ptr<Connection> connection, const std::string& query);
-        
-        void start_connection_monitor();
-        void stop_connection_monitor();
-        void print_pool_status() const;
-        
-        size_t available_connections() const;
-        size_t total_connections() const { return pool_size_; }
-
-    private:
-        std::vector<std::shared_ptr<Connection>> connections_;
-        std::queue<std::shared_ptr<Connection>> available_connections_;
-        
-        const size_t pool_size_;
-        const std::chrono::milliseconds max_wait_time_;
-        
-        std::mutex pool_mutex_;
-        std::condition_variable connection_available_;
-        std::atomic<bool> monitor_running_{false};
-        
-        std::thread monitor_thread_;
-        mutable std::mutex stats_mutex_;
-        std::atomic<int> total_acquisitions_{0};
-        std::atomic<int> failed_acquisitions_{0};
-        
-        void connection_monitor();
-        void cleanup_idle_connections();
-    };
-
-    /**
-     * @class ConditionVariableDemo
-     * @brief Main demonstration coordinator for condition variable examples
-     */
-    class ConditionVariableDemo {
-    public:
-        static void demonstrate_basic_condition_variables();
-        static void demonstrate_producer_consumer_buffer();
-        static void demonstrate_thread_barrier();
-        static void demonstrate_counting_semaphore();
-        static void demonstrate_thread_pool();
-        static void demonstrate_workflow_coordination();
-        static void demonstrate_event_notification_system();
-        static void demonstrate_database_connection_pool();
-        static void run_all_demonstrations();
-
-    private:
-        static void print_section_header(const std::string& title);
-        static void print_section_footer();
-        static void simulate_work(std::chrono::milliseconds duration);
-    };
-
-} // namespace CppVerseHub::Concurrency
-
-#endif // CONDITIONVARIABLES_HPP
+#endif  // CPPVERSEHUB_CONCURRENCY_CONDITIONALVARIABLES_HPP
