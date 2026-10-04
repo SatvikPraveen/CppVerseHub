@@ -1,746 +1,415 @@
-# Design Patterns Explained - CppVerseHub
+# Design Patterns Explained
 
-**Location:** `CppVerseHub/docs/design_docs/design_patterns_explained.md`
+## Purpose and Scope
 
-## Introduction to Design Patterns in CppVerseHub
+This document describes the `CppVerseHub::Patterns` library (`src/patterns/`), which
+implements eight of the Gamma et al. (1994) patterns in C++20. For most patterns the module
+shows the classic object-oriented form next to one or more modern alternatives (concepts,
+`std::variant`, `std::function`, RAII handles, type-state templates), because in
+contemporary C++ the pattern *intent* is often better served by a different mechanism than
+the 1994 class diagram.
 
-This document explains the rationale behind each design pattern implementation in CppVerseHub, detailing why each pattern was chosen, how it solves specific problems, and how it contributes to the overall system architecture.
+The audience is engineers and researchers who know the patterns and want the specific
+decisions, invariants and guarantees of this implementation. The domain vocabulary
+(planets, fleets, missions, warp drives) is illustrative only.
 
-## Pattern Selection Criteria
+| Pattern | Header | Classic form | Modern form(s) |
+| --- | --- | --- | --- |
+| Singleton | `Singleton.hpp` (header-only) | `Singleton<Derived>` CRTP base | function-local static ("magic static") |
+| Observer | `Observer.hpp` | `Subject<Event>` / `IObserver<Event>` | `Signal<Args...>`, `Connection`, `ScopedConnection` |
+| Strategy | `Strategy.hpp` | `IRoutingStrategy` + `FleetRouter` | `RoutingPolicy` concept + `StaticRouter<Policy>`; `TargetSelector` (`std::function`) |
+| Builder | `Builder.hpp` | `SpacecraftBuilder` + `ShipyardDirector` | `BlueprintBuilder<HasName, HasHull>` type-state builder |
+| Command | `Command.hpp` | `ICommand`, `CommandHistory` | `LambdaCommand`, transactional `MacroCommand` |
+| Adapter | `Adapter.hpp` | `RadioAdapter` (object), `ThermalSensorAdapter` (class) | `CallbackBridge` (C-callback trampoline) |
+| Decorator | `Decorator.hpp` | `MissionDecorator` hierarchy, `decorate<D>()` | `withRetry`, `withCallCounter`, `memoize` |
+| State | `State.hpp` | `MissionContext` / `IMissionState` | `VariantStateMachine` + `Overloaded`, `WarpDrive` |
 
-Our pattern selection follows these principles:
+All symbols live in namespace `CppVerseHub::Patterns`. Each header exposes a
+`demonstrateX(std::ostream&)` function, and `Demo.hpp` declares `runDemo(std::ostream&)`,
+which runs every showcase deterministically and never throws.
 
-1. **Educational Value**: Demonstrates pattern concepts clearly
-2. **Real-World Applicability**: Solves actual architectural problems
-3. **C++ Specifics**: Leverages C++ language features effectively
-4. **Maintainability**: Improves code organization and flexibility
-5. **Performance**: Maintains or improves system efficiency
+### Cross-cutting conventions
 
-## Creational Patterns
+- **Interfaces protect their special members.** Abstract bases (`IObserver`,
+  `IRoutingStrategy`, `ICommand`, `ICommunicationChannel`, `ITemperatureSensor`, `IMission`,
+  `IMissionState`) declare a public virtual destructor and *protected* copy/move operations,
+  which prevents slicing through a base reference while leaving derived classes free to be
+  copyable.
+- **Ownership is explicit.** Owning relationships use `std::unique_ptr` (`CommandPtr`,
+  `MissionPtr`, `StateOutcome::next`); non-owning ones use references or raw pointers with a
+  documented "must outlive" precondition, or `std::weak_ptr` where lifetimes are genuinely
+  independent (Observer).
+- **Validation reports, rather than guesses.** Invalid input is rejected with a typed
+  exception (`BuildError`, `CommandError`, `std::invalid_argument`) or a `false`/`std::nullopt`
+  return, never silently clamped unless the header says so.
 
-### Singleton Pattern - ResourceManager
+## Singleton
 
-**Problem Solved:**
-The simulation requires a single, globally accessible resource management system that coordinates resource allocation across all entities while maintaining thread safety.
+**Intent.** Exactly one instance, globally accessible, created on first use.
 
-**Why Singleton Here:**
-
-- **Global State Necessity**: Resources are inherently shared across the entire simulation
-- **Controlled Access**: Prevents multiple resource managers from creating conflicts
-- **Thread Safety**: Single instance simplifies concurrent access patterns
-- **Initialization Control**: Ensures proper setup before any resource operations
-
-**C++ Implementation Details:**
-
-```cpp
-class ResourceManager {
-private:
-    static std::unique_ptr<ResourceManager> instance_;
-    static std::once_flag init_flag_;
-
-    ResourceManager() = default;  // Private constructor
-
-public:
-    static ResourceManager& getInstance() {
-        std::call_once(init_flag_, []() {
-            instance_ = std::unique_ptr<ResourceManager>(new ResourceManager());
-        });
-        return *instance_;
-    }
-
-    // Delete copy constructor and assignment
-    ResourceManager(const ResourceManager&) = delete;
-    ResourceManager& operator=(const ResourceManager&) = delete;
-};
-```
-
-**Benefits in Context:**
-
-- Thread-safe initialization using `std::call_once`
-- Memory management via `std::unique_ptr`
-- Prevents accidental copying
-- Lazy initialization reduces startup overhead
-
-**Alternative Considered:**
-Dependency injection was considered but rejected because resource management is truly global in scope and the singleton pattern better represents the domain reality.
-
-### Factory Pattern - EntityFactory
-
-**Problem Solved:**
-The system needs to create different types of entities (planets, fleets) based on runtime configuration while decoupling creation logic from client code.
-
-**Why Factory Here:**
-
-- **Runtime Type Determination**: Entity types determined by configuration files
-- **Decoupling Creation**: Clients don't need to know concrete classes
-- **Extensibility**: New entity types can be added without modifying existing code
-- **Parameter Complexity**: Entity creation requires complex initialization
-
-**C++ Implementation Approach:**
+**Decision.** The Meyers singleton in a CRTP base:
 
 ```cpp
-class EntityFactory {
+template <typename Derived>
+class Singleton {
 public:
-    template<typename T, typename... Args>
-    static std::unique_ptr<Entity> create(Args&&... args) {
-        static_assert(std::is_base_of_v<Entity, T>, "T must derive from Entity");
-        return std::make_unique<T>(std::forward<Args>(args)...);
+    Singleton(const Singleton&) = delete;
+    Singleton& operator=(const Singleton&) = delete;
+    [[nodiscard]] static Derived& instance() {
+        static Derived inst;  // thread-safe initialisation guaranteed by the language
+        return inst;
     }
-
-    static std::unique_ptr<Entity> createFromConfig(const EntityConfig& config);
-    static std::unique_ptr<Entity> createPlanet(const PlanetParams& params);
-    static std::unique_ptr<Entity> createFleet(const FleetParams& params);
-};
-```
-
-**Advanced Features:**
-
-- Template-based creation with perfect forwarding
-- Compile-time type checking with `static_assert`
-- Configuration-driven creation
-- Smart pointer returns for automatic memory management
-
-**Benefits in Context:**
-
-- Type safety at compile time
-- Zero-overhead abstraction through templates
-- Exception-safe object construction
-- Simplified client code
-
-### Builder Pattern - FleetBuilder
-
-**Problem Solved:**
-Fleet creation involves complex configuration with many optional components (ships, weapons, shields, navigation systems) that can be combined in various ways.
-
-**Why Builder Here:**
-
-- **Complex Construction**: Fleets have many optional components
-- **Step-by-Step Assembly**: Logical construction sequence (ships → weapons → shields)
-- **Multiple Representations**: Different fleet types (military, exploration, cargo)
-- **Validation**: Each step can validate the current configuration
-
-**C++ Implementation Strategy:**
-
-```cpp
-class FleetBuilder {
-private:
-    std::unique_ptr<Fleet> fleet_;
-
-public:
-    FleetBuilder& addShips(const std::vector<ShipType>& ships) {
-        // Validation and addition logic
-        return *this;
-    }
-
-    FleetBuilder& addWeapons(const WeaponConfiguration& weapons) {
-        if (!fleet_->hasShips()) {
-            throw std::logic_error("Cannot add weapons without ships");
-        }
-        // Addition logic
-        return *this;
-    }
-
-    template<typename T>
-    FleetBuilder& addComponent(T&& component) {
-        static_assert(is_fleet_component_v<T>, "T must be a fleet component");
-        fleet_->addComponent(std::forward<T>(component));
-        return *this;
-    }
-
-    std::unique_ptr<Fleet> build() && {
-        validateFleet();
-        return std::move(fleet_);
-    }
-};
-```
-
-**Advanced C++ Features:**
-
-- Fluent interface with method chaining
-- Template methods for type-safe component addition
-- Move-only build method (ref-qualified)
-- RAII for resource management
-
-**Benefits in Context:**
-
-- Compile-time component type checking
-- Impossible to create invalid fleets
-- Self-documenting construction process
-- Memory-efficient with move semantics
-
-## Structural Patterns
-
-### Adapter Pattern - NavigationAdapter
-
-**Problem Solved:**
-The system needs to integrate with legacy navigation systems that have incompatible interfaces while providing a modern, consistent API.
-
-**Why Adapter Here:**
-
-- **Legacy Integration**: Existing navigation code can't be modified
-- **Interface Mismatch**: Legacy system uses different method names and parameters
-- **Gradual Migration**: Allows incremental replacement of legacy components
-- **API Consistency**: Provides uniform interface across all navigation systems
-
-**C++ Implementation Design:**
-
-```cpp
-class ModernNavigationInterface {
-public:
-    virtual ~ModernNavigationInterface() = default;
-    virtual Route calculateRoute(const Coordinates& from, const Coordinates& to) = 0;
-    virtual void setNavigationMode(NavigationMode mode) = 0;
-};
-
-class LegacyNavigationAdapter : public ModernNavigationInterface {
-private:
-    std::unique_ptr<LegacyNavSystem> legacy_system_;
-
-public:
-    explicit LegacyNavigationAdapter(std::unique_ptr<LegacyNavSystem> legacy)
-        : legacy_system_(std::move(legacy)) {}
-
-    Route calculateRoute(const Coordinates& from, const Coordinates& to) override {
-        // Convert modern parameters to legacy format
-        LegacyCoords legacy_from = convertCoordinates(from);
-        LegacyCoords legacy_to = convertCoordinates(to);
-
-        // Call legacy method
-        LegacyPath path = legacy_system_->computePath(legacy_from, legacy_to);
-
-        // Convert legacy result to modern format
-        return convertPath(path);
-    }
-};
-```
-
-**Key Design Decisions:**
-
-- **Composition over Inheritance**: Adapter owns legacy system
-- **Smart Pointer Management**: Automatic cleanup of legacy resources
-- **Exception Translation**: Converts legacy exceptions to modern ones
-- **Performance Optimization**: Minimal conversion overhead
-
-**Benefits in Context:**
-
-- Seamless legacy integration
-- Type-safe interface conversion
-- Resource management handled automatically
-- Future legacy system replacement simplified
-
-### Decorator Pattern - MissionDecorator
-
-**Problem Solved:**
-Missions need additional capabilities (stealth, armor, priority) that can be combined in various ways without creating a class explosion.
-
-**Why Decorator Here:**
-
-- **Runtime Enhancement**: Mission capabilities determined at runtime
-- **Combinatorial Explosion**: Many possible combinations of enhancements
-- **Single Responsibility**: Each decorator adds one specific capability
-- **Dynamic Composition**: Decorators can be added/removed during execution
-
-**C++ Implementation Approach:**
-
-```cpp
-class Mission {
-public:
-    virtual ~Mission() = default;
-    virtual MissionResult execute() = 0;
-    virtual double getCost() const = 0;
-    virtual Duration getEstimatedTime() const = 0;
-};
-
-class MissionDecorator : public Mission {
 protected:
-    std::unique_ptr<Mission> mission_;
-
-public:
-    explicit MissionDecorator(std::unique_ptr<Mission> mission)
-        : mission_(std::move(mission)) {}
-
-    MissionResult execute() override {
-        return mission_->execute();
-    }
-
-    double getCost() const override {
-        return mission_->getCost();
-    }
-};
-
-class StealthMissionDecorator : public MissionDecorator {
-public:
-    using MissionDecorator::MissionDecorator;
-
-    MissionResult execute() override {
-        enableStealth();
-        auto result = MissionDecorator::execute();
-        disableStealth();
-        return result;
-    }
-
-    double getCost() const override {
-        return MissionDecorator::getCost() * 1.3; // 30% stealth cost increase
-    }
+    Singleton() = default;
+    ~Singleton() = default;
 };
 ```
 
-**Advanced Features:**
+Since C++11, initialisation of a block-scope static is performed exactly once even under
+concurrent first calls ([stmt.dcl]); the compiler emits the guard (typically a
+double-checked flag plus a lock, as in the Itanium C++ ABI `__cxa_guard_acquire`). This
+removes the need for `std::call_once`, explicit locking or heap allocation, and the object is
+destroyed at program exit in reverse order of construction. Derived classes make their
+constructors private and befriend `Singleton<Derived>`.
 
-- **RAII for Decorations**: Automatic cleanup in destructors
-- **Exception Safety**: Strong exception guarantee through RAII
-- **Perfect Forwarding**: Constructor delegation for efficiency
-- **Type Erasure**: All decorators work with base Mission interface
+**Trade-offs considered.** Double-checked locking by hand is error-prone and adds nothing
+over the language guarantee; a heap-allocated, never-destroyed instance avoids
+destruction-order problems but leaks by design. The chosen form keeps the
+*static destruction order* caveat: calling `instance()` from another static object's
+destructor after the singleton is destroyed is undefined behaviour.
 
-**Benefits in Context:**
+**Services.** The three concrete singletons each choose a different synchronisation strategy
+for their *mutable state*, which the singleton machinery does not protect:
 
-- Unlimited combination possibilities
-- Runtime configuration of mission capabilities
-- Memory efficient with move semantics
-- Exception-safe decoration management
+| Class | State | Synchronisation |
+| --- | --- | --- |
+| `ConfigManager` | `std::unordered_map<std::string, std::string>` | `std::shared_mutex` (concurrent `get`/`contains`/`size`, exclusive `set`/`reset`) |
+| `LogManager` | bounded `std::deque<Record>` (`kCapacity = 1024`, oldest dropped) | `std::mutex`; minimum level is a relaxed `std::atomic<LogLevel>` |
+| `IdGenerator` | `std::atomic<std::uint64_t>` | lock-free `fetch_add(1, relaxed)`; ids start at 1 and are unique |
 
-## Behavioral Patterns
+Relaxed ordering is sufficient for `IdGenerator` because uniqueness follows from the atomicity
+of the read-modify-write, and no other data is published through the counter. Because global
+state hampers testing, `ConfigManager` and `LogManager` expose `reset()`; the header
+explicitly recommends dependency injection for new code.
 
-### Observer Pattern - PlanetMonitoring
+## Observer
 
-**Problem Solved:**
-Multiple systems need to react to planet state changes (resource depletion, population changes, threat detection) without tight coupling between components.
+**Intent.** One-to-many notification without coupling the subject to concrete observers.
 
-**Why Observer Here:**
+### Classic form: `Subject<Event>` with weak registration
 
-- **Event-Driven Architecture**: Many systems react to planet changes
-- **Loose Coupling**: Planets don't need to know about all dependent systems
-- **Dynamic Subscription**: Systems can subscribe/unsubscribe at runtime
-- **Broadcast Communication**: One event reaches multiple subscribers
+`Subject` stores `std::vector<std::weak_ptr<IObserver<Event>>>`. The subject never extends an
+observer's lifetime, so a destroyed observer simply stops receiving events and the
+dangling-observer bug of the raw-pointer GoF version cannot occur. Expired entries are pruned
+lazily during `notify` and `detach`.
 
-**C++ Implementation Strategy:**
+`notify(event)` takes a snapshot of live observers (locked `weak_ptr`s) under the mutex and
+invokes them without holding it, so observers may attach or detach re-entrantly. If observers
+throw, every remaining observer is still notified and the *first* exception is rethrown
+afterwards; the return value counts successful deliveries. `attach` rejects null and duplicate
+registrations. Complexity: `attach` is O(n) (duplicate check), `notify` O(n).
+
+### Modern form: `Signal<Args...>` with RAII connections
 
 ```cpp
-template<typename EventType>
-class Observable {
-private:
-    mutable std::shared_mutex observers_mutex_;
-    std::vector<std::weak_ptr<Observer<EventType>>> observers_;
-
-    void cleanupExpiredObservers() const {
-        std::unique_lock lock(observers_mutex_);
-        observers_.erase(
-            std::remove_if(observers_.begin(), observers_.end(),
-                [](const auto& weak_obs) { return weak_obs.expired(); }),
-            observers_.end());
-    }
-
-public:
-    void addObserver(std::shared_ptr<Observer<EventType>> observer) {
-        std::unique_lock lock(observers_mutex_);
-        observers_.emplace_back(observer);
-    }
-
-    void notifyObservers(const EventType& event) const {
-        std::shared_lock lock(observers_mutex_);
-        cleanupExpiredObservers();
-
-        for (const auto& weak_obs : observers_) {
-            if (auto obs = weak_obs.lock()) {
-                obs->onNotify(event);
-            }
-        }
-    }
+template <typename... Args>
+class Signal {
+    struct Slot {
+        std::function<void(Args...)> fn;
+        std::atomic<bool> active{true};  // cleared on disconnect
+    };
+    struct Core final : detail::SignalCore { std::vector<std::shared_ptr<Slot>> slots; /* remove() */ };
+    std::shared_ptr<Core> core_ = std::make_shared<Core>();
+    ...
 };
 ```
 
-**Advanced C++ Features:**
+- `connect(fn)` returns a copyable, non-owning `Connection` holding a
+  `std::weak_ptr<detail::SignalCore>` and a `std::weak_ptr<const std::atomic<bool>>` built with
+  the `shared_ptr` *aliasing constructor* (shares ownership of the slot, points at its flag).
+  Because both are weak, `disconnect()` is idempotent and safe even after the `Signal` has been
+  destroyed.
+- `ScopedConnection` is the move-only RAII owner: it disconnects on destruction or
+  move-assignment; `release()` gives up ownership without disconnecting. `connectScoped()`
+  returns one directly.
+- `emit(args...)` copies the slot vector under the mutex and invokes the copy unlocked. Each
+  slot's `active` flag is re-checked (acquire) immediately before invocation, so a slot removed
+  earlier in the same emission (including by itself) is skipped.
 
-- **Weak Pointers**: Prevents circular dependencies and memory leaks
-- **Template-Based**: Type-safe events with compile-time checking
-- **Thread-Safe**: Reader-writer locks for concurrent access
-- **Automatic Cleanup**: Expired observers removed automatically
+**Guarantees and limits.** All `Signal` operations are thread safe. `disconnect()` does not
+wait for an invocation already in progress on another thread, so a slot may still run once
+after a concurrent `disconnect()` returns; callers that destroy captured state must
+synchronise separately. Exceptions from a slot propagate out of `emit` and later slots in that
+emission are not called (unlike `Subject::notify`). `emit` is O(n) plus one vector copy.
 
-**Benefits in Context:**
+The domain class `ObservablePlanet` publishes `PlanetEvent`s to both a `Subject` and a
+`Signal`, and only when a value actually changes; `ResourceMonitor`, `DefenseMonitor` and
+`EventLogger` are the concrete observers.
 
-- Memory leak prevention through weak_ptr
-- Thread-safe notifications
-- Type safety for events
-- Automatic observer lifecycle management
+## Strategy
 
-### Strategy Pattern - PathfindingStrategy
+**Intent.** Interchangeable algorithms behind one interface, selectable at run time.
 
-**Problem Solved:**
-Navigation systems need different pathfinding algorithms (direct route, safe route, fuel-efficient route) that can be selected at runtime based on mission requirements and environmental conditions.
+Three styles are implemented for two problems (route planning and target selection), so the
+costs can be compared directly:
 
-**Why Strategy Here:**
+1. **Run-time polymorphism.** `IRoutingStrategy::plan(from, to, ctx)` is implemented by
+   `DirectLineStrategy`, `FuelOptimizedStrategy` (reduced throttle; fuel scales with
+   throttle squared in `evaluateRoute`), `SafeRouteStrategy` (inserts detour waypoints at
+   `margin * radius` from any hazard a leg crosses, refining at most 32 times and skipping
+   hazards that contain an endpoint) and `BalancedStrategy` (a meta-strategy that runs the
+   other three and returns the lowest `score(route, RouteWeights)`). `FleetRouter` is the
+   context; `setStrategy` rejects null with `std::invalid_argument`. `makeRoutingStrategy`
+   is a simple factory over `RoutingStrategyType`.
+2. **Compile-time policy.** A concept replaces the interface:
 
-- **Algorithm Variation**: Multiple valid pathfinding approaches exist
-- **Runtime Selection**: Algorithm choice depends on mission parameters
-- **Easy Extension**: New algorithms can be added without modifying existing code
-- **Performance Optimization**: Different algorithms for different scenarios
+   ```cpp
+   template <typename P>
+   concept RoutingPolicy = requires(const P& p, const Coordinate3D& c, const NavigationContext& ctx) {
+       { p.plan(c, c, ctx) } -> std::same_as<Route>;
+   };
+   template <RoutingPolicy Policy> class StaticRouter { /* policy_.plan(from, to, ctx_) */ };
+   ```
 
-**C++ Implementation Design:**
+   Dispatch is static and inlinable, there is no heap allocation, and an unsuitable policy is
+   rejected at the point of instantiation with a concept diagnostic. The cost is that the
+   algorithm cannot change at run time and each policy instantiates a new router type
+   (Alexandrescu's policy-based design, 2001, ch. 1).
+3. **Function objects.** `TargetSelector` is
+   `std::function<std::optional<std::size_t>(std::span<const PlanetTarget>, const Coordinate3D&)>`.
+   `nearestTarget`, `highestValueTarget` and `bestValueRatioTarget` are free functions;
+   `weakerThan(maxDefense, inner)` composes selectors and returns indices into the
+   *original* span. This is the lightest-weight form for stateless algorithms.
+
+All algorithms are deterministic. `segmentIntersects` uses the closest point on the segment to
+the sphere centre, so `evaluateRoute` is O(waypoints x hazards).
+
+## Builder
+
+**Intent.** Separate the construction of a complex object from its representation, and
+enforce invariants that a constructor cannot express readably.
+
+- **Fluent builder.** `SpacecraftBuilder` accumulates a name, `HullClass`, crew and
+  `Component`s; every setter returns `*this`. `validate()` returns *all* violated invariants
+  at once (missing name or hull, no engine, crew below `minCrew(hull)`, total mass above
+  `maxMass(hull)`, negative component mass, power deficit), and `build()` throws `BuildError`
+  carrying that list. `BuildError` derives from `std::invalid_argument`. `build()` is `const`
+  and copies the parts, so one configured builder can stamp out several ships. The product
+  `Spacecraft` has a private constructor and is reachable only through the builder, so every
+  `Spacecraft` that exists satisfies the invariants.
+- **Director.** `ShipyardDirector::buildScout/buildFrigate/buildCarrier` encode standard
+  recipes so clients need not know the steps.
+- **Hull tables.** `maxMass`, `minCrew` and `hullMass` are `constexpr` functions, so the
+  limits are usable in constant expressions and in tests.
+- **Aggregate builder.** `FleetBuilder` composes `Spacecraft` products into a `Fleet` and
+  validates that the fleet is named and non-empty.
+
+**Type-state builder.** `BlueprintBuilder<HasName, HasHull>` moves the "mandatory step"
+check from run time to compile time:
 
 ```cpp
-class PathfindingStrategy {
+template <bool HasName = false, bool HasHull = false>
+class BlueprintBuilder {
 public:
-    virtual ~PathfindingStrategy() = default;
-    virtual Route findPath(const Coordinates& start, const Coordinates& end,
-                          const NavigationContext& context) = 0;
-    virtual double estimateCost(const Coordinates& start, const Coordinates& end) const = 0;
+    [[nodiscard]] BlueprintBuilder<true, HasHull> withName(std::string name) &&;
+    [[nodiscard]] BlueprintBuilder<HasName, true> withHull(HullClass hull) &&;
+    [[nodiscard]] BlueprintBuilder withHardpoints(std::size_t n) &&;
+    [[nodiscard]] Blueprint build() && requires(HasName && HasHull);
 };
-
-class NavigationSystem {
-private:
-    std::unique_ptr<PathfindingStrategy> strategy_;
-
-public:
-    template<typename StrategyType, typename... Args>
-    void setStrategy(Args&&... args) {
-        static_assert(std::is_base_of_v<PathfindingStrategy, StrategyType>,
-                     "StrategyType must inherit from PathfindingStrategy");
-        strategy_ = std::make_unique<StrategyType>(std::forward<Args>(args)...);
-    }
-
-    Route calculateRoute(const Coordinates& start, const Coordinates& end) {
-        if (!strategy_) {
-            throw std::logic_error("No pathfinding strategy set");
-        }
-        return strategy_->findPath(start, end, getCurrentContext());
-    }
-};
-
-// Strategy implementations
-class DirectPathStrategy : public PathfindingStrategy {
-    Route findPath(const Coordinates& start, const Coordinates& end,
-                  const NavigationContext& context) override {
-        return Route::createDirectPath(start, end);
-    }
-};
-
-class SafePathStrategy : public PathfindingStrategy {
-    Route findPath(const Coordinates& start, const Coordinates& end,
-                  const NavigationContext& context) override {
-        auto threats = context.getKnownThreats();
-        return findPathAvoidingThreats(start, end, threats);
-    }
-};
+template <typename B>
+concept BuildableBlueprint = requires(B b) { std::move(b).build(); };
 ```
 
-**Advanced Features:**
+Each mandatory step returns a builder of a different type; `build()` is constrained by a
+`requires` clause, so `BlueprintBuilder<>{}.withName("x").build()` does not compile. All
+steps are `&&`-qualified, which forces a single linear chain and prevents reuse of a
+moved-from builder. `BuildableBlueprint` lets tests assert the guarantee with
+`static_assert`. The trade-off is one template instantiation per state and less flexible
+composition (a builder cannot be stored in a variable whose type is independent of progress).
 
-- **Template-based Strategy Setting**: Type-safe strategy creation
-- **Perfect Forwarding**: Efficient parameter passing to strategy constructors
-- **Context-Aware**: Strategies receive environmental information
-- **Null Object Protection**: Validation prevents null strategy usage
+## Command
 
-**Benefits in Context:**
+**Intent.** Encapsulate a request as an object so it can be queued, logged and undone.
 
-- Zero runtime overhead for strategy calls (virtual function optimization)
-- Easy testing of individual algorithms
-- Runtime algorithm selection based on conditions
-- Clean separation between algorithm and usage
+- `ICommand` has `execute()`, `undo()` and `name()`. Each concrete command stores exactly the
+  data needed to reverse itself: `MoveFleetCommand` remembers the previous location and refunds
+  fuel; `AttackCommand` stores a full `FleetStatus` snapshot and restores it via
+  `FleetReceiver::restore`; `ReinforceCommand` applies the inverse delta.
+- **Strong exception guarantee.** `FleetReceiver::move/attack/reinforce` validate before
+  mutating and throw `CommandError` on failure, so `execute()` either succeeds or leaves the
+  receiver untouched.
+- **Transactional macro.** `MacroCommand` executes children in order; if child *k* throws,
+  children 0..k-1 are undone in reverse order before the exception propagates:
 
-### Command Pattern - FleetCommands
+  ```cpp
+  void MacroCommand::execute() {
+      std::size_t done = 0;
+      try {
+          for (; done < children_.size(); ++done) children_[done]->execute();
+      } catch (...) {
+          while (done > 0) { --done; children_[done]->undo(); }
+          throw;
+      }
+  }
+  ```
 
-**Problem Solved:**
-Fleet operations need to be encapsulated as objects to support queuing, logging, undo operations, and macro commands composed of multiple actions.
+  This assumes `undo()` of a successfully executed child does not itself fail.
+- `LambdaCommand` builds a command from two `std::function<void()>`s; both are required.
+- **Invoker.** `CommandHistory(capacity)` holds a `std::deque<CommandPtr>` undo stack and a
+  `std::vector<CommandPtr>` redo stack. `execute` runs the command first and records it only on
+  success; recording clears the redo stack (editor semantics). When the undo stack exceeds
+  `capacity()`, the oldest entry is evicted (`evicted()` counts them), bounding memory at
+  O(capacity). If `undo()` throws, the command stays on the undo stack. `capacity == 0` throws
+  `std::invalid_argument`. All operations are amortised O(1).
 
-**Why Command Here:**
+The history is not thread safe; it is an invoker for a single control thread.
 
-- **Action Encapsulation**: Operations become first-class objects
-- **Undo/Redo Support**: Commands can reverse their effects
-- **Macro Commands**: Complex operations built from simple ones
-- **Logging and Persistence**: Commands can be serialized and replayed
+## Adapter
 
-**C++ Implementation Strategy:**
+**Intent.** Convert the interface of an existing class into the one clients expect.
 
-```cpp
-class Command {
-public:
-    virtual ~Command() = default;
-    virtual void execute() = 0;
-    virtual void undo() = 0;
-    virtual bool canUndo() const { return true; }
-    virtual std::string getDescription() const = 0;
-};
+Three flavours, each solving a different integration problem:
 
-class MoveFleetCommand : public Command {
-private:
-    std::weak_ptr<Fleet> fleet_;
-    Coordinates from_position_;
-    Coordinates to_position_;
-    bool executed_{false};
+- **Object adapter (composition).** `RadioAdapter` implements `ICommunicationChannel` on top of
+  a non-owned `LegacyRadio` whose API uses `const char*` frames, a `kMaxFrame = 256` byte limit
+  and negative integer error codes. `encodeFrame`/`decodeFrame` define a reversible
+  `TO|FROM|P|BODY` wire format with backslash escaping of `|` and `\`, so arbitrary bodies
+  round-trip. Error codes become `false` returns; malformed frames are dropped and counted in
+  `malformedFrames()`.
+- **Class adapter (private inheritance).** `ThermalSensorAdapter` inherits
+  `ITemperatureSensor` publicly and `LegacyThermalSensor` *privately*: the adaptee is an
+  implementation detail, not an is-a relationship. Centi-kelvin integers become degrees
+  Celsius; `using LegacyThermalSensor::readCentiKelvin;` selectively re-exposes one adaptee
+  member. Compared with the object adapter this avoids an indirection and allows overriding
+  adaptee behaviour, at the price of tighter coupling.
+- **Callback adapter.** `CallbackBridge` lets a `std::function<void(int)>` receive events from a
+  `LegacyEventPump` that accepts only `void (*)(int, void*)` plus a user-data pointer, using the
+  standard trampoline:
 
-public:
-    MoveFleetCommand(std::shared_ptr<Fleet> fleet, const Coordinates& to)
-        : fleet_(fleet), to_position_(to) {
-        if (auto f = fleet_.lock()) {
-            from_position_ = f->getPosition();
-        }
-    }
+  ```cpp
+  id_ = pump_->registerCallback(&CallbackBridge::trampoline, this);
+  void CallbackBridge::trampoline(int code, void* self) {
+      static_cast<CallbackBridge*>(self)->handler_(code);
+  }
+  ```
 
-    void execute() override {
-        auto fleet = fleet_.lock();
-        if (!fleet) {
-            throw std::runtime_error("Fleet no longer exists");
-        }
+  Because the pump stores `this`, the bridge is non-copyable and non-movable, and it
+  unregisters itself in its destructor (RAII), so the pump can never call into a destroyed
+  bridge. An empty handler is rejected with `std::invalid_argument`.
 
-        fleet->moveTo(to_position_);
-        executed_ = true;
-    }
+## Decorator
 
-    void undo() override {
-        if (!executed_) return;
+**Intent.** Attach responsibilities to an object dynamically, without a combinatorial
+explosion of subclasses.
 
-        auto fleet = fleet_.lock();
-        if (!fleet) {
-            throw std::runtime_error("Cannot undo: Fleet no longer exists");
-        }
+- **Object decorators.** `MissionDecorator` owns its inner `MissionPtr` (null rejected) and
+  forwards every `IMission` call. `StealthEnhancement`, `SpeedBoost`, `HeavyArmament` and
+  `MedicalSupport` override selected members; for example `SpeedBoost` multiplies duration by
+  0.7 and cost by 1.25. Success bonuses are applied as a fraction of the remaining failure
+  probability, `p + (1 - p) * f` with both clamped to [0, 1], so stacking decorators can never
+  push probability above 1. `enhancements()` lists the applied decorators innermost first.
+  `decorate<D>(inner, args...)` is a constrained factory
+  (`requires std::is_base_of_v<MissionDecorator, D>`). With *k* decorator types, any
+  combination needs *k* classes rather than 2^k.
+- **Function decorators.** For cross-cutting concerns on callables, higher-order templates are
+  the idiomatic C++ equivalent:
+  - `withRetry(fn, attempts)` re-invokes `fn` while it throws and rethrows the last exception.
+    Arguments are passed as lvalues on every attempt (not forwarded), so a failed attempt cannot
+    leave a moved-from argument for the next one. `attempts == 0` throws `std::invalid_argument`.
+  - `withCallCounter(fn, std::shared_ptr<std::size_t>)` increments a shared counter per call;
+    the counter is not atomic, so the wrapper is not thread safe.
+  - `memoize<R, Args...>(fn)` caches results in a `std::map<std::tuple<std::decay_t<Args>...>, R>`
+    behind a mutex shared by all copies. The function is evaluated *outside* the lock; a
+    racing duplicate evaluation is harmless for a pure function because `emplace` keeps the
+    first value. Lookups are O(log n). `std::type_identity_t` in the parameter prevents
+    deduction from the argument, so `R` and `Args` are always given explicitly.
 
-        fleet->moveTo(from_position_);
-        executed_ = false;
-    }
+## State
 
-    std::string getDescription() const override {
-        return "Move fleet to " + to_position_.toString();
-    }
-};
+**Intent.** Let an object change its behaviour when its internal state changes.
 
-class CommandProcessor {
-private:
-    std::stack<std::unique_ptr<Command>> undo_stack_;
-    std::stack<std::unique_ptr<Command>> redo_stack_;
+### Classic form: `MissionContext` / `IMissionState`
 
-public:
-    void execute(std::unique_ptr<Command> command) {
-        try {
-            command->execute();
-            undo_stack_.push(std::move(command));
-            // Clear redo stack when new command is executed
-            while (!redo_stack_.empty()) {
-                redo_stack_.pop();
-            }
-        } catch (...) {
-            // Command failed, don't add to undo stack
-            throw;
-        }
-    }
+`MissionContext` holds a `std::unique_ptr<IMissionState>` and delegates each event (`plan`,
+`launch`, `pause`, `resume`, `advance`, `fail`, `abort`) to it. Every handler in the base class
+rejects by default, so a concrete state overrides only the events it accepts. Handlers return a
+`StateOutcome` (`reject()`, `stay()` or `to(next)`), and `MissionContext::apply` performs the
+transition, records a `PhaseTransition` in `history()`, or increments `rejectedEvents()`.
+States never replace themselves while executing, which avoids the classic
+"`delete this` inside a member function" hazard. Lifecycle:
+`Pending -plan-> Planning -launch-> Active <-pause/resume-> Paused`,
+`Active --advance to 100%--> Completed`, `Active/Paused -fail-> Failed`, and any non-terminal
+phase `-abort-> Aborted`.
 
-    void undo() {
-        if (undo_stack_.empty()) return;
-
-        auto command = std::move(undo_stack_.top());
-        undo_stack_.pop();
-
-        command->undo();
-        redo_stack_.push(std::move(command));
-    }
-
-    void redo() {
-        if (redo_stack_.empty()) return;
-
-        auto command = std::move(redo_stack_.top());
-        redo_stack_.pop();
-
-        command->execute();
-        undo_stack_.push(std::move(command));
-    }
-};
-```
-
-**Advanced Features:**
-
-- **RAII for State Management**: Exception-safe command execution
-- **Weak Pointers**: Commands don't keep objects alive unnecessarily
-- **Exception Safety**: Failed commands aren't added to undo stack
-- **Move Semantics**: Efficient command transfer between stacks
-
-**Benefits in Context:**
-
-- Full undo/redo functionality
-- Command queuing and batching
-- Audit trail of all operations
-- Macro command composition
-
-## Pattern Interactions and Combinations
-
-### Factory + Strategy Combination
-
-The EntityFactory uses Strategy pattern internally to determine creation algorithms:
+### Value form: `VariantStateMachine` over `std::variant`
 
 ```cpp
-class EntityFactory {
-    static std::unique_ptr<CreationStrategy> getCreationStrategy(EntityType type) {
-        switch (type) {
-            case EntityType::Planet:
-                return std::make_unique<PlanetCreationStrategy>();
-            case EntityType::Fleet:
-                return std::make_unique<FleetCreationStrategy>();
-        }
-    }
-};
-```
-
-### Observer + Command Integration
-
-Commands can trigger observer notifications:
-
-```cpp
-class NotifyingCommand : public Command {
-    void execute() override {
-        Command::execute();
-        notifyObservers(CommandExecutedEvent{*this});
-    }
-};
-```
-
-### Decorator + Strategy Layering
-
-Mission decorators can change the strategy used:
-
-```cpp
-class StrategyChangingDecorator : public MissionDecorator {
-public:
-    MissionResult execute() override {
-        auto original_strategy = mission_->getNavigationStrategy();
-        mission_->setNavigationStrategy(std::make_unique<StealthPathStrategy>());
-
-        auto result = MissionDecorator::execute();
-
-        mission_->setNavigationStrategy(std::move(original_strategy));
-        return result;
-    }
-};
-```
-
-## Performance Considerations
-
-### Compile-Time Optimizations
-
-- Template-based patterns use zero-cost abstractions
-- constexpr pattern implementations where possible
-- Template specialization for performance-critical paths
-
-### Runtime Optimizations
-
-- Object pooling for frequently created command objects
-- Strategy caching to avoid repeated algorithm setup
-- Observer notification batching to reduce overhead
-
-### Memory Management
-
-- Smart pointers prevent memory leaks in all patterns
-- Weak pointers break cycles in Observer pattern
-- Move semantics minimize copying in Command pattern
-
-## Testing Strategy for Patterns
-
-### Unit Testing Patterns
-
-Each pattern implementation includes comprehensive tests:
-
-```cpp
-TEST_CASE("Singleton thread safety", "[patterns][singleton]") {
-    std::vector<std::thread> threads;
-    std::vector<ResourceManager*> instances;
-    std::mutex instances_mutex;
-
-    for (int i = 0; i < 10; ++i) {
-        threads.emplace_back([&]() {
-            auto& instance = ResourceManager::getInstance();
-            std::lock_guard lock(instances_mutex);
-            instances.push_back(&instance);
-        });
-    }
-
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    // All instances should be the same
-    for (size_t i = 1; i < instances.size(); ++i) {
-        REQUIRE(instances[i] == instances[0]);
-    }
+bool dispatch(const EventVariant& event) {
+    std::optional<StateVariant> next = std::visit(
+        [this](const auto& s, const auto& e) -> std::optional<StateVariant> { return transitions_(s, e); },
+        state_, event);
+    if (!next) { ++rejected_; return false; }
+    state_ = std::move(*next);
+    ++accepted_;
+    return true;
 }
 ```
 
-### Integration Testing
+The state is a `std::variant` of plain structs, each carrying only the data meaningful in that
+state (`Warp::Charging::percent`, `Warp::Jumping::destination`,
+`Warp::Cooldown::ticksRemaining`). The transition table `Warp::Transitions` is an overload set;
+multi-variant `std::visit` dispatches on the (state, event) pair in O(1) via a compiler-generated
+jump table, with no heap allocation and no virtual calls. Overload resolution provides the
+precedence rules: non-template exact matches beat templates, and partial ordering makes
+`template <S> (const S&, const Shutdown&)` more specialised than the catch-all
+`template <S, E> (const S&, const E&)` that rejects every unlisted pair. Because `std::visit`
+requires the visitor to be callable for every combination, a missing transition is a
+*compile-time* error unless the catch-all handles it, which makes the table exhaustive by
+construction. `Overloaded` (with its deduction guide) builds visitors from lambdas.
 
-Tests verify pattern interactions work correctly:
+Exception safety: if the transition function throws, neither the state nor the counters
+change. If move-assigning the next state threw, the variant could become
+`valueless_by_exception`; for `Warp::State` every alternative (including `Jumping`, whose only
+member is a `std::string`) is nothrow-move, so the assignment cannot throw. `WarpDrive` wraps a
+concrete machine and records completed jumps in `jumps()` and `log()`.
 
-```cpp
-TEST_CASE("Factory creates objects observable by observer", "[integration]") {
-    auto planet = EntityFactory::createPlanet(PlanetParams{});
-    auto observer = std::make_shared<MockPlanetObserver>();
+**Trade-off.** The OO form is open to new states without touching existing code but costs a
+heap allocation per transition and virtual dispatch; the variant form is closed (adding a state
+recompiles the table) but is value-semantic, allocation-free and checked by the compiler.
 
-    planet->addObserver(observer);
-    planet->changeResourceLevel(100);
+## Verification
 
-    REQUIRE(observer->wasNotified());
-}
-```
+Tests use Catch2 and live in `tests/patterns/` (built by `tests/patterns/CMakeLists.txt`).
 
-## Pattern Documentation Standards
+| Claim | Test file and representative cases |
+| --- | --- |
+| Singleton non-copyable/non-movable/not publicly constructible; concurrent first access constructs once; `ConfigManager` concurrent readers/writers; `IdGenerator` unique across threads; `LogManager` level filter and bound | `tests/patterns/SingletonTests.cpp` |
+| `Subject` does not extend lifetime, rejects null/duplicates, keeps notifying after a throw; `ScopedConnection` RAII and move; `Connection` outliving its `Signal`; self-disconnection during emission; concurrent connect/emit/disconnect | `tests/patterns/ObserverTests.cpp` |
+| Strategy metrics, hazard avoidance, balanced selection, static policy, selector composition | `tests/patterns/StrategyTests.cpp` |
+| `validate` reports every violated invariant; mass/power/crew limits; builder reuse; director recipes; constexpr hull tables; type-state `build()` only after mandatory steps | `tests/patterns/BuilderTests.cpp` |
+| Undo/redo semantics, bounded history and eviction, transactional macro rollback, strong guarantee of receiver operations | `tests/patterns/CommandTests.cpp` |
+| Frame encode/decode round trip with escaping, legacy error-code mapping, class adapter conversions, callback bridge RAII unregistration | `tests/patterns/AdapterTests.cpp` |
+| Decorator stacking and probability bounds, `withRetry`, `withCallCounter`, `memoize` | `tests/patterns/DecoratorTests.cpp` |
+| Mission happy path, rejected events, pause/resume, terminal failure, abort from every non-terminal phase; warp charging/jump/cooldown, rejected events, generic `VariantStateMachine`, `Overloaded` | `tests/patterns/StateTests.cpp` |
+| `runDemo` runs every showcase and writes to the given stream | `tests/patterns/DemoTests.cpp` |
 
-### Code Comments
+## References
 
-Every pattern implementation includes:
-
-- Purpose and problem solved
-- Key design decisions
-- Usage examples
-- Performance characteristics
-- Thread safety guarantees
-
-### API Documentation
-
-Doxygen documentation for all pattern interfaces:
-
-```cpp
-/**
- * @brief Abstract base for all pathfinding strategies
- *
- * This class defines the Strategy pattern interface for pathfinding
- * algorithms. Concrete strategies implement different approaches to
- * finding routes between coordinates.
- *
- * @note All implementations must be thread-safe for concurrent access
- * @see DirectPathStrategy, SafePathStrategy, EfficientPathStrategy
- */
-class PathfindingStrategy {
-    /**
-     * @brief Find path between two coordinates
-     * @param start Starting coordinates
-     * @param end Destination coordinates
-     * @param context Navigation context with environmental data
-     * @return Route object representing the calculated path
-     * @throws NavigationException if no valid path exists
-     */
-    virtual Route findPath(const Coordinates& start, const Coordinates& end,
-                          const NavigationContext& context) = 0;
-};
-```
-
-## Conclusion
-
-The design patterns in CppVerseHub were chosen based on real architectural needs rather than just educational demonstration. Each pattern:
-
-1. **Solves a Specific Problem**: Addresses actual design challenges in the simulation system
-2. **Leverages C++ Features**: Uses modern C++ capabilities for efficient implementation
-3. **Maintains Performance**: Patterns don't add unnecessary overhead
-4. **Supports Evolution**: Architecture can grow and change over time
-5. **Educational Value**: Demonstrates patterns in realistic contexts
-
-The combination of these patterns creates a flexible, maintainable system that showcases advanced C++ programming techniques while solving real-world software architecture problems.
-
-## Pattern Summary Table
-
-| Pattern   | Primary Use Case            | Key C++ Features                   | Performance Impact       | Educational Value             |
-| --------- | --------------------------- | ---------------------------------- | ------------------------ | ----------------------------- |
-| Singleton | Global resource management  | `std::call_once`, smart pointers   | Minimal                  | Thread safety, initialization |
-| Factory   | Runtime entity creation     | Templates, perfect forwarding      | Zero overhead            | Type safety, extensibility    |
-| Builder   | Complex object construction | Fluent interface, move semantics   | Efficient                | Step validation, flexibility  |
-| Adapter   | Legacy integration          | Composition, exception translation | Minimal conversion cost  | Interface design              |
-| Decorator | Runtime enhancement         | RAII, inheritance                  | Dynamic composition      | Responsibility separation     |
-| Observer  | Event notification          | Weak pointers, templates           | Lock-free possible       | Loose coupling                |
-| Strategy  | Algorithm selection         | Virtual functions, templates       | Optimizable              | Algorithm encapsulation       |
-| Command   | Action encapsulation        | Move semantics, RAII               | Command objects overhead | Undo/redo, queuing            |
-
-This comprehensive approach ensures that every pattern serves both educational and practical purposes while maintaining the high performance standards expected from modern C++ applications.
+1. E. Gamma, R. Helm, R. Johnson, J. Vlissides, *Design Patterns: Elements of Reusable
+   Object-Oriented Software*, Addison-Wesley, 1994.
+2. A. Alexandrescu, *Modern C++ Design: Generic Programming and Design Patterns Applied*,
+   Addison-Wesley, 2001 (ch. 1 policy-based design; ch. 6 singletons and lifetime).
+3. S. Meyers, *More Effective C++*, Addison-Wesley, 1996, Item 26, and S. Meyers,
+   A. Alexandrescu, "C++ and the Perils of Double-Checked Locking", *Dr. Dobb's Journal*, 2004.
+4. ISO/IEC 14882:2020, [stmt.dcl] (block-scope static initialisation), [variant.visit],
+   [temp.func.order] (partial ordering of function templates).
+5. A. Williams, *C++ Concurrency in Action*, 2nd ed., Manning, 2019 (section 3.3 protecting
+   shared data during initialisation).
+6. J. O. Coplien, "Curiously Recurring Template Patterns", *C++ Report*, 1995.
+7. F. M. Hess, D. Gregor, *Boost.Signals2* documentation (thread-safe signals and scoped
+   connections).
+8. cppreference.com: [`std::variant`](https://en.cppreference.com/w/cpp/utility/variant),
+   [`std::visit`](https://en.cppreference.com/w/cpp/utility/variant/visit),
+   [`std::weak_ptr`](https://en.cppreference.com/w/cpp/memory/weak_ptr),
+   [`std::shared_ptr` aliasing constructor](https://en.cppreference.com/w/cpp/memory/shared_ptr/shared_ptr),
+   [Constraints and concepts](https://en.cppreference.com/w/cpp/language/constraints).

@@ -1,986 +1,539 @@
-# Concurrency Design - CppVerseHub
+# Concurrency Design
 
-**Location:** `CppVerseHub/docs/design_docs/concurrency_design.md`
+## Purpose and Scope
 
-## Threading Model Overview
+This document describes the design of the `CppVerseHub::Concurrency` library
+(`src/concurrency/`). It is written for readers who already know the C++ memory model
+and want to know *why* each component is built the way it is, which guarantees it
+gives, and where those guarantees are checked.
 
-CppVerseHub implements a sophisticated concurrency model designed to demonstrate advanced C++ threading concepts while maintaining high performance and safety. The system uses a combination of thread pools, async operations, and lock-free data structures to handle parallel mission execution, resource management, and inter-entity communication.
+The module is organised as one header/source pair per topic:
 
-## Concurrency Architecture Principles
+| File | Components |
+| --- | --- |
+| `ThreadPool.hpp/.cpp` | `UniqueTask`, `PoolShutdownError`, `ThreadPool`, `PriorityThreadPool`, `TaskPriority`, `WorkStealingThreadPool` |
+| `MutexExamples.hpp/.cpp` | `HierarchicalMutex`, `Synchronized<T>`, `ThreadSafeQueue<T>`, `ThreadSafeMap<K, V>`, `BankAccount` + `transfer()`, `run_dining_philosophers()`, `LazyValue<T>` |
+| `ConditionalVariables.hpp/.cpp` | `BoundedQueue<T>`, `CountingSemaphore`, `CountDownLatch`, `CyclicBarrier`, `ManualResetEvent`, `ResourcePool<T>` |
+| `Atomics.hpp/.cpp` | `SpinLock`, `SpscRingBuffer<T, Capacity>`, `LockFreeStack<T>`, `AtomicStatistics`, `atomic_fetch_max/min`, `ConcurrentBloomFilter`, `OneShotEvent` |
+| `AsyncMissions.hpp/.cpp` | `CancellationSource`/`CancellationToken`, `AsyncMission<T>`, `MissionCoordinator`, `parallel_transform`, `when_all`, `Pipeline<T>` |
+| `AsyncComms.hpp/.cpp` | `MessageBus`, `Actor<Msg>`, `RequestResponseServer` |
+| `CoroutinesDemo.hpp/.cpp` | `Generator<T>`, `Task<T>`, `sync_wait`, `schedule_on`/`ScheduleOnAwaiter`, `RoundRobinScheduler` |
+| `Demo.hpp/.cpp` | `runDemo(std::ostream&)`, the CLI entry point |
 
-### Design Goals
+Everything lives in namespace `CppVerseHub::Concurrency` and requires C++20
+(`<coroutine>`, `std::atomic<T>::wait`, `std::has_single_bit`, concepts). Only standard
+library facilities are used; there is no dependency on platform threading APIs except the
+`cpu_relax()` pause/yield intrinsic in `Atomics.hpp`.
 
-1. **Thread Safety**: All shared data structures are protected against race conditions
-2. **Performance**: Minimize contention and maximize CPU utilization
-3. **Scalability**: Support for configurable thread counts based on hardware
-4. **Deadlock Prevention**: Careful lock ordering and timeout mechanisms
-5. **Exception Safety**: Concurrent operations maintain strong exception guarantees
-6. **Educational Value**: Demonstrate modern C++ concurrency features
+### Cross-cutting conventions
 
-### Threading Strategy
+- **Predicate waits only.** Every `condition_variable::wait` uses the predicate overload, and
+  state read by a predicate is only modified under the associated mutex.
+- **Notify after the state change**, usually after releasing the lock, to avoid waking a
+  thread only for it to block on the mutex again.
+- **Every memory order is justified in a comment.** The rule used throughout `Atomics.hpp`:
+  a store that publishes previously written data is `release`; the load that consumes it is
+  `acquire`; a value nobody synchronises through (statistics, a thread's own index) is
+  `relaxed`; `seq_cst` is used deliberately where a proof needs a single total order over
+  several variables.
+- **Graceful shutdown.** Executors and queues distinguish "stop accepting" from "stop
+  running": accepted work is always completed or explicitly drained.
+- **Non-movable concurrent objects.** Types whose address is captured by worker threads
+  (pools, buses, actors, ring buffers, stacks) delete copy and move operations.
 
-- **Thread Pool Pattern**: Managed worker threads for task execution
-- **Producer-Consumer**: Async communication between entities
-- **Actor Model**: Entities process messages independently
-- **Lock-Free Programming**: Critical paths use atomic operations
-- **RAII Synchronization**: Automatic lock management
+## Thread Pools (`ThreadPool.hpp`)
 
-## Core Threading Components
+### `UniqueTask`: move-only type erasure
 
-### Thread Pool Implementation
-
-The system uses a custom thread pool optimized for mission processing:
+`std::function` requires copyable targets, which excludes `std::packaged_task` and lambdas
+capturing `std::unique_ptr`. `UniqueTask` is a minimal `std::move_only_function<void()>`
+(C++23) built from the classic Concept/Model pattern:
 
 ```cpp
-class ThreadPool {
-private:
-    std::vector<std::thread> workers_;
-    std::queue<std::function<void()>> tasks_;
-    std::mutex queue_mutex_;
-    std::condition_variable condition_;
-    std::atomic<bool> stop_{false};
-
+class UniqueTask {
 public:
-    explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency()) {
-        for (size_t i = 0; i < num_threads; ++i) {
-            workers_.emplace_back([this] { workerLoop(); });
-        }
-    }
-
-    ~ThreadPool() {
-        stop_.store(true);
-        condition_.notify_all();
-
-        for (auto& worker : workers_) {
-            if (worker.joinable()) {
-                worker.join();
-            }
-        }
-    }
-
-    template<typename F, typename... Args>
-    auto enqueue(F&& f, Args&&... args)
-        -> std::future<std::invoke_result_t<F, Args...>> {
-
-        using return_type = std::invoke_result_t<F, Args...>;
-
-        auto task = std::make_shared<std::packaged_task<return_type()>>(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-
-        std::future<return_type> result = task->get_future();
-
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            if (stop_.load()) {
-                throw std::runtime_error("ThreadPool is stopping");
-            }
-
-            tasks_.emplace([task](){ (*task)(); });
-        }
-
-        condition_.notify_one();
-        return result;
-    }
-
+    template <typename F>
+        requires(!std::same_as<std::remove_cvref_t<F>, UniqueTask> && std::invocable<std::decay_t<F>&>)
+    explicit UniqueTask(F&& fn) : impl_(std::make_unique<Model<std::decay_t<F>>>(std::forward<F>(fn))) {}
+    void operator()() { impl_->call(); }
 private:
-    void workerLoop() {
-        while (!stop_.load()) {
-            std::function<void()> task;
+    struct Concept { virtual ~Concept() = default; virtual void call() = 0; };
+    template <typename F> struct Model final : Concept { void call() override { std::invoke(fn); } F fn; };
+    std::unique_ptr<Concept> impl_;
+};
+```
 
-            {
-                std::unique_lock<std::mutex> lock(queue_mutex_);
-                condition_.wait(lock, [this] {
-                    return stop_.load() || !tasks_.empty();
-                });
+Trade-off: one heap allocation per task (no small-buffer optimisation). This keeps the
+type trivially correct and is dominated by the `packaged_task` shared state allocation
+anyway.
 
-                if (stop_.load() && tasks_.empty()) {
-                    return;
-                }
+`detail::package_task(fn, args...)` decay-copies the arguments (the same rule as
+`std::thread`), wraps the invocation in a `std::packaged_task<R()>`, and returns
+`{UniqueTask, std::future<R>}`. Because the packaged task captures any exception into the
+shared state, tasks created by `submit()` never throw out of `operator()`.
 
-                task = std::move(tasks_.front());
-                tasks_.pop();
-            }
+### `ThreadPool` and `PriorityThreadPool`: one core, two queue disciplines
 
-            try {
-                task();
-            } catch (const std::exception& e) {
-                // Log exception but continue processing
-                logError("Task execution failed: " + std::string(e.what()));
-            }
-        }
+Both pools are thin facades over `detail::PoolCore<Queue>`, parameterised on a queue
+discipline that provides `push`, `pop`, `empty` and `size`. All queue operations happen
+under `PoolCore::mutex_`, so the queues themselves are not thread safe.
+
+| Pool | Queue | `push`/`pop` cost | Ordering |
+| --- | --- | --- | --- |
+| `ThreadPool` | `detail::FifoQueue` (`std::deque<UniqueTask>`) | O(1) | submission order |
+| `PriorityThreadPool` | `detail::PriorityQueue` (binary heap in `std::vector`) | O(log n) | highest `TaskPriority` first, FIFO within a priority |
+
+Ties in the priority queue are broken by a monotonically increasing 64-bit sequence number,
+not a timestamp: timestamps can collide and are not monotonic under clock adjustment.
+
+```cpp
+struct Compare {  // "a has lower precedence than b"
+    bool operator()(const Entry& a, const Entry& b) const noexcept {
+        if (a.priority != b.priority) return a.priority < b.priority;
+        return a.sequence > b.sequence;
     }
 };
 ```
 
-**Key Features:**
-
-- **Generic Task Support**: Templates allow any callable to be queued
-- **Future-Based Results**: Type-safe return value handling
-- **Exception Isolation**: Failed tasks don't crash worker threads
-- **Graceful Shutdown**: RAII ensures proper thread cleanup
-- **Hardware Scaling**: Default thread count matches CPU cores
-
-### Async Mission Execution
-
-Missions execute asynchronously to prevent blocking the main simulation:
+**Worker loop and shutdown invariant.** A worker waits for `stopping_ || !queue_.empty()`
+and exits only if the queue is empty after waking:
 
 ```cpp
-class AsyncMissionExecutor {
-private:
-    ThreadPool& thread_pool_;
-    std::unordered_map<MissionId, std::future<MissionResult>> active_missions_;
-    std::shared_mutex missions_mutex_;
-
-public:
-    explicit AsyncMissionExecutor(ThreadPool& pool) : thread_pool_(pool) {}
-
-    template<typename MissionType>
-    std::future<MissionResult> executeMission(std::unique_ptr<MissionType> mission) {
-        static_assert(std::is_base_of_v<Mission, MissionType>,
-                     "MissionType must inherit from Mission");
-
-        auto mission_id = mission->getId();
-
-        auto future = thread_pool_.enqueue([mission = std::move(mission)]() mutable {
-            try {
-                return mission->execute();
-            } catch (...) {
-                return MissionResult::createFailure(std::current_exception());
-            }
-        });
-
-        {
-            std::unique_lock lock(missions_mutex_);
-            active_missions_[mission_id] = std::move(future);
-        }
-
-        return active_missions_[mission_id];
-    }
-
-    std::vector<MissionResult> waitForCompletion(
-        const std::vector<MissionId>& mission_ids,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds::max()) {
-
-        std::vector<MissionResult> results;
-        results.reserve(mission_ids.size());
-
-        for (const auto& id : mission_ids) {
-            std::shared_lock lock(missions_mutex_);
-            auto it = active_missions_.find(id);
-            if (it != active_missions_.end()) {
-                lock.unlock();
-
-                if (timeout == std::chrono::milliseconds::max()) {
-                    results.push_back(it->second.get());
-                } else {
-                    auto status = it->second.wait_for(timeout);
-                    if (status == std::future_status::ready) {
-                        results.push_back(it->second.get());
-                    } else {
-                        results.push_back(MissionResult::createTimeout());
-                    }
-                }
-            }
-        }
-
-        return results;
-    }
-};
-```
-
-**Concurrency Features:**
-
-- **Non-Blocking Execution**: Mission submission returns immediately
-- **Exception Handling**: Exceptions captured and returned as results
-- **Timeout Support**: Configurable wait times prevent infinite blocking
-- **Reader-Writer Locks**: Multiple readers for mission status queries
-- **Type Safety**: Template ensures only valid mission types
-
-## Synchronization Mechanisms
-
-### Lock Hierarchy and Deadlock Prevention
-
-The system implements a strict lock ordering to prevent deadlocks:
-
-```cpp
-enum class LockLevel : int {
-    RESOURCE_MANAGER = 100,
-    ENTITY_COLLECTION = 200,
-    INDIVIDUAL_ENTITY = 300,
-    MISSION_QUEUE = 400,
-    OBSERVER_LIST = 500
-};
-
-template<LockLevel Level>
-class HierarchicalMutex {
-private:
-    std::mutex mutex_;
-    static thread_local LockLevel current_lock_level_;
-
-public:
-    void lock() {
-        if (current_lock_level_ != LockLevel{} &&
-            current_lock_level_ >= Level) {
-            throw std::runtime_error("Lock order violation detected");
-        }
-
-        mutex_.lock();
-        current_lock_level_ = Level;
-    }
-
-    void unlock() {
-        current_lock_level_ = LockLevel{};
-        mutex_.unlock();
-    }
-
-    bool try_lock() {
-        if (current_lock_level_ != LockLevel{} &&
-            current_lock_level_ >= Level) {
-            return false;
-        }
-
-        if (mutex_.try_lock()) {
-            current_lock_level_ = Level;
-            return true;
-        }
-        return false;
-    }
-};
-
-template<LockLevel Level>
-thread_local LockLevel HierarchicalMutex<Level>::current_lock_level_{};
-```
-
-**Deadlock Prevention Strategy:**
-
-- **Lock Ordering**: Lower-numbered locks must be acquired before higher-numbered ones
-- **Runtime Checking**: Violations detected and reported immediately
-- **Thread-Local State**: Each thread tracks its current lock level
-- **Try-Lock Support**: Non-blocking acquisition with ordering validation
-
-### Lock-Free Data Structures
-
-Critical performance paths use lock-free programming:
-
-```cpp
-template<typename T>
-class LockFreeQueue {
-private:
-    struct Node {
-        std::atomic<T*> data{nullptr};
-        std::atomic<Node*> next{nullptr};
-    };
-
-    std::atomic<Node*> head_;
-    std::atomic<Node*> tail_;
-
-public:
-    LockFreeQueue() {
-        Node* dummy = new Node;
-        head_.store(dummy);
-        tail_.store(dummy);
-    }
-
-    ~LockFreeQueue() {
-        while (Node* old_head = head_.load()) {
-            head_.store(old_head->next.load());
-            delete old_head;
-        }
-    }
-
-    void enqueue(T item) {
-        Node* new_node = new Node;
-        T* data_ptr = new T(std::move(item));
-        new_node->data.store(data_ptr);
-
-        Node* prev_tail = tail_.exchange(new_node);
-        prev_tail->next.store(new_node);
-    }
-
-    bool try_dequeue(T& result) {
-        Node* head = head_.load();
-        Node* next = head->next.load();
-
-        if (next == nullptr) {
-            return false; // Queue is empty
-        }
-
-        T* data = next->data.exchange(nullptr);
-        if (data == nullptr) {
-            return false; // Another thread got this item
-        }
-
-        result = *data;
-        delete data;
-
-        head_.store(next);
-        delete head;
-
-        return true;
-    }
-
-    bool empty() const {
-        Node* head = head_.load();
-        Node* next = head->next.load();
-        return next == nullptr;
-    }
-};
-```
-
-**Lock-Free Benefits:**
-
-- **No Blocking**: Threads never wait for locks
-- **Scalability**: Performance improves with more cores
-- **Deadlock Immunity**: No locks means no deadlock potential
-- **Progress Guarantee**: At least one thread always makes progress
-- **Cache Efficiency**: Atomic operations optimize memory access patterns
-
-### Resource Manager Thread Safety
-
-The singleton ResourceManager handles concurrent access safely:
-
-```cpp
-class ResourceManager {
-private:
-    static std::unique_ptr<ResourceManager> instance_;
-    static std::once_flag init_flag_;
-
-    mutable std::shared_mutex resources_mutex_;
-    std::unordered_map<ResourceType, std::atomic<double>> resource_levels_;
-
-    // Allocation tracking for deadlock detection
-    struct AllocationRecord {
-        std::thread::id thread_id;
-        std::chrono::steady_clock::time_point timestamp;
-        ResourceType resource_type;
-        double amount;
-    };
-
-    mutable std::mutex allocation_records_mutex_;
-    std::vector<AllocationRecord> pending_allocations_;
-
-    ResourceManager() {
-        // Initialize resource levels
-        resource_levels_[ResourceType::ENERGY] = 10000.0;
-        resource_levels_[ResourceType::MATERIALS] = 5000.0;
-        resource_levels_[ResourceType::FUEL] = 8000.0;
-    }
-
-public:
-    static ResourceManager& getInstance() {
-        std::call_once(init_flag_, []() {
-            instance_ = std::unique_ptr<ResourceManager>(new ResourceManager());
-        });
-        return *instance_;
-    }
-
-    bool tryAllocateResources(const ResourceRequirement& requirement) {
-        // Record allocation attempt for deadlock detection
-        {
-            std::lock_guard lock(allocation_records_mutex_);
-            pending_allocations_.push_back({
-                std::this_thread::get_id(),
-                std::chrono::steady_clock::now(),
-                requirement.type,
-                requirement.amount
-            });
-        }
-
-        // Use atomic operations for the actual allocation
-        double expected = resource_levels_[requirement.type].load();
-        double desired;
-
-        do {
-            if (expected < requirement.amount) {
-                cleanupAllocationRecord();
-                return false; // Insufficient resources
-            }
-            desired = expected - requirement.amount;
-        } while (!resource_levels_[requirement.type].compare_exchange_weak(
-                    expected, desired));
-
-        cleanupAllocationRecord();
-        return true;
-    }
-
-    void releaseResources(const ResourceRequirement& requirement) {
-        resource_levels_[requirement.type].fetch_add(requirement.amount);
-    }
-
-    double getResourceLevel(ResourceType type) const {
-        return resource_levels_.at(type).load();
-    }
-
-private:
-    void cleanupAllocationRecord() {
-        std::lock_guard lock(allocation_records_mutex_);
-        auto thread_id = std::this_thread::get_id();
-
-        pending_allocations_.erase(
-            std::remove_if(pending_allocations_.begin(), pending_allocations_.end(),
-                [thread_id](const AllocationRecord& record) {
-                    return record.thread_id == thread_id;
-                }),
-            pending_allocations_.end());
-    }
-};
-```
-
-**Thread Safety Features:**
-
-- **Atomic Resource Levels**: Lock-free resource queries and updates
-- **Compare-and-Swap**: Atomic allocation operations
-- **Deadlock Detection**: Track allocation attempts for analysis
-- **Exception Safety**: RAII cleanup of allocation records
-- **Singleton Safety**: Thread-safe initialization with std::call_once
-
-## Inter-Entity Communication
-
-### Message Passing System
-
-Entities communicate through an async message passing system:
-
-```cpp
-template<typename MessageType>
-class MessageQueue {
-private:
-    LockFreeQueue<MessageType> queue_;
-    std::atomic<bool> active_{true};
-
-public:
-    void send(MessageType message) {
-        if (!active_.load()) {
-            throw std::runtime_error("Message queue is shut down");
-        }
-        queue_.enqueue(std::move(message));
-    }
-
-    std::optional<MessageType> receive() {
-        if (!active_.load()) {
-            return std::nullopt;
-        }
-
-        MessageType message;
-        if (queue_.try_dequeue(message)) {
-            return message;
-        }
-        return std::nullopt;
-    }
-
-    template<typename Predicate>
-    std::vector<MessageType> receiveFiltered(Predicate pred, size_t max_count = 100) {
-        std::vector<MessageType> messages;
-        messages.reserve(max_count);
-
-        MessageType message;
-        size_t count = 0;
-
-        while (count < max_count && queue_.try_dequeue(message)) {
-            if (pred(message)) {
-                messages.push_back(std::move(message));
-            }
-            ++count;
-        }
-
-        return messages;
-    }
-
-    void shutdown() {
-        active_.store(false);
-    }
-
-    bool isActive() const {
-        return active_.load();
-    }
-};
-
-class Entity {
-protected:
-    MessageQueue<EntityMessage> message_queue_;
-    std::atomic<bool> processing_messages_{false};
-
-public:
-    void sendMessage(const EntityMessage& message) {
-        message_queue_.send(message);
-    }
-
-    virtual void processMessages() {
-        // Prevent recursive message processing
-        bool expected = false;
-        if (!processing_messages_.compare_exchange_strong(expected, true)) {
-            return; // Already processing messages
-        }
-
-        // RAII guard to reset processing flag
-        auto guard = make_scope_guard([this] {
-            processing_messages_.store(false);
-        });
-
-        auto messages = message_queue_.receiveFiltered(
-            [this](const EntityMessage& msg) { return shouldProcess(msg); },
-            50 // Process up to 50 messages per cycle
-        );
-
-        for (const auto& message : messages) {
-            try {
-                handleMessage(message);
-            } catch (const std::exception& e) {
-                logError("Message handling failed: " + std::string(e.what()));
-            }
-        }
-    }
-
-protected:
-    virtual bool shouldProcess(const EntityMessage& message) const = 0;
-    virtual void handleMessage(const EntityMessage& message) = 0;
-};
-```
-
-**Communication Features:**
-
-- **Lock-Free Queues**: High-performance message passing
-- **Type Safety**: Template-based message type checking
-- **Filtering**: Selective message processing
-- **Overflow Protection**: Bounded message processing per cycle
-- **Exception Isolation**: Failed message handling doesn't crash entity
-
-### Async Fleet Communication
-
-Fleets use specialized communication for coordination:
-
-```cpp
-class Fleet : public Entity {
-private:
-    ThreadPool& thread_pool_;
-    std::shared_ptr<AsyncMissionExecutor> mission_executor_;
-
-    // Fleet-specific message types
-    using FleetMessage = std::variant<
-        MoveCommand,
-        AttackCommand,
-        FormationChange,
-        ResourceRequest,
-        StatusUpdate
-    >;
-
-    MessageQueue<FleetMessage> fleet_queue_;
-
-public:
-    std::future<void> executeAsync(std::unique_ptr<Mission> mission) {
-        return thread_pool_.enqueue([this, mission = std::move(mission)]() mutable {
-            try {
-                auto result = mission->execute();
-                broadcastResult(result);
-            } catch (...) {
-                broadcastError(std::current_exception());
-            }
-        });
-    }
-
-    void coordinateWithFleet(std::shared_ptr<Fleet> other_fleet,
-                           CoordinationStrategy strategy) {
-        thread_pool_.enqueue([this, other_fleet, strategy]() {
-            try {
-                auto coordination_result = strategy.coordinate(*this, *other_fleet);
-
-                // Send coordination commands to both fleets
-                sendMessage(coordination_result.this_fleet_command);
-                other_fleet->sendMessage(coordination_result.other_fleet_command);
-
-            } catch (const std::exception& e) {
-                logError("Fleet coordination failed: " + std::string(e.what()));
-            }
-        });
-    }
-
-protected:
-    void handleMessage(const EntityMessage& base_message) override {
-        // Try to convert to fleet-specific message
-        if (auto fleet_msg = std::get_if<FleetMessage>(&base_message.data)) {
-            std::visit([this](const auto& msg) {
-                handleFleetMessage(msg);
-            }, *fleet_msg);
-        } else {
-            Entity::handleMessage(base_message);
-        }
-    }
-
-private:
-    template<typename MessageType>
-    void handleFleetMessage(const MessageType& message) {
-        if constexpr (std::is_same_v<MessageType, MoveCommand>) {
-            processMovement(message);
-        } else if constexpr (std::is_same_v<MessageType, AttackCommand>) {
-            processAttack(message);
-        } else if constexpr (std::is_same_v<MessageType, FormationChange>) {
-            adjustFormation(message);
-        }
-        // ... other message type handlers
-    }
-};
-```
-
-## Performance Optimization
-
-### Thread Pool Tuning
-
-Dynamic thread pool sizing based on workload:
-
-```cpp
-class AdaptiveThreadPool {
-private:
-    std::vector<std::thread> core_workers_;
-    std::vector<std::unique_ptr<std::thread>> overflow_workers_;
-
-    std::atomic<size_t> active_tasks_{0};
-    std::atomic<size_t> queued_tasks_{0};
-
-    const size_t min_threads_;
-    const size_t max_threads_;
-
-    std::chrono::steady_clock::time_point last_adjustment_;
-
-public:
-    void adjustThreadCount() {
-        auto now = std::chrono::steady_clock::now();
-        if (now - last_adjustment_ < std::chrono::seconds(5)) {
-            return; // Don't adjust too frequently
-        }
-
-        size_t active = active_tasks_.load();
-        size_t queued = queued_tasks_.load();
-        size_t current_threads = core_workers_.size() + overflow_workers_.size();
-
-        // Scale up if we have queued work and spare capacity
-        if (queued > current_threads && current_threads < max_threads_) {
-            addWorkerThread();
-        }
-
-        // Scale down if utilization is low
-        if (active < current_threads / 2 && current_threads > min_threads_) {
-            removeWorkerThread();
-        }
-
-        last_adjustment_ = now;
-    }
-};
-```
-
-### Cache-Friendly Data Layout
-
-Organize data to minimize cache misses:
-
-```cpp
-// Structure of Arrays for better cache performance
-class EntityManager {
-private:
-    // Instead of Array of Structures (AoS)
-    struct EntityData {
-        alignas(64) std::vector<EntityId> ids;
-        alignas(64) std::vector<Position> positions;
-        alignas(64) std::vector<Velocity> velocities;
-        alignas(64) std::vector<std::atomic<Health>> health_values;
-    };
-
-    EntityData entities_;
-
-public:
-    // Process positions in batch for cache efficiency
-    void updatePositions(float delta_time) {
-        const size_t batch_size = 64; // Process in cache-line sized batches
-
-        for (size_t i = 0; i < entities_.positions.size(); i += batch_size) {
-            size_t end = std::min(i + batch_size, entities_.positions.size());
-
-            // Prefetch next batch
-            if (end < entities_.positions.size()) {
-                __builtin_prefetch(&entities_.positions[end], 0, 3);
-                __builtin_prefetch(&entities_.velocities[end], 0, 3);
-            }
-
-            // Process current batch
-            for (size_t j = i; j < end; ++j) {
-                entities_.positions[j] += entities_.velocities[j] * delta_time;
-            }
-        }
-    }
-};
-```
-
-## Exception Safety in Concurrent Code
-
-### Exception-Safe Lock Guards
-
-Custom RAII locks that handle exceptions properly:
-
-```cpp
-template<typename Mutex>
-class ExceptionSafeLockGuard {
-private:
-    Mutex& mutex_;
-    bool locked_{false};
-
-public:
-    explicit ExceptionSafeLockGuard(Mutex& m) : mutex_(m) {
-        mutex_.lock();
-        locked_ = true;
-    }
-
-    ~ExceptionSafeLockGuard() noexcept {
-        if (locked_) {
-            try {
-                mutex_.unlock();
-            } catch (...) {
-                // Log error but don't throw from destructor
-                // This prevents std::terminate from being called
-                std::abort(); // Better than masking the error
-            }
-        }
-    }
-
-    // Move-only semantics
-    ExceptionSafeLockGuard(const ExceptionSafeLockGuard&) = delete;
-    ExceptionSafeLockGuard& operator=(const ExceptionSafeLockGuard&) = delete;
-
-    ExceptionSafeLockGuard(ExceptionSafeLockGuard&& other) noexcept
-        : mutex_(other.mutex_), locked_(other.locked_) {
-        other.locked_ = false;
-    }
-
-    void unlock() {
-        if (locked_) {
-            mutex_.unlock();
-            locked_ = false;
-        }
-    }
-
-    void lock() {
-        if (!locked_) {
-            mutex_.lock();
-            locked_ = true;
-        }
-    }
-};
-```
-
-### Exception Propagation in Async Operations
-
-Properly handle exceptions across thread boundaries:
-
-```cpp
-template<typename T>
-class ExceptionSafeFuture {
-private:
-    std::future<T> future_;
-    std::exception_ptr exception_;
-
-public:
-    explicit ExceptionSafeFuture(std::future<T> f) : future_(std::move(f)) {}
-
-    T get() {
-        try {
-            return future_.get();
-        } catch (...) {
-            exception_ = std::current_exception();
-            throw;
-        }
-    }
-
-    std::optional<T> get_no_throw() noexcept {
-        try {
-            return future_.get();
-        } catch (...) {
-            exception_ = std::current_exception();
-            return std::nullopt;
-        }
-    }
-
-    bool has_exception() const noexcept {
-        return exception_ != nullptr;
-    }
-
-    void rethrow_exception() const {
-        if (exception_) {
-            std::rethrow_exception(exception_);
-        }
-    }
-};
-```
-
-## Testing Concurrent Code
-
-### Race Condition Testing
-
-Specialized testing for concurrent operations:
-
-```cpp
-TEST_CASE("Resource allocation race conditions", "[concurrency][stress]") {
-    ResourceManager& rm = ResourceManager::getInstance();
-
-    const int num_threads = std::thread::hardware_concurrency();
-    const int allocations_per_thread = 1000;
-
-    std::vector<std::thread> threads;
-    std::atomic<int> successful_allocations{0};
-    std::atomic<int> failed_allocations{0};
-
-    // Reset resource levels
-    rm.setResourceLevel(ResourceType::ENERGY, 10000.0);
-
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&]() {
-            for (int j = 0; j < allocations_per_thread; ++j) {
-                ResourceRequirement req{ResourceType::ENERGY, 1.0};
-
-                if (rm.tryAllocateResources(req)) {
-                    successful_allocations.fetch_add(1);
-
-                    // Simulate some work
-                    std::this_thread::sleep_for(std::chrono::microseconds(10));
-
-                    rm.releaseResources(req);
-                } else {
-                    failed_allocations.fetch_add(1);
-                }
-            }
-        });
-    }
-
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    // Verify no resources were lost or created
-    REQUIRE(rm.getResourceLevel(ResourceType::ENERGY) == Approx(10000.0));
-
-    // At least some allocations should have succeeded
-    REQUIRE(successful_allocations.load() > 0);
-
-    INFO("Successful: " << successful_allocations.load()
-         << ", Failed: " << failed_allocations.load());
+work_cv_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
+if (queue_.empty()) {
+    return;  // stopping_ and fully drained: graceful exit
 }
 ```
 
-### Deadlock Detection Testing
+`push` checks `stopping_` and enqueues under the same mutex, so every submission is either
+rejected with `PoolShutdownError` or enqueued before any worker can observe `stopping_`.
+Together these give the central invariant: **no accepted task is ever dropped**.
 
-Automated testing for potential deadlocks:
+Guarantees:
+
+- *Thread safety.* All members may be called concurrently, except that `shutdown()`,
+  `wait_idle()` and the destructor must not be called from a worker of the same pool
+  (it would wait for itself). `shutdown()` is idempotent; `join_mutex_` serialises
+  concurrent callers.
+- *Exception safety.* If constructing the N-th worker thread throws, the constructor shuts
+  down the already-started workers and rethrows (no leaked joinable `std::thread`). A task
+  exception reaches the caller through the `std::future`. Raw tasks given to `post()` that
+  throw are swallowed so one faulty task cannot terminate the process.
+- *`wait_idle()`* returns when `active_ == 0 && queue_.empty()`; `active_` is incremented
+  under the lock in the same critical section that pops the task, so there is no window in
+  which a task is neither queued nor counted as active.
+- `completed_tasks()` is a relaxed counter; it is a statistic, not a synchronisation point.
+
+### `WorkStealingThreadPool`
+
+Each worker owns a `WorkerQueue` (a mutex plus a `std::deque<UniqueTask>`). The owner pops
+LIFO from the back (cache-warm, recently spawned work); thieves steal FIFO from the front
+(the oldest, typically largest, piece of work), following the discipline of Blumofe and
+Leiserson's work-stealing scheduler. Submissions from outside the pool are distributed
+round-robin (`next_queue_`, relaxed); submissions from a worker go to that worker's own
+deque, identified through the `thread_local` pair `tls_pool`/`tls_index` in
+`ThreadPool.cpp`.
+
+Termination and wake-up correctness rest on one counter, `pending_` (accepted but not yet
+popped tasks):
+
+1. `enqueue` checks `stopping_` and increments `pending_` under `sleep_mutex_`, so a task
+   is either rejected or counted before shutdown can be observed.
+2. A worker only sleeps after re-checking `pending_ == 0` under `sleep_mutex_`, and only
+   exits when `stopping_ && pending_ == 0`.
+3. If `pending_ > 0` but no deque holds a task, a push is in flight; the worker yields and
+   retries rather than sleeping.
+4. Before `notify_one`, `enqueue` locks and unlocks `sleep_mutex_`, so a worker that has
+   just evaluated its wait predicate cannot miss the notification (the classic lost
+   wake-up).
+
+Trade-off: per-deque mutexes make the pool simple and ThreadSanitizer-clean, at the cost of
+lock overhead on every pop. The header names the Chase-Lev lock-free deque as the next step
+for very fine-grained tasks. `steal_count()` exposes the number of successful steals for
+tests and diagnostics.
+
+## Mutual Exclusion (`MutexExamples.hpp`)
+
+### `HierarchicalMutex`
+
+A run-time lock-order checker in the style of Williams (2019, section 3.2.5). Each mutex has
+a level; a `thread_local` value `this_thread_hierarchy_level` (initially
+`std::numeric_limits<std::uint64_t>::max()`) records the lowest level the thread holds. Locking
+a mutex whose level is not strictly lower throws `std::logic_error` *before* blocking.
+If all threads respect one global order, the wait-for graph is acyclic and deadlock is
+impossible; a violation becomes a deterministic exception instead of a rare hang.
+`unlock()` restores the previous level, so mutexes must be released in reverse order.
+
+### Deadlock-free multi-lock: `transfer()` and `run_dining_philosophers()`
+
+`transfer(BankAccount& from, BankAccount& to, std::int64_t amount)` acquires both account
+mutexes with `std::scoped_lock`, whose deadlock-avoidance algorithm makes argument order
+irrelevant, so concurrent `transfer(a, b)` and `transfer(b, a)` cannot deadlock. It returns
+`false` for `amount <= 0`, insufficient funds, or `&from == &to` (which would otherwise
+lock the same mutex twice). `run_dining_philosophers(n, meals)` applies the same technique
+to the textbook problem and returns the meals eaten per philosopher; it throws
+`std::invalid_argument` for `n < 2`.
+
+### Data-structure wrappers
+
+- `Synchronized<T>` couples a value with a `std::shared_mutex`; the value is reachable only
+  inside `with_lock(fn)` (exclusive) or `with_shared_lock(fn)` (shared), or by `copy()`.
+  This makes "forgot to lock" unrepresentable, but a callback must not leak references.
+- `ThreadSafeQueue<T>`: unbounded, single `std::mutex`, blocking `wait_and_pop()` that
+  returns `std::nullopt` once the queue is closed and empty.
+- `ThreadSafeMap<K, V>`: `std::unordered_map` behind a `std::shared_mutex`. Lookups return
+  `std::optional<V>` copies, never references, because a reference would escape the lock.
+  `update(key, fn)` is an atomic read-modify-write; `snapshot()` returns a sorted
+  `std::map` taken under one shared lock (a consistent cut).
+- `LazyValue<T>` uses `std::call_once`; concurrent first callers block until the factory
+  finishes. If the factory throws, the `once_flag` is not set and the next `get()` retries
+  (the standard's exceptional-call semantics).
+
+## Condition-Variable Primitives (`ConditionalVariables.hpp`)
+
+### `BoundedQueue<T>`
+
+A closable, bounded MPMC FIFO with two condition variables (`not_full_`, `not_empty_`).
+
+- `push` blocks while full (back-pressure); `pop` blocks while empty.
+- After `close()`, pushes fail immediately and pops **drain** the remaining elements, then
+  return `std::nullopt`; this is the termination signal used by `Actor`, `MessageBus` and
+  `Pipeline`.
+- Timed variants `push_for`/`pop_for` and non-blocking `try_push`/`try_pop`.
+- A failed push does not move from its argument (the element is only forwarded into
+  `emplace_back` after the closed check), so callers may retry.
+- Notification happens after `lock.unlock()` in `emplace_locked`/`take_locked`.
+- `capacity == 0` throws `std::invalid_argument`.
+
+All operations are O(1) amortised. Exception safety is strong: if `emplace_back` throws,
+the deque is unchanged.
+
+### Hand-rolled C++20 synchronisation types
+
+`CountingSemaphore`, `CountDownLatch`, `CyclicBarrier` and `ManualResetEvent` mirror
+`std::counting_semaphore`, `std::latch`, `std::barrier` and a Win32-style manual-reset
+event. Building them from a mutex and a condition variable makes their semantics explicit
+and portable to standard libraries that lack the C++20 headers. Notable decisions:
+
+- `CountDownLatch::count_down(n)` saturates at zero instead of exhibiting undefined
+  behaviour as `std::latch` does for over-decrement.
+- `CyclicBarrier` uses a **generation counter**: a waiter waits for `generation_` to change,
+  not for `waiting_` to reach a value, so a fast thread re-entering the next phase cannot be
+  confused with stragglers of the previous one. The optional `on_completion` callback is run
+  exactly once per phase by the last arriving thread, before any waiter is released;
+  `arrive_and_wait()` returns the completed phase index.
+
+### `ResourcePool<T>`
+
+A blocking object pool returning move-only RAII `Lease` handles. `free_` is a stack of
+indices reserved to the pool size at construction, so `give_back()` (called from
+`Lease::~Lease`) is `noexcept`: `push_back` can never reallocate. The pool must outlive
+every lease; this is a documented precondition, not checked.
+
+## Atomics and Lock-Free Structures (`Atomics.hpp`)
+
+### `SpinLock`
+
+Test-and-test-and-set: `exchange(true, acquire)` to acquire; on failure, spin on a
+`relaxed` load (keeps the cache line in the shared state instead of bouncing it with RMWs),
+calling `cpu_relax()` (`pause` on x86, `yield` on Arm) for 64 iterations and
+`std::this_thread::yield()` afterwards. `unlock` is a `release` store, which synchronises with
+the next successful acquiring exchange. It meets *Lockable*, so `std::lock_guard<SpinLock>`
+works. Appropriate only for very short critical sections; it is not fair.
+
+### `SpscRingBuffer<T, Capacity>`
+
+A bounded, wait-free single-producer/single-consumer queue.
+
+**Layout.** `head_` (consumer-owned) and `tail_` (producer-owned) are on separate 64-byte
+cache lines (`kCacheLineSize`; `std::hardware_destructive_interference_size` is avoided
+because it is missing from some libraries and GCC warns about its ABI stability). Each side
+also keeps a plain, non-atomic *cached copy* of the opposite index on its own line
+(`consumer_cached_tail_`, `producer_cached_head_`). Storage is an array of
+`alignas(T) std::byte[sizeof(T)]` slots; elements are created with `std::construct_at` and
+accessed through `std::launder`, so `T` need not be default-constructible.
+
+**Indices.** `head_` and `tail_` are monotonically increasing `std::size_t` counters masked
+with `Capacity - 1` on access. "Empty" is `tail == head` and "full" is
+`tail - head == Capacity`, so no slot is wasted. `Capacity` must be a power of two
+(`static_assert(std::has_single_bit(Capacity))`); this also makes unsigned wrap-around of the
+counters harmless, because 2^64 is a multiple of `Capacity`.
+
+**Memory-ordering argument.**
 
 ```cpp
-class DeadlockDetector {
-private:
-    static thread_local std::vector<std::mutex*> held_locks_;
-    static std::mutex detection_mutex_;
-    static std::unordered_map<std::thread::id, std::vector<std::mutex*>> all_held_locks_;
+// producer
+const std::size_t tail = tail_.load(std::memory_order_relaxed);        // (P1) own index
+if (tail - producer_cached_head_ == Capacity) {
+    producer_cached_head_ = head_.load(std::memory_order_acquire);      // (P2)
+    if (tail - producer_cached_head_ == Capacity) return false;
+}
+std::construct_at(slot_storage(tail), std::forward<U>(value));        // (P3)
+tail_.store(tail + 1, std::memory_order_release);                       // (P4)
 
-public:
-    static void lockAcquired(std::mutex* m) {
-        held_locks_.push_back(m);
+// consumer
+const std::size_t head = head_.load(std::memory_order_relaxed);        // (C1) own index
+if (head == consumer_cached_tail_) {
+    consumer_cached_tail_ = tail_.load(std::memory_order_acquire);      // (C2)
+    if (head == consumer_cached_tail_) return std::nullopt;
+}
+std::optional<T> result(std::move(*element));                          // (C3)
+std::destroy_at(element);                                               // (C4)
+head_.store(head + 1, std::memory_order_release);                       // (C5)
+```
 
-        std::lock_guard lock(detection_mutex_);
-        all_held_locks_[std::this_thread::get_id()] = held_locks_;
+1. *Publication.* If (C2) reads the value written by (P4), the release store synchronises
+   with the acquire load, so the construction (P3) happens-before the read (C3). Without
+   `release`/`acquire` the element access would be a data race.
+2. *Slot reuse.* Symmetrically, if (P2) reads the value written by (C5), the move-out and
+   destruction (C3, C4) happen-before the producer's next `construct_at` in that slot.
+3. *Own index relaxed.* (P1) and (C1) read a variable only the calling thread writes, so
+   sequenced-before already orders them; no fence is needed.
+4. *Cached indices.* The cached copy is a lower bound on the true opposite index (the
+   opposite counter only grows). Acting on a stale cache can only report full/empty
+   spuriously, never overrun, and in that case the code re-reads with `acquire`. A stale
+   cached value read earlier with `acquire` still carries the happens-before edge for every
+   slot it covers. The cache removes the cross-core cache-line transfer on most operations.
+5. *No RMW.* Neither side performs a read-modify-write, so each operation completes in a
+   bounded number of steps: the structure is wait-free for both endpoints.
 
-        // Check for potential deadlock
-        if (detectCircularWait()) {
-            throw std::runtime_error("Potential deadlock detected");
-        }
+`size_approx()` loads both indices with `acquire`; it is exact only when one endpoint calls
+it while the other is quiescent. The destructor destroys buffered elements and must not race
+with push/pop.
+
+*Exception safety.* If `T`'s constructor throws in (P3), `tail_` is not advanced
+(strong guarantee). If the move in (C3) throws, `head_` is not advanced and the element
+remains buffered. A failed `try_push` does not consume its argument.
+
+### `LockFreeStack<T>`
+
+A Treiber stack (Treiber 1986) with the "threads in pop" deferred-reclamation scheme of
+Williams (2019, section 7.2.2).
+
+**Push** links the new node with a `relaxed` store to `next` (the node is not yet shared)
+and publishes it with `compare_exchange_weak(..., release, relaxed)`. The `release` on
+success makes the node's contents visible to any popper whose load of `head_` reads it.
+Ownership is held in a `std::unique_ptr` until the CAS succeeds, so an allocation or
+construction failure leaks nothing.
+
+**Pop** uses default (`seq_cst`) operations for `threads_in_pop_`, `head_` and
+`to_be_deleted_`:
+
+```cpp
+threads_in_pop_.fetch_add(1);                                  // (1)
+Node* old_head = head_.load();                                 // (2)
+while (old_head != nullptr &&
+       !head_.compare_exchange_weak(old_head, old_head->next.load(std::memory_order_relaxed))) {
+}                                                               // (3) unlink
+std::optional<T> result;
+if (old_head != nullptr) result.emplace(std::move(old_head->value));
+try_reclaim(old_head);
+```
+
+`Node::next` is `std::atomic<Node*>` because a thread holding a stale `old_head` may read
+`next` while the thread that really popped that node re-links it onto the pending list.
+The value read in that case is garbage, but the CAS then fails (the node cannot reappear as
+head while the reader is inside `pop`), so it is never used.
+
+**Reclamation (`try_reclaim`).**
+
+```cpp
+if (threads_in_pop_.load() == 1) {                     // (4) apparently alone
+    Node* claimed = to_be_deleted_.exchange(nullptr);  // (5) claim pending list
+    if (threads_in_pop_.fetch_sub(1) == 1) {           // (6) still alone?
+        delete_chain(claimed);
+    } else if (claimed != nullptr) {
+        chain_pending(claimed);                        // someone joined: put them back
     }
+    std::unique_ptr<Node> reclaim(old_head);           // (7) free own node
+} else {
+    if (old_head != nullptr) chain_pending(old_head, old_head);
+    threads_in_pop_.fetch_sub(1);
+}
+```
 
-    static void lockReleased(std::mutex* m) {
-        auto it = std::find(held_locks_.begin(), held_locks_.end(), m);
-        if (it != held_locks_.end()) {
-            held_locks_.erase(it);
-        }
+Why this is safe:
 
-        std::lock_guard lock(detection_mutex_);
-        if (held_locks_.empty()) {
-            all_held_locks_.erase(std::this_thread::get_id());
-        } else {
-            all_held_locks_[std::this_thread::get_id()] = held_locks_;
-        }
+- *Own node (7).* Any thread U that might dereference `old_head` must have read it from
+  `head_` at step (2) or in a failed CAS, which is before our unlinking CAS (3) in the
+  modification order of `head_`. U incremented the counter at (1) before that read. All
+  of these are `seq_cst`, so in the single total order S:
+  U.(1) < U.(2) < our (3) < our (4). Our load at (4) therefore observes U's increment
+  unless U has already decremented, i.e. left `pop` and stopped referencing the node.
+  Reading `1` at (4) thus proves no other thread holds `old_head`.
+- *Pending list (5)-(6).* Nodes on `to_be_deleted_` have already been unlinked from
+  `head_`, so a thread entering `pop` after (4) cannot obtain one through `head_`. It could,
+  however, have read a node that a third thread pops and chains onto the list *between*
+  (4) and (5). That newcomer is still inside `pop`, so `fetch_sub` at (6) returns a value
+  greater than 1 and the claimed chain is put back instead of freed.
+- *ABA.* A node's memory is freed only when no concurrent popper can hold its address, so
+  an address cannot be recycled by `push` under a popper's feet. The ABA scenario
+  (CAS succeeds against a recycled node with a different `next`) is therefore impossible
+  without tagged pointers or double-width CAS.
+
+**Trade-offs and progress.** `push` and `pop` are lock-free, not wait-free. Reclamation is
+not bounded: under sustained contention `threads_in_pop_` may never drop to 1 and the
+pending list grows until a quiescent moment (`pending_reclamation()` is a diagnostic snapshot
+valid only when quiescent). The counter is also a shared contention point. Hazard pointers
+(Michael 2004) or epoch-based reclamation would bound memory at the cost of considerably
+more machinery; for a teaching library the counter scheme gives a complete, verifiable
+argument. The destructor frees both chains and must not race with push/pop; `T`'s
+destructor is assumed not to throw.
+
+### Smaller atomic components
+
+- `AtomicStatistics` keeps count/sum/min/max as four independent relaxed atomics. min and
+  max use CAS loops (`atomic_fetch_min`/`atomic_fetch_max`, portable stand-ins for the
+  proposed `fetch_min`/`fetch_max`). A `snapshot()` taken while writers run is not a
+  consistent cut across fields; take it after joining the writers.
+- `ConcurrentBloomFilter` sets bits with relaxed `fetch_or` on 64-bit words and queries
+  with relaxed loads. There are no false negatives once an insertion happens-before the
+  query (the caller provides that ordering, e.g. by joining). Hashing is FNV-1a plus double
+  hashing so results are identical on every platform.
+- `OneShotEvent` uses C++20 `std::atomic<bool>::wait`/`notify_all` (futex-style blocking):
+  `set()` is a release store, `wait()` an acquire loop around `flag_.wait(false)`.
+- `release_acquire_message_passing(int)` and `relaxed_counter_total(...)` are executable
+  demonstrations of message passing through a non-atomic payload and of relaxed counters
+  that never lose an update.
+
+## Futures-Based Orchestration (`AsyncMissions.hpp`)
+
+- **Cooperative cancellation.** `CancellationSource` owns a
+  `std::shared_ptr<std::atomic<bool>>`; `CancellationToken` holds a
+  `shared_ptr<const std::atomic<bool>>`, so it is cheap to copy and outlives its source
+  safely. `cancel()` is a release store and `is_cancelled()` an acquire load, so data written
+  before cancellation is visible to an observer that sees the flag. It is a callback-free
+  analogue of C++20 `std::stop_source`/`std::stop_token`.
+- **`AsyncMission<T>`** launches its body with `std::async(policy, ...)` and shares the
+  result as `std::shared_future<MissionResult<T>>`. Exceptions become `Failed`,
+  `MissionCancelled` becomes `Cancelled`. The destructor waits for a started mission, so the
+  object can never be destroyed under its running body; `start()` twice throws
+  `std::logic_error`.
+- **`MissionCoordinator`** runs a DAG of missions on a `ThreadPool`. `run()` first checks
+  acyclicity with Kahn's algorithm (`topological_order()`, smallest id first, O(V + E)) and
+  throws `std::logic_error` on a cycle. A mission is launched as soon as its `remaining`
+  prerequisite count reaches zero; when a mission fails, all transitive dependents are marked
+  `Cancelled` without running, while independent branches continue. `run()` blocks on
+  `done_cv_` until `unfinished_ == 0`.
+- **`parallel_transform(pool, inputs, fn, chunk_size)`** splits the input into chunks
+  (default `size / (threads * 4)`), each writing a disjoint index range of the output, so no
+  synchronisation is needed on the output vector. It waits for *every* chunk before
+  rethrowing the lowest-indexed error, because the chunks reference the caller's locals.
+- **`when_all(std::vector<std::future<T>>)`** joins all futures, preserves order, and rethrows
+  the first stored exception after all are ready.
+- **`Pipeline<T>`** runs one thread per stage connected by `BoundedQueue<T>`s of
+  `queue_capacity`. Each stage is sequential, so output order equals input order, while
+  different items occupy different stages concurrently. A stage exception is recorded, every
+  queue is closed to unblock all stages, and the first exception is rethrown after all threads
+  are joined.
+
+## Message Passing (`AsyncComms.hpp`)
+
+- **`MessageBus`**: topic-based publish/subscribe with a single dispatcher thread, which
+  yields a global FIFO delivery order. Subscriptions are stored as
+  `std::shared_ptr<const Handler>` under a `std::shared_mutex`; the dispatcher copies the
+  matching handler pointers and invokes them with no bus lock held, so handlers may
+  `publish`, `subscribe` or `unsubscribe` without deadlock. Publications from the dispatcher
+  thread (detected with the `thread_local` `tls_dispatching_bus`) bypass the bounded queue
+  into a dispatcher-private `reentrant_` backlog, so a handler can never block on a full
+  queue only it could drain. `flush()` waits for quiescence (`delivered_ == published_`)
+  rather than for a delivery count, because re-entrant messages are delivered out of queue
+  order. Handler exceptions are caught and counted in `handler_failures()`.
+- **`Actor<Msg>`**: a `BoundedQueue<Msg>` mailbox drained by a private thread. The behaviour
+  runs one message at a time on that thread, so its captured state needs no locks. With a
+  `std::variant` message type and a `std::promise` reply slot this implements the "ask"
+  pattern. The `std::thread` is the last data member, so it starts only after everything it
+  uses is constructed; `stop()` and the destructor process every accepted message.
+- **`RequestResponseServer`**: handlers keyed by request type, executed on an internal
+  `ThreadPool`. `request()` returns a `Ticket` with a correlation id and a
+  `std::future<Response>`; an unknown type fails the future with `UnknownRequestError`. The
+  pool is the last member, so it is destroyed (and drained) first while `handlers_` is alive.
+
+## Coroutines (`CoroutinesDemo.hpp`)
+
+C++20 standardised the coroutine machinery (P0057, adopted via P0912) but almost no
+coroutine types; this header builds the two fundamental ones.
+
+- **`Generator<T>`** is a lazy, move-only, single-pass input range. `initial_suspend` and
+  `final_suspend` both return `std::suspend_always`; the promise stores a *pointer* to the
+  yielded object, which is safe because the yielded object (even a temporary) lives until
+  the coroutine is resumed. `await_transform` is deleted, making `co_await` inside a generator
+  ill-formed. An exception in the body is captured by `unhandled_exception` and rethrown to the
+  consumer from `begin()` or `operator++`. The iterator models `std::input_iterator` with
+  `std::default_sentinel_t` as the end, so `Generator` satisfies `std::ranges::input_range`.
+  Combinators `take` and `filter` and sequences `iota_range`, `fibonacci` and `collatz` are
+  themselves generators.
+- **`Task<T>`** is lazy (`initial_suspend` is `suspend_always`) and resumes its awaiter via
+  **symmetric transfer**: `FinalAwaiter::await_suspend` returns the stored continuation
+  handle (default `std::noop_coroutine()`), and `Task::Awaiter::await_suspend` returns the
+  task's own handle. Returning a handle instead of calling `resume()` turns nested
+  `co_await` chains into tail calls, so their depth does not grow the stack (P0913).
+  `Task<T&>` is rejected by `static_assert`.
+
+```cpp
+struct FinalAwaiter {
+    bool await_ready() const noexcept { return false; }
+    template <typename Promise>
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<Promise> h) const noexcept {
+        return h.promise().continuation;   // symmetric transfer
     }
-
-private:
-    static bool detectCircularWait() {
-        // Implement cycle detection in wait-for graph
-        // This is a simplified version - real implementation would be more complex
-        return false;
-    }
+    void await_resume() const noexcept {}
 };
 ```
 
-## Monitoring and Debugging
+- **`sync_wait(Task<T>)`** wraps the task in an internal `SyncWaitTask` coroutine whose
+  final awaiter signals a `SyncWaitEvent` *from `await_suspend`*, i.e. after the wrapper
+  coroutine is suspended. The waiting thread can therefore destroy the frame as soon as
+  `wait()` returns. `SyncWaitEvent::set()` notifies while holding the lock so the event may
+  be destroyed immediately after the waiter wakes. `void` results are carried as
+  `std::monostate`.
+- **`schedule_on(ThreadPool&)`** returns a `ScheduleOnAwaiter` whose `await_suspend` posts
+  `handle.resume()` to the pool through `ThreadPool::post`; execution continues on a pool
+  thread. If the pool is shut down, `PoolShutdownError` propagates out of `co_await`.
+- **`RoundRobinScheduler`** is a single-threaded cooperative scheduler. `spawn` wraps each
+  `Task<void>` in an internal driver coroutine that catches exceptions and counts them in
+  `failed_tasks()`; `co_await scheduler.yield()` re-queues the current coroutine at the back
+  of `ready_`, giving deterministic interleaving. `spawn` reserves vector and deque slots
+  before releasing ownership of the driver handle, so an allocation failure cannot leak a
+  frame. The destructor destroys unfinished frames. It is not thread safe by design.
 
-### Thread Performance Metrics
+## Verification
 
-Built-in monitoring for thread performance:
+Tests use Catch2 and are registered as the `concurrency_tests` target in
+`tests/concurrency/CMakeLists.txt` (label `concurrency`). Configure with
+`-DCPPVERSEHUB_ENABLE_TSAN=ON` (see `cmake/Sanitizers.cmake`) to run them under
+ThreadSanitizer.
 
-```cpp
-class ThreadMetrics {
-private:
-    struct ThreadStats {
-        std::atomic<size_t> tasks_completed{0};
-        std::atomic<std::chrono::microseconds> total_execution_time{std::chrono::microseconds::zero()};
-        std::atomic<std::chrono::microseconds> total_wait_time{std::chrono::microseconds::zero()};
-    };
+| Claim | Test file and representative cases |
+| --- | --- |
+| Futures carry results and exceptions; move-only tasks and arguments; graceful shutdown; no lost task when submitters race with shutdown; priority order with FIFO ties; work stealing actually steals; subtasks spawned from workers | `tests/concurrency/ThreadPoolTests.cpp` ("ThreadPool loses no task when submitters race with shutdown", "PriorityThreadPool runs higher priorities first, FIFO within a priority", "WorkStealingThreadPool idle workers steal from a busy worker") |
+| Hierarchy violations throw; opposing transfers neither deadlock nor lose money; philosophers finish; `LazyValue` initialises once; `BoundedQueue` close/back-pressure/MPMC exactly-once; semaphore bounds concurrency; barrier runs completion once per phase; `ResourcePool` blocks when exhausted | `tests/concurrency/SynchronizationTests.cpp` |
+| `SpinLock` mutual exclusion; SPSC FIFO, full/empty, non-trivial lifetimes, ordered two-thread stream; `LockFreeStack` delivers every value exactly once under concurrent push/pop; statistics, `fetch_max/min`, Bloom filter has no false negatives; `OneShotEvent` publishes prior writes | `tests/concurrency/AtomicsTests.cpp` |
+| Mission status/cancellation; DAG ordering, transitive cancellation, cycle detection; `parallel_transform`, `when_all`, `Pipeline` order and error propagation; `MessageBus` order, re-entrancy, `flush`; `Actor` ask and drain; request/response; `runDemo` output | `tests/concurrency/AsyncTests.cpp` |
+| `Generator` models `input_range`, laziness, exception rethrow, `std::views` interop; `Task` laziness, exception propagation, deep symmetric-transfer chains; `schedule_on` resumes on pool threads; deterministic round-robin and failure counting | `tests/concurrency/CoroutineTests.cpp` |
 
-    std::unordered_map<std::thread::id, ThreadStats> thread_stats_;
-    std::shared_mutex stats_mutex_;
+Memory-ordering arguments cannot be proven by testing; the two-thread SPSC stream and the
+concurrent stack test are designed to make violations observable under ThreadSanitizer
+(which models the C++ happens-before relation) rather than to prove their absence.
 
-public:
-    void recordTaskExecution(std::chrono::microseconds execution_time,
-                           std::chrono::microseconds wait_time) {
-        auto thread_id = std::this_thread::get_id();
+## References
 
-        std::shared_lock lock(stats_mutex_);
-        auto& stats = thread_stats_[thread_id];
-
-        stats.tasks_completed.fetch_add(1);
-        stats.total_execution_time.fetch_add(execution_time);
-        stats.total_wait_time.fetch_add(wait_time);
-    }
-
-    struct PerformanceReport {
-        size_t total_tasks;
-        double average_execution_time_ms;
-        double average_wait_time_ms;
-        double thread_utilization;
-    };
-
-    PerformanceReport generateReport() const {
-        std::shared_lock lock(stats_mutex_);
-
-        PerformanceReport report{};
-
-        for (const auto& [thread_id, stats] : thread_stats_) {
-            report.total_tasks += stats.tasks_completed.load();
-            report.average_execution_time_ms += stats.total_execution_time.load().count() / 1000.0;
-            report.average_wait_time_ms += stats.total_wait_time.load().count() / 1000.0;
-        }
-
-        if (!thread_stats_.empty()) {
-            report.average_execution_time_ms /= thread_stats_.size();
-            report.average_wait_time_ms /= thread_stats_.size();
-
-            double total_time = report.average_execution_time_ms + report.average_wait_time_ms;
-            report.thread_utilization = total_time > 0 ?
-                (report.average_execution_time_ms / total_time) : 0.0;
-        }
-
-        return report;
-    }
-};
-```
-
-## Conclusion
-
-The CppVerseHub concurrency design demonstrates advanced C++ threading concepts while maintaining practical applicability. Key achievements include:
-
-1. **Safe Concurrency**: All shared data structures are properly synchronized
-2. **High Performance**: Lock-free data structures where appropriate
-3. **Scalable Design**: Thread pools adapt to workload and hardware
-4. **Exception Safety**: Strong guarantees maintained in concurrent code
-5. **Testable Architecture**: Comprehensive testing for race conditions and deadlocks
-6. **Educational Value**: Clear examples of modern C++ concurrency features
-
-The system serves as both a working concurrent application and a comprehensive learning resource for advanced C++ threading techniques.
+1. ISO/IEC 14882:2020, *Programming Languages - C++*, [intro.races] and [atomics.order].
+2. G. Nishanov, *Wording for Coroutines*, P0057R8, 2018, and *Merge Coroutines TS into
+   C++20 working draft*, P0912R5, 2019.
+3. G. Nishanov, *Add symmetric coroutine control transfer*, P0913R1, 2018.
+4. A. Williams, *C++ Concurrency in Action*, 2nd ed., Manning, 2019 (section 3.2.5
+   hierarchical mutex; section 7.2.2 reference-counted reclamation for a lock-free stack).
+5. M. Herlihy, N. Shavit, *The Art of Multiprocessor Programming*, Morgan Kaufmann, 2008
+   (ch. 3 linearizability and progress; ch. 7 spin locks; ch. 10-11 queues and stacks).
+6. R. K. Treiber, *Systems Programming: Coping with Parallelism*, IBM RJ 5118, 1986.
+7. M. M. Michael, "Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects",
+   *IEEE TPDS* 15(6), 2004.
+8. D. Chase, Y. Lev, "Dynamic Circular Work-Stealing Deque", *SPAA* 2005.
+9. R. D. Blumofe, C. E. Leiserson, "Scheduling Multithreaded Computations by Work
+   Stealing", *JACM* 46(5), 1999.
+10. H. Boehm, S. Adve, "Foundations of the C++ Concurrency Memory Model", *PLDI* 2008.
+11. cppreference.com: [`std::memory_order`](https://en.cppreference.com/w/cpp/atomic/memory_order),
+    [`std::condition_variable`](https://en.cppreference.com/w/cpp/thread/condition_variable),
+    [Coroutines](https://en.cppreference.com/w/cpp/language/coroutines),
+    [`std::scoped_lock`](https://en.cppreference.com/w/cpp/thread/scoped_lock).

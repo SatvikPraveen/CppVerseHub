@@ -1,1145 +1,463 @@
-# Modern C++ Usage - CppVerseHub
+# Modern C++ Usage
 
-**Location:** `CppVerseHub/docs/design_docs/modern_cpp_usage.md`
+## Purpose and Scope
 
-## Modern C++ Philosophy
+This document describes two closely related modules:
 
-CppVerseHub extensively leverages C++17, C++20, and emerging C++23 features to demonstrate state-of-the-art C++ programming practices. This document explains the rationale behind using modern C++ features, their benefits in context, and how they contribute to code quality, performance, and maintainability.
+- `CppVerseHub::Modern` (`src/modern/`): language features from C++11 to C++20 (concepts,
+  compile-time programming, lambdas, move semantics, ranges, structured bindings, and a
+  documented emulation of C++20 modules). Compiled as a library; each header has a matching
+  `.cpp` except the header-only `ConceptsAdvanced.hpp`, `ConstexprProgramming.hpp` and
+  `StructuredBindings.hpp`.
+- `CppVerseHub::Templates` (`src/templates/`): generic programming (concepts, SFINAE and the
+  detection idiom, specialisation, variadic templates, template metaprogramming, and
+  hand-written containers and smart pointers). Header-only.
 
-## Feature Selection Criteria
+For each component it records the design decision, the alternatives considered, the
+invariants and exception-safety guarantees, and where the claims are verified. The intended
+reader already knows the features; the emphasis is on *how this code uses them* and on the
+non-obvious details.
 
-### Adoption Strategy
+| Header | Namespace | Main entities |
+| --- | --- | --- |
+| `modern/ConceptsAdvanced.hpp` | `Modern::Concepts` | `Numeric`, `Printable`, `Container`, `RandomAccessContainer`, `SpaceEntity`, `MovableSpaceEntity`, `classify`, `profileOf<T>()`, `ConceptFactory<T>`, `RunningStats<T>` |
+| `modern/ConstexprProgramming.hpp` | `Modern::ConstexprProgramming` | `power`, `sqrtNewton`, `adaptiveSqrt`, `compileTimeFactorial` (consteval), `FixedString<N>`, `NamedTag<Name>`, `makeTable<N>`, `ConstexprPlanet`, `ConstexprFleet` |
+| `modern/LambdaExpressions.hpp` | `Modern::LambdaExpressions` | `compose`, `pipeline`, `curry`, `Overloaded`, `Fix`, `Memoized`, `Beacon`, `EventBus`, `parallelSum` |
+| `modern/MoveSemantics.hpp` | `Modern::MoveSemantics` | `TrackedResource`, `OperationCounts`, `Spacecraft`, `categoryOf`, `relayForwarded`, `MoveAwareVector<T>` |
+| `modern/RangesDemo.hpp` | `Modern::Ranges` | `toVector`, `EveryNthView<V>`, `everyNth(n)`, domain queries |
+| `modern/StructuredBindings.hpp` | `Modern::StructuredBindings` | `ShipRecord` (tuple-like), `SpaceCoordinate`, `FleetStats`, `orbitParameters`, `refuelBelow` |
+| `modern/ModulesDemo.hpp` | `Modern::Modules` | `SpaceGame::{Core, Entities, Missions, Fleet, System}`, `ModuleUnit`, `moduleGraph()`, `topologicalBuildOrder()` |
+| `templates/ConceptsDemo.hpp` | `Templates::Concepts` | concept hierarchy `Arithmetic` to `Field`, `classify`, `power(T, Unsigned auto)`, `ContainerAdapter`, `MathVector` |
+| `templates/SFINAE_Examples.hpp` | `Templates::SFINAE` | `has_size_method`, `is_detected`/`detected_or_t`, tag dispatch, `modern_describe` |
+| `templates/TemplateSpecialization.hpp` | `Templates::Specialization` | `Serializer<T>`, `TypeInfo<T>`, `ContainerPrinter`, `TupleProcessor`, `element_type` |
+| `templates/VariadicTemplates.hpp` | `Templates::Variadic` | folds, `RecursiveTuple`, `overload`, `multifunction`, `Factory`, `Builder`, `Pipeline` |
+| `templates/MetaProgramming.hpp` | `Templates::Meta` | `type_list`, `type_at`, `Ratio`, `dimension`/`quantity`, `VectorExpression`/`ExprVector`, `ConstexprMap`, CRTP mixins |
+| `templates/GenericContainers.hpp` | `Templates` | `DynamicArray<T, Allocator>`, `UniquePtr<T, D>`, `SharedPtr<T>`/`WeakPtr<T>`, `make_shared_ptr`, `Optional<T>` |
 
-1. **Standard Compliance**: Only use standardized features (no experimental extensions)
-2. **Compiler Support**: Features must be supported by major compilers (GCC 10+, Clang 11+, MSVC 19.28+)
-3. **Performance Benefits**: Features should improve runtime or compile-time performance
-4. **Safety Improvements**: Prefer features that prevent common programming errors
-5. **Educational Value**: Demonstrate practical usage of modern language capabilities
+All namespaces are nested in `CppVerseHub`. Both modules expose a `runDemo(std::ostream&)`
+entry point (`modern/Demo.hpp`, `templates/Demo.hpp`) that is deterministic and never throws.
+Library code never prints; only the `demonstrate*` functions write to a stream.
 
-### Progressive Feature Usage
+### Portability policy
 
-- **C++17**: Baseline requirement for all code
-- **C++20**: Used where compiler support is available
-- **C++23**: Early adoption of stable features with fallbacks
+Only C++20 library facilities that are available in both libc++ and libstdc++ are used. C++23
+facilities are replaced by local equivalents and named as such: `toVector` stands in for
+`std::ranges::to`, `EveryNthView` for `std::views::stride`, and `Optional::transform`/`and_then`
+mirror the C++23 monadic interface of `std::optional`. Feature-test macros guard optional library support,
+for example `__cpp_lib_constexpr_vector` in `sumOfSquaresViaVector`.
 
-## C++17 Features Implementation
+## Concepts (`ConceptsAdvanced.hpp`, `ConceptsDemo.hpp`)
 
-### Structured Bindings
-
-Structured bindings improve code readability when dealing with pairs, tuples, and custom types:
+**Decision.** Constraints are expressed as named concepts built by *conjunction* of smaller
+concepts, so that the compiler can order overloads by subsumption ([temp.constr.order]). Both
+headers implement `classify(const T&)`, an overload set in which the most constrained viable
+candidate wins without SFINAE or tag dispatch:
 
 ```cpp
-// Planet resource management with structured bindings
-class Planet {
-    std::unordered_map<ResourceType, ResourceInfo> resources_;
+template <Numeric T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept { return "numeric"; }
 
-public:
-    void updateResources() {
-        for (const auto& [resource_type, resource_info] : resources_) {
-            auto [current_level, regeneration_rate, maximum_capacity] = resource_info;
+template <Numeric T>
+    requires std::integral<T>      // Numeric<T> && integral<T> subsumes Numeric<T>
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept { return "integral"; }
 
-            // Calculate new resource level
-            double new_level = std::min(
-                current_level + regeneration_rate * getDeltaTime(),
-                maximum_capacity
-            );
-
-            resources_[resource_type].current_level = new_level;
-        }
-    }
-
-    std::optional<std::pair<ResourceType, double>> findLowestResource() const {
-        if (resources_.empty()) {
-            return std::nullopt;
-        }
-
-        auto lowest_iter = std::min_element(resources_.begin(), resources_.end(),
-            [](const auto& a, const auto& b) {
-                const auto& [type_a, info_a] = a;
-                const auto& [type_b, info_b] = b;
-                return info_a.current_level < info_b.current_level;
-            });
-
-        const auto& [resource_type, resource_info] = *lowest_iter;
-        return std::make_pair(resource_type, resource_info.current_level);
-    }
-};
+template <RandomAccessContainer T> // defined as Container<T> && ..., subsumes Container
+[[nodiscard]] constexpr std::string_view classify(const T&) noexcept { return "random-access container"; }
 ```
 
-**Benefits:**
+Subsumption only works between *atomic constraints that are the same expression from the same
+concept definition*; this is why `RandomAccessContainer` is defined in terms of `Container`
+rather than restating its requirements. `Numeric` deliberately excludes `bool`
+(`!std::same_as<std::remove_cv_t<T>, bool>`).
 
-- **Readability**: Clear variable names instead of `.first`, `.second`
-- **Maintainability**: Changes to underlying structure don't break access patterns
-- **Performance**: Zero-cost abstraction with compiler optimization
+Other techniques:
 
-### std::optional and Error Handling
+- `requires`-expressions that check nested types, expression validity and return-type
+  constraints (`Container`, `Entity`, `Positionable`, `Movable`, `Resource`).
+- `profileOf<T>()` is `consteval` and returns a `ConceptProfile` of booleans, a small form of
+  compile-time reflection over concept satisfaction.
+- `ConceptFactory<T>` constrains the class (`std::is_object_v<T>`) and each member separately
+  (`std::constructible_from<T, Args...>`), so an unsupported construction fails at the call,
+  not at class instantiation.
+- `templates/ConceptsDemo.hpp` adds an algebraic hierarchy (`Additive`, `Multiplicative`,
+  `Ring`, `Field`) and an abbreviated function template,
+  `power(T base, Unsigned auto exponent)` (exponentiation by squaring, O(log n)).
 
-Modern error handling using `std::optional` instead of error codes or exceptions:
+**Trade-off.** Concepts check syntax, not semantics: `Ring` cannot verify associativity. The
+diagnostic quality is much better than SFINAE (the unsatisfied requirement is named), which is
+why `SFINAE_Examples.hpp` keeps the older techniques side by side for comparison.
 
-```cpp
-class NavigationSystem {
-public:
-    std::optional<Route> calculateRoute(const Coordinates& from, const Coordinates& to) const {
-        if (!isValidCoordinate(from) || !isValidCoordinate(to)) {
-            return std::nullopt;
-        }
+## Compile-Time Programming (`ConstexprProgramming.hpp`)
 
-        if (auto direct_route = tryDirectPath(from, to)) {
-            return direct_route;
-        }
+The header is self-verifying: it ends with forty `static_assert`s, so if it compiles, the
+computations are correct.
 
-        if (auto safe_route = trySafePath(from, to)) {
-            return safe_route;
-        }
+- **`constexpr` functions with loops and local state**: `power` (repeated squaring),
+  `factorial` (saturates at `UINT64_MAX` for n > 20), `sqrtNewton`, `sinTaylor` (range
+  reduction to [-pi, pi] and a 20-term series), `isPrime`, `gcd`/`lcm` (`lcm` divides before
+  multiplying to avoid overflow), FNV-1a hashing, Caesar ciphers, sorting and binary search on
+  `std::array`.
+- **`std::is_constant_evaluated()`**: `adaptiveSqrt` uses Newton iteration during constant
+  evaluation and `std::sqrt` at run time, because `std::sqrt` is not `constexpr` before C++26.
+  `sqrtNewton` terminates when the iterate stops decreasing, which is guaranteed because
+  Newton's method for the square root converges monotonically from above.
+- **`consteval`**: `compileTimeFactorial` and `compileTimeFibonacci` are immediate functions;
+  calling them with a run-time argument is ill-formed.
+- **`constinit`**: the demo's `constinit static std::atomic<int> invocations` is guaranteed to be
+  statically initialised (no static-initialisation-order fiasco) while remaining mutable.
+- **Class-type non-type template parameters**:
 
-        return std::nullopt; // No valid route found
-    }
+  ```cpp
+  template <std::size_t N>
+  struct FixedString {
+      std::array<char, N> chars{};
+      constexpr FixedString(const char (&text)[N]) noexcept { /* copy */ }
+      [[nodiscard]] constexpr std::string_view view() const noexcept { return {chars.data(), N - 1}; }
+  };
+  template <FixedString Name>
+  struct NamedTag {
+      static constexpr std::string_view name = Name.view();
+      static constexpr std::uint32_t id = fnv1a(Name.view());
+  };
+  static_assert(NamedTag<"Fleet">::id != NamedTag<"Planet">::id);
+  ```
 
-    // Chaining optional operations
-    std::optional<double> getRouteDistance(const Coordinates& from, const Coordinates& to) const {
-        return calculateRoute(from, to)
-            .transform([](const Route& route) { return route.getTotalDistance(); });
-    }
+  `FixedString` is a structural type (public members, no mutable state), as P1907 requires.
+- **Table generation**: `makeTable<N>(f)` evaluates a lambda N times into a `std::array`
+  (`SQUARES_TABLE`, `SINE_TABLE`); lambdas are implicitly `constexpr` since C++17.
+- **Transient allocation**: `sumOfSquaresViaVector` uses a `std::vector` inside a constant
+  expression (P0784); the storage must be released before evaluation ends.
+- **Literal domain types**: `ConstexprPlanet` and `ConstexprFleet` have `constexpr` member
+  functions (`surfaceGravity`, `density`, `combatPower`), and `SOLAR_SYSTEM` is evaluated
+  entirely at compile time.
 
-    // Using optional in mission planning
-    bool planMission(const MissionParameters& params) {
-        auto route = calculateRoute(params.start, params.destination);
-        auto fuel_estimate = route.transform([](const Route& r) { return r.getFuelRequirement(); });
-        auto time_estimate = route.transform([](const Route& r) { return r.getTimeRequirement(); });
+**Trade-off.** Compile-time evaluation moves cost into the build and is subject to
+implementation limits on steps and recursion depth; floating-point results are compared with
+`approxEqual` because constant evaluation need not match run-time rounding bit for bit.
 
-        if (route && fuel_estimate && time_estimate) {
-            auto& fleet = getFleet(params.fleet_id);
+## Lambda Expressions (`LambdaExpressions.hpp`)
 
-            if (fleet.getFuelLevel() >= *fuel_estimate &&
-                fleet.getTimeAvailable() >= *time_estimate) {
+- **Captures.** `makeOwningReporter` moves a `std::unique_ptr` into an init-capture, making the
+  closure move-only. `Beacon::liveReporter()` captures `this` (reference semantics; must not
+  outlive the object) whereas `snapshotReporter()` captures `*this` by copy (C++17), which is
+  safe to outlive it.
+- **Higher-order utilities**, all `constexpr` and verified by `static_assert`:
+  `compose(f, g, h)(x) == f(g(h(x)))`, `pipeline(f, g, h)(x) == h(g(f(x)))`, and `curry`, which
+  accepts arguments in any grouping until the callable becomes invocable:
 
-                executeMission(params, *route);
-                return true;
-            }
-        }
+  ```cpp
+  template <typename F, typename... Bound>
+  [[nodiscard]] constexpr auto curry(F f, Bound... bound) {
+      return [f = std::move(f), ... bound = std::move(bound)](auto&&... args) {
+          if constexpr (std::invocable<const F&, const Bound&..., decltype(args)...>) {
+              return std::invoke(f, bound..., std::forward<decltype(args)>(args)...);
+          } else {
+              return curry(f, bound..., std::decay_t<decltype(args)>(std::forward<decltype(args)>(args))...);
+          }
+      };
+  }
+  ```
 
-        return false;
-    }
-};
-```
+  The pack init-capture `... bound = std::move(bound)` is C++20 (P0780). Bound arguments are
+  stored by value, so a curried closure never dangles.
+- **`Fix`** is a fixed-point combinator: the lambda receives itself as its first parameter. It
+  avoids the heap allocation, indirect call and dangling-reference hazards of a
+  self-capturing `std::function`, and works in constant expressions (`factorialFix(10)`).
+- **`Memoized<Arg, Result>`** caches in a `std::map` (requires `std::totally_ordered<Arg>`).
+  Because `std::map` nodes are stable, `operator()` returns `const Result&` safely. It is not
+  thread safe; contrast `Patterns::memoize`, which is.
+- **`sizeInBits`** is a C++20 template lambda (`[]<typename T>(const T&)`).
+- **`EventBus`** type-erases heterogeneous handlers in `std::function` and uses a transparent
+  comparator (`std::map<std::string, std::vector<Entry>, std::less<>>`). It is synchronous and
+  not thread safe, and handlers must not (un)subscribe re-entrantly.
+- **`parallelSum(data, chunks)`** splits work across `std::async(std::launch::async, ...)` tasks;
+  `chunks` is clamped to [1, data.size()].
 
-**Advantages:**
+## Move Semantics (`MoveSemantics.hpp`)
 
-- **Explicit Failure**: Optional makes potential failure visible in type system
-- **No Exceptions**: Avoids exception overhead for expected failure cases
-- **Composable**: Monadic operations with `transform`, `and_then`
-- **Memory Efficient**: No heap allocation for simple failure cases
+- **`TrackedResource`** implements the rule of five and reports every special member call into
+  a non-owning `OperationCounts*` observer, which lets tests count copies and moves exactly.
+  Copy assignment uses copy-and-swap (strong guarantee); move operations are `noexcept`, which
+  the header checks with `static_assert(std::is_nothrow_move_constructible_v<TrackedResource>)`.
+  A moved-from object is empty (`isMovedFrom()`) but valid and assignable.
+- **`Spacecraft`** is move-only (copy deleted) because it uniquely owns its log through
+  `std::unique_ptr`; a moved-from instance has id -1. `loadCargo(TrackedResource)` is the sink
+  idiom (callers choose copy or move); `emplaceCargo(args...)` constructs in place.
+- **Value categories.** `categoryOf(T&&)` classifies an argument from forwarding-reference
+  deduction (`T` is `U&` for lvalues). `relayForwarded` versus `relayWithoutForward` shows that a
+  named rvalue-reference parameter is an lvalue, so only `std::forward` reaches the
+  `accept(std::string&&)` overload.
+- **`makeResource`** returns a prvalue; C++17 guaranteed copy elision (P0135) means no copy or
+  move occurs, which the tests observe through the counters.
 
-### std::variant for Type-Safe Unions
-
-Using `std::variant` for type-safe polymorphism alternatives:
-
-```cpp
-// Different types of mission results
-using MissionResult = std::variant<
-    SuccessResult,
-    PartialFailureResult,
-    CompleteFailureResult,
-    AbortedResult
->;
-
-class Mission {
-public:
-    virtual MissionResult execute() = 0;
-
-protected:
-    // Type-safe result processing
-    template<typename ResultHandler>
-    void processResult(const MissionResult& result, ResultHandler&& handler) {
-        std::visit(std::forward<ResultHandler>(handler), result);
-    }
-};
-
-class ExplorationMission : public Mission {
-public:
-    MissionResult execute() override {
-        try {
-            auto exploration_data = conductExploration();
-
-            if (exploration_data.planets_discovered > 0) {
-                return SuccessResult{
-                    .data_collected = exploration_data,
-                    .mission_duration = getMissionDuration(),
-                    .resources_consumed = getResourcesUsed()
-                };
-            } else {
-                return PartialFailureResult{
-                    .reason = "No new planets discovered",
-                    .partial_data = exploration_data.sensor_readings
-                };
-            }
-
-        } catch (const CriticalSystemFailure& e) {
-            return CompleteFailureResult{
-                .error_message = e.what(),
-                .recovery_suggestions = generateRecoverySuggestions()
-            };
-        }
-    }
-
-private:
-    void reportResults(const MissionResult& result) {
-        processResult(result, [this](const auto& specific_result) {
-            using ResultType = std::decay_t<decltype(specific_result)>;
-
-            if constexpr (std::is_same_v<ResultType, SuccessResult>) {
-                logSuccess(specific_result);
-                updatePlanetDatabase(specific_result.data_collected);
-            } else if constexpr (std::is_same_v<ResultType, PartialFailureResult>) {
-                logWarning(specific_result.reason);
-                if (!specific_result.partial_data.empty()) {
-                    updatePlanetDatabase(specific_result.partial_data);
-                }
-            } else if constexpr (std::is_same_v<ResultType, CompleteFailureResult>) {
-                logError(specific_result.error_message);
-                initiateEmergencyProtocol();
-            }
-        });
-    }
-};
-```
-
-**Key Benefits:**
-
-- **Type Safety**: Compile-time guarantee of handling all cases
-- **Performance**: No virtual function call overhead
-- **Memory Efficiency**: Single allocation for all variant types
-- **Pattern Matching**: Visitor pattern with generic lambda support
-
-### constexpr Programming
-
-Compile-time computation for performance-critical calculations:
+**`MoveAwareVector<T>`** is a minimal growable array that demonstrates why `std::vector`
+needs `noexcept` moves:
 
 ```cpp
-// Compile-time mathematical constants and functions
-namespace MathConstants {
-    constexpr double PI = 3.14159265358979323846;
-    constexpr double LIGHT_SPEED = 299792458.0; // m/s
-    constexpr double AU = 149597870700.0; // meters in astronomical unit
-
-    constexpr double toRadians(double degrees) {
-        return degrees * PI / 180.0;
-    }
-
-    constexpr double distanceInAU(double meters) {
-        return meters / AU;
-    }
-}
-
-// Compile-time coordinate system calculations
-class Coordinates {
-private:
-    double x_, y_, z_;
-
-public:
-    constexpr Coordinates(double x, double y, double z) : x_(x), y_(y), z_(z) {}
-
-    constexpr double distance(const Coordinates& other) const {
-        double dx = x_ - other.x_;
-        double dy = y_ - other.y_;
-        double dz = z_ - other.z_;
-        return std::sqrt(dx*dx + dy*dy + dz*dz);
-    }
-
-    constexpr Coordinates operator+(const Coordinates& other) const {
-        return Coordinates(x_ + other.x_, y_ + other.y_, z_ + other.z_);
-    }
-
-    constexpr Coordinates normalize() const {
-        double magnitude = std::sqrt(x_*x_ + y_*y_ + z_*z_);
-        return magnitude > 0 ? Coordinates(x_/magnitude, y_/magnitude, z_/magnitude)
-                             : Coordinates(0, 0, 0);
-    }
-};
-
-// Compile-time lookup tables for performance
-template<size_t Size>
-struct CompileTimeLookupTable {
-    std::array<double, Size> values{};
-
-    constexpr CompileTimeLookupTable() {
-        for (size_t i = 0; i < Size; ++i) {
-            values[i] = std::sin(2 * MathConstants::PI * i / Size);
+void transferInto(T* dest) {
+    size_type built = 0;
+    try {
+        for (; built < size_; ++built) {
+            std::construct_at(dest + built, std::move_if_noexcept(data_[built]));
         }
-    }
-
-    constexpr double operator[](size_t index) const {
-        return values[index % Size];
-    }
-};
-
-// Pre-computed sine table available at compile time
-constexpr auto SINE_TABLE = CompileTimeLookupTable<360>{};
-
-// Usage in runtime code
-double fastSine(double angle_degrees) {
-    // Convert to table index
-    int index = static_cast<int>(angle_degrees) % 360;
-    if (index < 0) index += 360;
-
-    return SINE_TABLE[index]; // No runtime computation!
-}
-```
-
-**Performance Benefits:**
-
-- **Zero Runtime Cost**: Calculations moved to compile time
-- **Optimized Code**: Compiler can inline and optimize aggressively
-- **Reduced Binary Size**: Pre-computed constants stored efficiently
-- **Type Safety**: constexpr functions validated at compile time
-
-## C++20 Features Implementation
-
-### Concepts for Template Constraints
-
-Type-safe template programming with clear error messages:
-
-```cpp
-#include <concepts>
-
-// Define concepts for our domain
-template<typename T>
-concept Entity = requires(T t) {
-    { t.getId() } -> std::convertible_to<EntityId>;
-    { t.getPosition() } -> std::convertible_to<Coordinates>;
-    { t.update(1.0f) } -> std::same_as<void>;
-    typename T::entity_type;
-};
-
-template<typename T>
-concept Moveable = Entity<T> && requires(T t, const Coordinates& coords) {
-    { t.moveTo(coords) } -> std::same_as<void>;
-    { t.getVelocity() } -> std::convertible_to<Velocity>;
-};
-
-template<typename T>
-concept ResourceConsumer = requires(T t, ResourceType type, double amount) {
-    { t.consumeResource(type, amount) } -> std::same_as<bool>;
-    { t.getResourceLevel(type) } -> std::convertible_to<double>;
-};
-
-// Template functions with concept constraints
-template<Moveable EntityType>
-void planRoute(EntityType& entity, const Coordinates& destination) {
-    auto current_pos = entity.getPosition();
-    auto route = calculateOptimalPath(current_pos, destination);
-
-    if (route) {
-        entity.moveTo(destination);
-    }
-}
-
-template<Entity EntityType>
-requires ResourceConsumer<EntityType>
-bool executeMission(EntityType& entity, const Mission& mission) {
-    auto required_resources = mission.getResourceRequirements();
-
-    // Check if entity has sufficient resources
-    for (const auto& [resource_type, amount] : required_resources) {
-        if (entity.getResourceLevel(resource_type) < amount) {
-            return false;
-        }
-    }
-
-    // Consume resources and execute mission
-    for (const auto& [resource_type, amount] : required_resources) {
-        entity.consumeResource(resource_type, amount);
-    }
-
-    return mission.execute(entity);
-}
-
-// Generic container operations with concepts
-template<std::ranges::range Container>
-requires std::sortable<std::ranges::iterator_t<Container>>
-void sortEntitiesByDistance(Container& entities, const Coordinates& reference_point) {
-    std::ranges::sort(entities, [&reference_point](const auto& a, const auto& b) {
-        return a.getPosition().distance(reference_point) <
-               b.getPosition().distance(reference_point);
-    });
-}
-```
-
-**Concept Advantages:**
-
-- **Better Error Messages**: Clear compile-time errors when constraints not met
-- **Self-Documenting**: Constraints make template requirements explicit
-- **Partial Specialization**: Enable different implementations based on capabilities
-- **Composition**: Complex concepts built from simple ones
-
-### Ranges and Views
-
-Modern sequence processing with lazy evaluation:
-
-```cpp
-#include <ranges>
-
-class FleetManager {
-    std::vector<std::unique_ptr<Fleet>> fleets_;
-
-public:
-    // Find combat-ready fleets near a position
-    auto getCombatReadyFleets(const Coordinates& position, double max_distance) {
-        return fleets_
-            | std::views::filter([](const auto& fleet) {
-                return fleet->isCombatReady();
-              })
-            | std::views::filter([position, max_distance](const auto& fleet) {
-                return fleet->getPosition().distance(position) <= max_distance;
-              })
-            | std::views::transform([](const auto& fleet) -> Fleet& {
-                return *fleet;
-              });
-    }
-
-    // Get fleet statistics using ranges
-    struct FleetStats {
-        size_t total_fleets;
-        size_t combat_ready;
-        size_t on_mission;
-        double average_fuel_level;
-    };
-
-    FleetStats getFleetStatistics() const {
-        auto combat_ready_count = std::ranges::count_if(fleets_,
-            [](const auto& fleet) { return fleet->isCombatReady(); });
-
-        auto on_mission_count = std::ranges::count_if(fleets_,
-            [](const auto& fleet) { return fleet->isOnMission(); });
-
-        auto fuel_levels = fleets_
-            | std::views::transform([](const auto& fleet) {
-                return fleet->getFuelLevel();
-              });
-
-        double total_fuel = std::accumulate(fuel_levels.begin(), fuel_levels.end(), 0.0);
-        double avg_fuel = fleets_.empty() ? 0.0 : total_fuel / fleets_.size();
-
-        return FleetStats{
-            .total_fleets = fleets_.size(),
-            .combat_ready = static_cast<size_t>(combat_ready_count),
-            .on_mission = static_cast<size_t>(on_mission_count),
-            .average_fuel_level = avg_fuel
-        };
-    }
-
-    // Complex range processing for resource allocation
-    void redistributeResources() {
-        // Find fleets with excess resources
-        auto resource_excess = fleets_
-            | std::views::filter([](const auto& fleet) {
-                return fleet->getResourceLevel(ResourceType::FUEL) > 0.8 * fleet->getMaxFuel();
-              })
-            | std::views::transform([](const auto& fleet) {
-                return std::make_pair(fleet.get(), fleet->getExcessResources());
-              });
-
-        // Find fleets needing resources
-        auto resource_deficit = fleets_
-            | std::views::filter([](const auto& fleet) {
-                return fleet->getResourceLevel(ResourceType::FUEL) < 0.3 * fleet->getMaxFuel();
-              })
-            | std::views::transform([](const auto& fleet) {
-                return std::make_pair(fleet.get(), fleet->getResourceDeficit());
-              });
-
-        // Redistribute resources (simplified)
-        for (const auto& [excess_fleet, excess_amount] : resource_excess) {
-            for (const auto& [deficit_fleet, deficit_amount] : resource_deficit) {
-                double transfer_amount = std::min(excess_amount, deficit_amount);
-                if (transfer_amount > 0) {
-                    transferResources(*excess_fleet, *deficit_fleet, transfer_amount);
-                    break;
-                }
-            }
-        }
-    }
-};
-```
-
-**Ranges Benefits:**
-
-- **Lazy Evaluation**: Processing happens only when needed
-- **Composability**: Chain operations naturally
-- **Performance**: Optimized by compiler, often faster than manual loops
-- **Readability**: Express intent clearly without implementation details
-
-### Coroutines for Async Operations
-
-Modern asynchronous programming with coroutines:
-
-```cpp
-#include <coroutine>
-#include <future>
-
-// Coroutine types for async operations
-template<typename T>
-struct Task {
-    struct promise_type {
-        std::optional<T> result;
-        std::exception_ptr exception;
-
-        Task get_return_object() {
-            return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
-        }
-
-        std::suspend_never initial_suspend() { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
-
-        void return_value(T value) {
-            result = std::move(value);
-        }
-
-        void unhandled_exception() {
-            exception = std::current_exception();
-        }
-    };
-
-    std::coroutine_handle<promise_type> handle;
-
-    explicit Task(std::coroutine_handle<promise_type> h) : handle(h) {}
-
-    ~Task() {
-        if (handle) {
-            handle.destroy();
-        }
-    }
-
-    // Move-only semantics
-    Task(const Task&) = delete;
-    Task& operator=(const Task&) = delete;
-
-    Task(Task&& other) noexcept : handle(std::exchange(other.handle, {})) {}
-    Task& operator=(Task&& other) noexcept {
-        if (this != &other) {
-            if (handle) {
-                handle.destroy();
-            }
-            handle = std::exchange(other.handle, {});
-        }
-        return *this;
-    }
-
-    T get() {
-        if (!handle.done()) {
-            throw std::runtime_error("Task not completed");
-        }
-
-        if (handle.promise().exception) {
-            std::rethrow_exception(handle.promise().exception);
-        }
-
-        return *handle.promise().result;
-    }
-};
-
-// Awaitable for delayed operations
-struct DelayAwaiter {
-    std::chrono::milliseconds delay;
-
-    bool await_ready() { return delay.count() == 0; }
-
-    void await_suspend(std::coroutine_handle<> handle) {
-        std::thread([handle, delay = this->delay]() {
-            std::this_thread::sleep_for(delay);
-            handle.resume();
-        }).detach();
-    }
-
-    void await_resume() {}
-};
-
-// Coroutine-based mission execution
-class AsyncMissionExecutor {
-public:
-    Task<MissionResult> executeMissionAsync(std::unique_ptr<Mission> mission) {
-        // Pre-mission checks
-        if (!mission->isReady()) {
-            co_await DelayAwaiter{std::chrono::seconds(1)};
-        }
-
-        // Execute mission phases
-        auto preparation_result = co_await prepareMissionAsync(*mission);
-        if (!preparation_result.success) {
-            co_return MissionResult::failure(preparation_result.error);
-        }
-
-        auto execution_result = co_await executeMainPhaseAsync(*mission);
-        if (!execution_result.success) {
-            co_await cleanupMissionAsync(*mission);
-            co_return MissionResult::failure(execution_result.error);
-        }
-
-        auto cleanup_result = co_await cleanupMissionAsync(*mission);
-        co_return MissionResult::success(execution_result.data);
-    }
-
-private:
-    Task<PhaseResult> prepareMissionAsync(const Mission& mission) {
-        // Simulate async preparation
-        co_await DelayAwaiter{std::chrono::milliseconds(100)};
-
-        if (checkResourceAvailability(mission)) {
-            co_return PhaseResult::success();
-        } else {
-            co_return PhaseResult::failure("Insufficient resources");
-        }
-    }
-
-    Task<PhaseResult> executeMainPhaseAsync(const Mission& mission) {
-        co_await DelayAwaiter{std::chrono::seconds(2)};
-
-        try {
-            auto result = mission.executeMainPhase();
-            co_return PhaseResult::success(result);
-        } catch (const std::exception& e) {
-            co_return PhaseResult::failure(e.what());
-        }
-    }
-
-    Task<PhaseResult> cleanupMissionAsync(const Mission& mission) {
-        co_await DelayAwaiter{std::chrono::milliseconds(50)};
-        mission.cleanup();
-        co_return PhaseResult::success();
-    }
-};
-```
-
-**Coroutine Benefits:**
-
-- **Natural Async Code**: Looks like synchronous code but executes asynchronously
-- **Exception Handling**: Standard try/catch works across suspension points
-- **Composability**: Coroutines can call other coroutines naturally
-- **Performance**: No callback overhead, efficient state machine generation
-
-### Modules (Where Supported)
-
-Modern modular programming for better compilation:
-
-```cpp
-// math_utilities.cppm (module interface)
-export module math_utilities;
-
-import <cmath>;
-import <numbers>;
-
-export namespace MathUtils {
-    constexpr double PI = std::numbers::pi;
-    constexpr double E = std::numbers::e;
-
-    template<typename T>
-    constexpr T square(T value) {
-        return value * value;
-    }
-
-    template<typename T>
-    T distance3D(T x1, T y1, T z1, T x2, T y2, T z2) {
-        return std::sqrt(square(x2-x1) + square(y2-y1) + square(z2-z1));
-    }
-
-    class Coordinates {
-        // Implementation details not exported
-    private:
-        double x_, y_, z_;
-
-    public:
-        constexpr Coordinates(double x, double y, double z)
-            : x_(x), y_(y), z_(z) {}
-
-        constexpr double distance(const Coordinates& other) const {
-            return distance3D(x_, y_, z_, other.x_, other.y_, other.z_);
-        }
-    };
-}
-
-// Usage in other files
-import math_utilities;
-
-void someFunction() {
-    using namespace MathUtils;
-    auto pos1 = Coordinates{0, 0, 0};
-    auto pos2 = Coordinates{1, 1, 1};
-
-    auto dist = pos1.distance(pos2); // Uses exported interface
-}
-```
-
-**Module Advantages:**
-
-- **Faster Compilation**: No header parsing overhead
-- **Better Encapsulation**: Implementation details truly private
-- **Dependency Management**: Clear import/export relationships
-- **Reduced Binary Size**: Better dead code elimination
-
-## C++23 Preview Features
-
-### Deducing this (Early Adoption)
-
-CRTP alternative for performance:
-
-```cpp
-// Traditional CRTP approach
-template<typename Derived>
-class EntityCRTP {
-public:
-    void update(float delta_time) {
-        static_cast<Derived*>(this)->updateImpl(delta_time);
-    }
-
-protected:
-    ~EntityCRTP() = default;
-};
-
-// C++23 deducing this approach (where supported)
-class ModernEntity {
-public:
-    template<typename Self>
-    void update(this Self&& self, float delta_time) {
-        self.updateImpl(delta_time);
-    }
-
-    virtual ~ModernEntity() = default;
-};
-
-class Planet : public ModernEntity {
-public:
-    void updateImpl(float delta_time) {
-        // Planet-specific update logic
-        regenerateResources(delta_time);
-        processPopulation(delta_time);
-    }
-};
-```
-
-### std::expected for Error Handling
-
-Enhanced error handling (polyfill implementation):
-
-```cpp
-// Polyfill for std::expected (until C++23 widely available)
-template<typename T, typename E>
-class Expected {
-private:
-    std::variant<T, E> storage_;
-
-public:
-    Expected(const T& value) : storage_(value) {}
-    Expected(T&& value) : storage_(std::move(value)) {}
-    Expected(const E& error) : storage_(error) {}
-    Expected(E&& error) : storage_(std::move(error)) {}
-
-    bool has_value() const noexcept {
-        return std::holds_alternative<T>(storage_);
-    }
-
-    const T& value() const& {
-        if (!has_value()) {
-            throw std::runtime_error("Expected contains error");
-        }
-        return std::get<T>(storage_);
-    }
-
-    T& value() & {
-        if (!has_value()) {
-            throw std::runtime_error("Expected contains error");
-        }
-        return std::get<T>(storage_);
-    }
-
-    T&& value() && {
-        if (!has_value()) {
-            throw std::runtime_error("Expected contains error");
-        }
-        return std::get<T>(std::move(storage_));
-    }
-
-    const E& error() const& {
-        if (has_value()) {
-            throw std::runtime_error("Expected contains value, not error");
-        }
-        return std::get<E>(storage_);
-    }
-
-    template<typename F>
-    auto and_then(F&& func) -> Expected<std::invoke_result_t<F, T>, E> {
-        if (has_value()) {
-            return func(value());
-        } else {
-            return error();
-        }
-    }
-
-    template<typename F>
-    auto transform(F&& func) -> Expected<std::invoke_result_t<F, T>, E> {
-        if (has_value()) {
-            return func(value());
-        } else {
-            return error();
-        }
-    }
-};
-
-// Usage in navigation system
-class NavigationSystem {
-public:
-    Expected<Route, NavigationError> calculateRoute(
-        const Coordinates& from, const Coordinates& to) {
-
-        if (!isValidCoordinate(from)) {
-            return NavigationError{"Invalid source coordinates"};
-        }
-
-        if (!isValidCoordinate(to)) {
-            return NavigationError{"Invalid destination coordinates"};
-        }
-
-        return findOptimalPath(from, to)
-            .and_then([](const Route& route) -> Expected<Route, NavigationError> {
-                if (route.isValid()) {
-                    return route;
-                } else {
-                    return NavigationError{"Generated route is invalid"};
-                }
-            });
-    }
-
-    // Chained operations with expected
-    Expected<double, NavigationError> calculateMissionCost(
-        const Coordinates& from, const Coordinates& to) {
-
-        return calculateRoute(from, to)
-            .transform([](const Route& route) { return route.getFuelCost(); })
-            .and_then([](double fuel_cost) -> Expected<double, NavigationError> {
-                if (fuel_cost > 0) {
-                    return fuel_cost;
-                } else {
-                    return NavigationError{"Invalid fuel cost calculation"};
-                }
-            });
-    }
-};
-```
-
-## Performance Optimization Techniques
-
-### Template Metaprogramming for Zero-Cost Abstractions
-
-Compile-time computation eliminates runtime overhead:
-
-```cpp
-// Compile-time type list processing
-template<typename... Types>
-struct TypeList {};
-
-template<typename List>
-struct TypeListSize;
-
-template<typename... Types>
-struct TypeListSize<TypeList<Types...>> {
-    static constexpr size_t value = sizeof...(Types);
-};
-
-// Compile-time algorithm selection
-template<size_t N>
-struct SortAlgorithmSelector {
-    template<typename Iterator>
-    static void sort(Iterator begin, Iterator end) {
-        if constexpr (N <= 10) {
-            // Use insertion sort for small arrays
-            std::sort(begin, end); // Compiler will likely inline as insertion sort
-        } else if constexpr (N <= 1000) {
-            // Use quicksort for medium arrays
-            std::sort(begin, end);
-        } else {
-            // Use parallel sort for large arrays
-            std::sort(std::execution::par_unseq, begin, end);
-        }
-    }
-};
-
-template<typename Container>
-void optimizedSort(Container& container) {
-    constexpr size_t size = std::tuple_size_v<Container>;
-    SortAlgorithmSelector<size>::sort(container.begin(), container.end());
-}
-```
-
-### Compile-Time Configuration
-
-Template-based configuration system:
-
-```cpp
-// Compile-time feature flags
-template<bool EnableDebugLogging, bool EnableProfiling, bool EnableConcurrency>
-struct SystemConfiguration {
-    static constexpr bool debug_logging = EnableDebugLogging;
-    static constexpr bool profiling = EnableProfiling;
-    static constexpr bool concurrency = EnableConcurrency;
-};
-
-using ProductionConfig = SystemConfiguration<false, false, true>;
-using DebugConfig = SystemConfiguration<true, true, false>;
-using TestConfig = SystemConfiguration<true, false, false>;
-
-template<typename Config>
-class GameEngine {
-public:
-    void log(const std::string& message) {
-        if constexpr (Config::debug_logging) {
-            std::cout << "[DEBUG] " << message << std::endl;
-        }
-        // No runtime overhead when logging disabled
-    }
-
-    void profileFunction(const char* name, auto&& func) {
-        if constexpr (Config::profiling) {
-            auto start = std::chrono::high_resolution_clock::now();
-            func();
-            auto end = std::chrono::high_resolution_clock::now();
-
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            std::cout << "[PROFILE] " << name << ": " << duration.count() << "μs" << std::endl;
-        } else {
-            func();
-        }
-    }
-
-    template<typename Task>
-    void executeTask(Task&& task) {
-        if constexpr (Config::concurrency) {
-            thread_pool_.enqueue(std::forward<Task>(task));
-        } else {
-            task();
-        }
-    }
-};
-```
-
-## Memory Management Innovations
-
-### Custom Allocators with Modern C++
-
-PMRA (Polymorphic Memory Resource Allocator) usage:
-
-```cpp
-#include <memory_resource>
-
-class GameMemoryManager {
-private:
-    // Different memory pools for different allocation patterns
-    std::pmr::monotonic_buffer_resource mission_buffer_{1024 * 1024}; // 1MB
-    std::pmr::pool_options entity_pool_options_{
-        .max_blocks_per_chunk = 32,
-        .largest_required_pool_block = 1024
-    };
-    std::pmr::synchronized_pool_resource entity_pool_{entity_pool_options_};
-
-public:
-    // Get allocator for short-lived mission objects
-    std::pmr::memory_resource* getMissionAllocator() {
-        return &mission_buffer_;
-    }
-
-    // Get allocator for entity objects
-    std::pmr::memory_resource* getEntityAllocator() {
-        return &entity_pool_;
-    }
-
-    void resetMissionMemory() {
-        mission_buffer_.release(); // Fast reset of all mission memory
-    }
-};
-
-// PMR-aware containers
-class MissionManager {
-private:
-    GameMemoryManager& memory_manager_;
-    std::pmr::vector<std::pmr::unique_ptr<Mission>> active_missions_;
-
-public:
-    explicit MissionManager(GameMemoryManager& mm)
-        : memory_manager_(mm)
-        , active_missions_(mm.getMissionAllocator()) {}
-
-    template<typename MissionType, typename... Args>
-    void createMission(Args&&... args) {
-        auto mission_memory = memory_manager_.getMissionAllocator();
-
-        auto mission = std::pmr::make_unique<MissionType>(
-            mission_memory,
-            std::forward<Args>(args)...
-        );
-
-        active_missions_.push_back(std::move(mission));
-    }
-
-    void clearCompletedMissions() {
-        // Remove completed missions
-        auto new_end = std::remove_if(active_missions_.begin(), active_missions_.end(),
-            [](const auto& mission) { return mission->isCompleted(); });
-        active_missions_.erase(new_end, active_missions_.end());
-
-        // Optionally reset mission buffer if all missions complete
-        if (active_missions_.empty()) {
-            memory_manager_.resetMissionMemory();
-        }
-    }
-};
-```
-
-## Debugging and Development Tools
-
-### Compile-Time Debugging
-
-Template debugging utilities:
-
-```cpp
-// Compile-time type information printing
-template<typename T>
-void print_type() {
-    // Force compilation error to see type in error message
-    static_assert(std::is_void_v<T> && !std::is_void_v<T>, "Type is:");
-}
-
-// Better approach: constexpr type names
-template<typename T>
-constexpr std::string_view type_name() {
-    std::string_view name = __PRETTY_FUNCTION__;
-
-#ifdef __clang__
-    name.remove_prefix(34); // Remove "std::string_view type_name() [T = "
-    name.remove_suffix(1);  // Remove "]"
-#elif defined(__GNUC__)
-    name.remove_prefix(46); // Remove "constexpr std::string_view type_name() [with T = "
-    name.remove_suffix(1);  // Remove "]"
-#elif defined(_MSC_VER)
-    name.remove_prefix(38); // Remove "class std::basic_string_view<char,struct "
-    name.remove_suffix(7);  // Remove " > __cdecl type_name<"
-#endif
-
-    return name;
-}
-
-// Usage in templates for debugging
-template<typename T>
-void debug_template_function(T&& value) {
-    if constexpr (std::is_same_v<std::decay_t<T>, int>) {
-        std::cout << "Processing int: " << value << std::endl;
-    } else {
-        std::cout << "Processing " << type_name<std::decay_t<T>>()
-                  << ": " << value << std::endl;
+    } catch (...) {
+        std::destroy(dest, dest + built);
+        throw;
     }
 }
 ```
 
-### Runtime Performance Monitoring
+Elements are moved only if their move constructor is `noexcept` (or the type is not
+copyable); otherwise they are copied, so a throwing transfer leaves the original buffer intact.
+This gives `push_back`, `emplace_back` and `reserve` the strong guarantee. `emplace_back`
+constructs the new element in the new buffer *before* transferring the old ones, so an argument
+that aliases an existing element (`v.emplace_back(v[0])`) is read before it is moved from.
+Capacity doubles (amortised O(1) append); `reallocations()` exposes the count for tests.
+`T` must be nothrow-destructible (`static_assert`).
 
-RAII-based profiling:
+## Ranges (`RangesDemo.hpp`)
+
+- Domain queries (`habitablePlanetNames`, `topByPopulation`, `readyFleetIds`,
+  `missionIdsByUrgency`, `planetsBySystem`) are written as view pipelines and range algorithms
+  with **projections**, for example sorting by `&Planet::population` instead of writing a
+  comparator. `missionIdsByUrgency` uses a stable sort so ties keep input order.
+- `splitWords` (`views::split`), `flatten` (`views::join`), `squaresOfOdds` (an infinite
+  `views::iota` bounded by `take`) and `splitAtFirstNotBelow` (`take_while`/`drop_while`)
+  exercise the remaining adaptors.
+- **Laziness** is measured, not asserted: `countEvaluationsForFirst` counts how many times the
+  `transform` runs when only the first k results of a filtered view are consumed.
+- `sumSquaresOfEvensRanges` and `sumSquaresOfEvensLoop` compute the same value for comparison
+  with a raw loop.
+
+**Custom view.** `EveryNthView<V>` derives from `std::ranges::view_interface`, requires
+`std::ranges::view<V> && std::ranges::forward_range<V>`, and iterates with
+`std::ranges::advance(cur_, step_, end_)`, which clamps at the end so the iterator never steps
+past it. The end is `std::default_sentinel_t`; a deduction guide wraps any range in
+`views::all_t`, and `everyNth(n)` returns an adaptor object with a hidden-friend `operator|`.
+The header verifies `std::ranges::forward_range` and `std::ranges::view` with `static_assert`.
+Design limits: `begin()` is non-const (so a `const EveryNthView` is not a range), and the view is
+forward-only even over random-access bases; both keep the implementation short compared with
+`std::views::stride`.
+
+## Structured Bindings (`StructuredBindings.hpp`)
+
+The header exercises all three binding protocols of [dcl.struct.bind]:
+
+1. **Arrays** (`std::array`, C arrays), e.g. `centerOfMass`.
+2. **Tuple-like types**: `std::tuple`/`std::pair` results from `orbitParameters`,
+   `jumpDistance` and `missionStats`, plus the user-defined `ShipRecord`, which keeps its data
+   *private* and opts in through `std::tuple_size`, `std::tuple_element` and member `get<I>()`
+   overloaded on `const&`, `&` and `&&`:
+
+   ```cpp
+   template <std::size_t I>
+   [[nodiscard]] auto&& get() && noexcept { return std::move(get<I>()); }
+   ```
+
+   The rvalue overload lets `auto [id, name, crew] = std::move(record);` move the string out.
+3. **Aggregates with public members**: `SpaceCoordinate`, `FleetStats`, `FuelRange`.
+
+`refuelBelow` binds by reference (`auto& [..]`) to mutate elements in place; `shipsByMission`
+and `busiestMission` decompose map entries and `insert`/`try_emplace` results;
+`makeScaledOffset` captures structured bindings in a lambda, which is permitted since C++20
+(P1091, P1381).
+
+## Modules Emulation (`ModulesDemo.hpp`)
+
+**Decision.** Real named modules are not used. The header explains why: they require CMake's
+`FILE_SET CXX_MODULES`, a dependency-scanning generator, and compiler-specific binary module
+interfaces (Clang `.pcm`, GCC `.gcm`, MSVC `.ifc`) whose maturity differs across AppleClang,
+GCC 13 and MSVC. The module *structure* is therefore emulated:
+
+| Module concept | Emulation |
+| --- | --- |
+| `export module CppVerseHub.SpaceGame.Core;` | namespace `SpaceGame::Core` in the header |
+| exported declarations | declarations in the header (the "interface unit") |
+| module-linkage (non-exported) names | anonymous namespace in `ModulesDemo.cpp` |
+| implementation unit | `ModulesDemo.cpp` |
+| `import` edges | `moduleGraph()` metadata (`ModuleUnit{name, imports, exports}`) |
+| versioned interface | `inline namespace v1` inside `Core` |
+
+`topologicalBuildOrder()` derives a valid compilation order with Kahn's algorithm and returns
+`std::nullopt` on a cycle or unknown import, illustrating that, unlike headers, modules must be
+built in dependency order. `moduleInterfaceSketch()` returns the source text the real interface
+units would contain. The simulated game (`Planet`, `Starship`, `Mission`, `MissionFactory`,
+`FleetFormation`, `GameUniverse`) is real, tested code organised along those boundaries.
+`Core::IdGenerator` keeps per-instance state rather than a global counter.
+
+## Generic Programming Techniques (`templates/`)
+
+### SFINAE and the detection idiom (`SFINAE_Examples.hpp`)
+
+Presented in historical order so the progression is visible: overloaded `test(int)`/`test(...)`
+detectors (`has_size_method`, `has_begin_method`), `std::void_t` partial specialisation, and the
+Library Fundamentals TS v2 detection idiom:
 
 ```cpp
-class ScopedProfiler {
-private:
-    const char* name_;
-    std::chrono::high_resolution_clock::time_point start_time_;
+template <typename Default, typename AlwaysVoid, template <typename...> class Op, typename... Args>
+struct detector { using value_t = std::false_type; using type = Default; };
 
-public:
-    explicit ScopedProfiler(const char* name)
-        : name_(name)
-        , start_time_(std::chrono::high_resolution_clock::now()) {}
-
-    ~ScopedProfiler() {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-            end_time - start_time_);
-
-        std::cout << "[PROFILE] " << name_ << ": "
-                  << duration.count() << "μs" << std::endl;
-    }
+template <typename Default, template <typename...> class Op, typename... Args>
+struct detector<Default, std::void_t<Op<Args...>>, Op, Args...> {
+    using value_t = std::true_type; using type = Op<Args...>;
 };
-
-#ifdef ENABLE_PROFILING
-    #define PROFILE_SCOPE(name) ScopedProfiler _prof(name)
-    #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
-#else
-    #define PROFILE_SCOPE(name) do {} while(0)
-    #define PROFILE_FUNCTION() do {} while(0)
-#endif
-
-// Usage
-void expensiveFunction() {
-    PROFILE_FUNCTION();
-
-    {
-        PROFILE_SCOPE("expensive_calculation");
-        // Some expensive calculation
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    {
-        PROFILE_SCOPE("database_query");
-        // Database operation
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-}
+template <template <typename...> class Op, typename... Args>
+using is_detected = typename detail::detector<nonesuch, void, Op, Args...>::value_t;
 ```
 
-## Modern C++ Best Practices Summary
+followed by `std::enable_if_t` overload selection, tag dispatch (`container_tag`,
+`arithmetic_tag`, `string_tag`, `generic_tag`), and the concept-based `modern_describe` for
+comparison. `nonesuch` has deleted special members so it cannot be used accidentally.
 
-### Code Organization
+### Specialisation (`TemplateSpecialization.hpp`)
 
-1. **Header-Only Libraries**: For template-heavy code
-2. **Module System**: Where compiler support exists
-3. **Namespace Organization**: Prevent name collisions
-4. **Forward Declarations**: Minimize compilation dependencies
+Full specialisations (`Serializer<int>`, `Serializer<bool>`, ...), partial specialisations on
+type shape and on template-ids (`std::vector<T>`, `std::array<T, N>`, smart pointers, `tuple`,
+`pair`, `optional`, `variant`), and decomposition of function and member-function pointer types
+including `noexcept`. Two subtleties are documented in the code: `TypeInfo` reports
+cv-qualification through standard traits instead of `const T` specialisations, because
+`const T` and `T[N]` would both match `const int[3]` and be ambiguous; and since alias templates
+cannot be specialised, `element_type` places the variation in a class template that the alias
+forwards to.
 
-### Type Safety
+### Variadic templates (`VariadicTemplates.hpp`)
 
-1. **Strong Typing**: Custom types over primitives
-2. **constexpr**: Compile-time computation where possible
-3. **Concepts**: Clear template constraints
-4. **std::optional/std::expected**: Explicit error handling
+Recursive pack processing next to C++17 folds (`print` vs `print_recursive`, `min_fold` and
+`max_fold` via comma folds, empty-pack identities for `*`), `RecursiveTuple` built by private
+recursive inheritance with index-based `get`, the `overload` idiom (`using Visitors::operator()...`)
+contrasted with a *first-match* `multifunction`, and pack storage and replay with `std::apply`
+(`Factory`, `Builder`, `Pipeline`). `Variadic::overload` declares the classic C++17 deduction
+guide (`overload(Visitors...) -> overload<Visitors...>`), whereas
+`Modern::LambdaExpressions::Overloaded` omits it and relies on C++20 class template argument
+deduction for aggregates (P1021, worded in P1816); the pair shows both forms.
 
-### Performance
+### Metaprogramming (`MetaProgramming.hpp`)
 
-1. **Zero-Cost Abstractions**: Templates over runtime polymorphism where appropriate
-2. **Move Semantics**: Minimize unnecessary copies
-3. **RAII**: Automatic resource management
-4. **Custom Allocators**: Optimize memory allocation patterns
+- **Type lists** (`type_list`, `type_at` by recursive peeling, transform and filter
+  metafunctions) in the style of Alexandrescu (2001, ch. 3), alongside the same computations
+  written as `constexpr` functions for comparison.
+- **`Ratio<Num, Den>`** normalises at compile time (sign in the numerator, lowest terms via
+  `std::gcd`); intermediate overflow is documented as unchecked.
+- **Dimensional analysis.** `dimension<Mass, Length, Time>` and `quantity<Rep, Dim>` encode
+  units in the type: `operator+` and `operator-` are only defined for equal dimensions, while
+  `operator*` and `operator/` add and subtract exponents. Adding a velocity to a length is a
+  compile error with zero run-time cost (Barton and Nackman, 1994).
+- **Expression templates.** `VectorBinaryOp` and `VectorScaleOp` derive from the CRTP base
+  `VectorExpression<E>`; `a + b * 2.0` builds a tree that is evaluated in one fused loop when
+  assigned to an `ExprVector`, with no temporaries (Veldhuizen, 1995). `expression_storage`
+  holds leaves by reference and interior nodes by value, so a full expression is safe; storing
+  an expression (`auto e = x + y;`) that outlives its leaf vectors would dangle, the usual
+  caveat of this technique. Assignment is element-wise, so `v = v + w` is alias-safe.
+- **CRTP** for static polymorphism (`ShapeBase`, `CircleShape`) and operator mixins
+  (`TotallyOrdered`), a `ConstexprMap` lookup table, and a `std::variant` state machine.
 
-### Maintainability
+## Generic Containers and Smart Pointers (`GenericContainers.hpp`)
 
-1. **Clear Interfaces**: Well-defined contracts
-2. **Documentation**: Comprehensive API documentation
-3. **Testing**: Unit tests for all modern C++ features
-4. **Static Analysis**: Automated code quality checks
+Teaching implementations of the standard vocabulary types; the header says to prefer the
+standard ones in production.
 
-## Conclusion
+- **`DynamicArray<T, Allocator>`** is allocator-aware through `std::allocator_traits` (and
+  `static_assert`s that the allocator's `value_type` is `T` and its pointer is `T*`). Copy and
+  move assignment and `swap` honour `propagate_on_container_*` and `is_always_equal`; when
+  allocators neither propagate nor compare equal, move assignment falls back to element-wise
+  moves. Iterators are a single template `ArrayIterator<IsConst>` modelling
+  `std::contiguous_iterator` with defaulted `operator<=>`. Guarantees, as documented in the
+  header: `push_back`, `emplace_back`, `reserve` and copy assignment are strong when `T`'s move
+  constructor is `noexcept` (or `T` is copyable); `insert` and `erase` are basic. Growth doubles,
+  saturating at `max_size()`, and `emplace_back` is safe when an argument aliases an element.
+- **`UniquePtr<T, Deleter>`** stores the deleter with `[[no_unique_address]]`, so a stateless
+  deleter adds no size; it has a converting move (Derived to Base) and an array partial
+  specialisation.
+- **`SharedPtr<T>` / `WeakPtr<T>`** share a type-erased `detail::ControlBlockBase` with atomic
+  strong and weak counts. The weak count carries one extra reference while any strong reference
+  exists, so the block is deleted exactly once by whichever count reaches zero last:
 
-CppVerseHub's modern C++ implementation demonstrates practical usage of advanced language features while maintaining:
+  ```cpp
+  void add_strong() noexcept { strong_.fetch_add(1, std::memory_order_relaxed); }
+  void release_strong() noexcept {
+      if (strong_.fetch_sub(1, std::memory_order_acq_rel) == 1) { dispose(); release_weak(); }
+  }
+  [[nodiscard]] bool try_add_strong() noexcept {   // used by WeakPtr::lock()
+      std::size_t count = strong_.load(std::memory_order_relaxed);
+      while (count != 0) {
+          if (strong_.compare_exchange_weak(count, count + 1, std::memory_order_acq_rel,
+                                            std::memory_order_relaxed)) return true;
+      }
+      return false;
+  }
+  ```
 
-- **Performance**: Zero-overhead abstractions and compile-time optimization
-- **Safety**: Strong typing and explicit error handling
-- **Maintainability**: Clear code organization and comprehensive documentation
-- **Educational Value**: Real-world examples of modern C++ best practices
+  Increments are `relaxed` because a new reference can only be created from an existing one,
+  which already keeps the object alive. The decrement is `acq_rel`: the release half orders
+  each owner's last use of the object before the decrement, and the acquire half makes all of
+  those uses happen-before `dispose()` in the thread that drops the count to zero. `lock()` is
+  race-free because the CAS never resurrects a count that has reached zero. `make_shared_ptr`
+  uses `InplaceControlBlock<T>`, which stores the object in a union inside the block (one
+  allocation); `PointerControlBlock<U, Deleter>` serves externally allocated pointers. The
+  aliasing constructor `SharedPtr(const SharedPtr<U>&, T*)` shares ownership while pointing at a
+  sub-object. Copying a `SharedPtr` *object* concurrently with modifying the same object is a
+  data race, exactly as for `std::shared_ptr`.
+- **`Optional<T>`** stores its value in an anonymous union with an `empty_` alternative, so it
+  works in constant expressions without `reinterpret_cast`. Constructors are constrained
+  (`is_value_arg` rejects `Optional`, `in_place_t` and `nullopt_t`) and use conditional
+  `explicit(!std::is_convertible_v<U&&, T>)`. It offers `value_or` and the C++23-style monadic
+  `transform` and `and_then`; `Optional<T&>` is rejected by `static_assert`.
 
-The codebase serves as both a working application and a comprehensive reference for modern C++ development techniques, showing how advanced language features solve real engineering problems while maintaining code quality and performance standards.
+## Verification
 
-## Feature Adoption Timeline
+Tests use Catch2. Many claims are additionally enforced by `static_assert`s inside the headers
+themselves (`ConstexprProgramming.hpp`, `LambdaExpressions.hpp`, `MoveSemantics.hpp`,
+`RangesDemo.hpp`, `ConceptsAdvanced.hpp`), so a successful build is already a partial
+verification.
 
-| Feature             | Standard | Support Status   | Usage in CppVerseHub              |
-| ------------------- | -------- | ---------------- | --------------------------------- |
-| Structured Bindings | C++17    | Full             | Resource management, iteration    |
-| std::optional       | C++17    | Full             | Error handling, optional values   |
-| constexpr           | C++17    | Full             | Math calculations, configurations |
-| Concepts            | C++20    | Modern compilers | Template constraints              |
-| Ranges              | C++20    | Modern compilers | Data processing pipelines         |
-| Coroutines          | C++20    | Partial          | Async mission execution           |
-| Modules             | C++20    | Limited          | Where supported                   |
-| std::expected       | C++23    | Polyfill         | Enhanced error handling           |
+| Claim | Test file |
+| --- | --- |
+| Concepts accept and reject the expected types; subsumption picks the most constrained `classify`; domain concepts | `tests/modern/ConceptsTests.cpp` |
+| `power`, `factorial` saturation, `sqrtNewton` against `std::sqrt`, tables, literal types | `tests/modern/ConstexprTests.cpp` |
+| `compose`/`pipeline` order, `curry` groupings and by-value binding, `Fix`, `Memoized`, captures, `EventBus`, `parallelSum` | `tests/modern/LambdaTests.cpp` |
+| Deep copy and counted moves of `TrackedResource`, move-only `Spacecraft`, forwarding, copy elision, `MoveAwareVector` strong guarantee | `tests/modern/MoveSemanticsTests.cpp` |
+| View pipelines, projections, laziness counts, `EveryNthView` | `tests/modern/RangesTests.cpp` |
+| All three binding protocols, `ShipRecord`, in-place mutation | `tests/modern/StructuredBindingsTests.cpp` |
+| Core utilities, `inline namespace v1` versioning, game entities, module graph and build order | `tests/modern/ModulesTests.cpp` |
+| `Modern::runDemo` runs without throwing and is deterministic apart from its `constinit` counter | `tests/modern/DemoTests.cpp` |
+| Subsumption in `Templates::Concepts::classify`, `power`, constrained containers | `tests/templates/ConceptsDemoTests.cpp` |
+| `enable_if` overload selection, detection idiom, tag dispatch | `tests/templates/SFINAETests.cpp` |
+| `Serializer` round trips, shape and template-id specialisations | `tests/templates/TemplateSpecializationTests.cpp` |
+| Fold versus recursion equivalence, `RecursiveTuple`, `overload`/`multifunction`, pipelines | `tests/templates/VariadicTemplatesTests.cpp` |
+| Compile-time arithmetic agrees with run time, type lists, `Ratio`, units, expression templates | `tests/templates/MetaProgrammingTests.cpp` |
+| `DynamicArray` growth, aliasing `emplace_back` during reallocation, exception guarantees; smart-pointer counts and `lock()`; `Optional` | `tests/templates/GenericContainersTests.cpp` |
+| `Templates::runDemo` runs without throwing and is deterministic | `tests/templates/DemoTests.cpp` |
 
-This progressive adoption ensures the codebase remains both cutting-edge and practically usable across different compiler environments.
+## References
+
+1. ISO/IEC 14882:2020, *Programming Languages - C++*, in particular [temp.constr.order],
+   [dcl.struct.bind], [expr.const], [range.view].
+2. A. Sutton, *Wording Paper, C++ extensions for Concepts*, P0734R0, 2017.
+3. E. Niebler, C. Carter, C. Di Bella, *The One Ranges Proposal*, P0896R4, 2018.
+4. L. Dionne, R. Smith, N. Ranns, D. Vandevoorde, *More constexpr containers*, P0784R7, 2019.
+5. R. Smith, A. Sutton, D. Vandevoorde, *Immediate functions*, P1073R3, 2018; E. Fiselier,
+   *Adding the constinit keyword*, P1143R2, 2019.
+6. J. Maurer, *Class types in non-type template parameters*, P0732R2, 2018, and
+   *Inconsistencies with non-type template parameters*, P1907R1, 2019.
+7. R. Smith, *Guaranteed copy elision through simplified value categories*, P0135R1, 2016.
+8. H. Sutter, B. Stroustrup, G. Dos Reis, *Structured bindings*, P0144R2, 2016; N. Josuttis,
+   *Extending structured bindings to be more like variable declarations*, P1091R3, 2019;
+   N. Josuttis, *Reference capture of structured bindings*, P1381R1, 2019.
+9. B. Revzin, *Allow pack expansion in lambda init-capture*, P0780R2, 2018.
+10. M. Spertus, *Filling holes in Class Template Argument Deduction*, P1021R6, 2019, and
+    T. Song, *Wording for class template argument deduction for aggregates*, P1816R0, 2019.
+11. G. Dos Reis, R. Smith, *Merging Modules*, P1103R3, 2019.
+12. D. Vandevoorde, N. M. Josuttis, D. Gregor, *C++ Templates: The Complete Guide*, 2nd ed.,
+    Addison-Wesley, 2017.
+13. A. Alexandrescu, *Modern C++ Design*, Addison-Wesley, 2001 (ch. 3 typelists).
+14. T. Veldhuizen, "Expression Templates", *C++ Report* 7(5), 1995.
+15. J. J. Barton, L. R. Nackman, *Scientific and Engineering C++*, Addison-Wesley, 1994.
+16. D. Abrahams, "Exception-Safety in Generic Components", *Generic Programming*, LNCS 1766,
+    Springer, 2000.
+17. A. Williams, *C++ Concurrency in Action*, 2nd ed., Manning, 2019 (ch. 5, memory model, for
+    the reference-count ordering argument).
+18. cppreference.com: [Constraints and concepts](https://en.cppreference.com/w/cpp/language/constraints),
+    [Ranges library](https://en.cppreference.com/w/cpp/ranges),
+    [Structured binding](https://en.cppreference.com/w/cpp/language/structured_binding),
+    [`std::move_if_noexcept`](https://en.cppreference.com/w/cpp/utility/move_if_noexcept),
+    [Modules](https://en.cppreference.com/w/cpp/language/modules).
