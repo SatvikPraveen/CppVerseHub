@@ -27,7 +27,7 @@ jobs:
           - { os: macos-15,     compiler: apple-clang, cxx: clang++, build_type: Release }
           - { os: windows-2022, compiler: msvc,     cxx: cl,         build_type: Release }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Ninja (Linux)
         if: runner.os == 'Linux'
@@ -68,7 +68,7 @@ jobs:
       matrix:
         preset: [asan, tsan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Configure
         run: cmake --preset ${{ matrix.preset }} -DCMAKE_CXX_COMPILER=clang++-18 -DCPPVERSEHUB_BUILD_BENCHMARKS=OFF
@@ -85,7 +85,7 @@ jobs:
     name: coverage
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y ninja-build && pipx install gcovr
       - run: cmake --preset coverage -DCMAKE_CXX_COMPILER=g++-13
       - run: cmake --build --preset coverage --parallel
@@ -104,7 +104,7 @@ jobs:
     name: benchmarks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y ninja-build
       - run: cmake --preset default -DCPPVERSEHUB_BUILD_TESTS=OFF -DCPPVERSEHUB_BUILD_EXAMPLES=OFF
       - run: cmake --build --preset default --parallel
