@@ -18,13 +18,13 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y ninja-build doxygen graphviz
       - run: >
           cmake -S . -B build -G Ninja -DCPPVERSEHUB_BUILD_DOCS=ON
           -DCPPVERSEHUB_BUILD_TESTS=OFF -DCPPVERSEHUB_BUILD_BENCHMARKS=OFF -DCPPVERSEHUB_BUILD_EXAMPLES=OFF
       - run: cmake --build build --target docs
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: build/docs/html
 
@@ -36,4 +36,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
