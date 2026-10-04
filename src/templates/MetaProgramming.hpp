@@ -781,6 +781,10 @@ using energy = quantity<double, energy_dimension>;             ///< joules
  *        becomes the new state. Unhandled events are ignored.
  * @tparam States the state types
  */
+/// @brief A state type S reacts to event E if it has a callable `on_event(const E&)`.
+template <typename S, typename E>
+concept HandlesEvent = requires(S& state, const E& event) { state.on_event(event); };
+
 template <typename... States>
 class StateMachine {
 public:
@@ -801,7 +805,9 @@ public:
         std::optional<state_variant> next;
         const bool handled = std::visit(
             [&](auto& state) -> bool {
-                if constexpr (requires { state.on_event(event); }) {
+                // A named concept rather than an inline requires-expression: MSVC mis-evaluates the
+                // latter inside a generic lambda and treats every event as unhandled.
+                if constexpr (HandlesEvent<std::remove_reference_t<decltype(state)>, Event>) {
                     next.emplace(state.on_event(event));
                     return true;
                 } else {

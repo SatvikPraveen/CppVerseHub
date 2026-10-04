@@ -118,7 +118,12 @@ public:
     void loadState(const std::string& state, std::uint64_t seed) {
         std::istringstream is(state);
         std::mt19937_64 restored;
-        is >> restored;
+        try {
+            is >> restored;
+        } catch (const std::exception&) {
+            // MSVC's engine extractor throws on malformed input instead of setting failbit.
+            throw SerializationException("malformed RNG state");
+        }
         if (!is) {
             throw SerializationException("malformed RNG state");
         }
