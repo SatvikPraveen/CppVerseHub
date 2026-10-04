@@ -10,7 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - CMake presets for Release, Debug, ASan/UBSan, TSan, coverage, strict warnings and clang-tidy.
 - Catch2 v3 test suites and Google Benchmark suites for every module.
 - Deterministic, seeded space-fleet simulation core with JSON scenario persistence.
-- Continuous integration across GCC, Clang, Apple Clang and MSVC, with sanitizer, coverage, static-analysis and documentation jobs.
+- Continuous integration across GCC 13/14, Clang 18, Apple Clang 16 and MSVC 2022, with sanitizer, coverage, static-analysis and documentation jobs.
+- API documentation published to GitHub Pages.
 - `CITATION.cff`, contribution guide, code of conduct and security policy.
 
 ### Changed
