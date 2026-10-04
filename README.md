@@ -6,10 +6,11 @@
 
 [![CI](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/ci.yml/badge.svg)](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/ci.yml)
 [![Static Analysis](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/static-analysis.yml)
-[![Docs](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/docs.yml/badge.svg)](https://satvikpraveen.github.io/CppVerseHub/)
+[![Docs](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/docs.yml/badge.svg)](https://github.com/SatvikPraveen/CppVerseHub/actions/workflows/docs.yml)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.25%2B-064F8C.svg?logo=cmake)](https://cmake.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/release-v2.0.0-blue.svg)](CHANGELOG.md)
 
 [Overview](#overview) ·
 [Quick start](#quick-start) ·
@@ -41,7 +42,7 @@ The project is built to be read, reused and checked:
 
 ## Quick start
 
-**Requirements:** a C++20 compiler (GCC 13+, Clang 17+, Apple Clang 15+ or MSVC 2022 17.8+), CMake 3.25+ and Ninja.
+**Requirements:** a C++20 compiler (GCC 13+, Clang 17+, Apple Clang 16+ or MSVC 2022 17.8+), CMake 3.25+ and Ninja.
 Catch2, Google Benchmark and nlohmann/json are found on the system or fetched automatically.
 
 ```bash
@@ -183,7 +184,12 @@ docs/                  design documents, cheat sheets and Doxygen configuration
 - [Modern C++ usage](docs/design_docs/modern_cpp_usage.md)
 - [Benchmarking methodology](docs/design_docs/benchmarking_methodology.md)
 - [Cheat sheets](docs/cheat_sheets)
-- [API reference](https://satvikpraveen.github.io/CppVerseHub/), generated with Doxygen
+- API reference, generated with Doxygen: build it locally with the commands below, or browse it on [GitHub Pages](https://satvikpraveen.github.io/CppVerseHub/) once Pages is enabled for the repository
+
+```bash
+cmake -S . -B build -DCPPVERSEHUB_BUILD_DOCS=ON
+cmake --build build --target docs      # open build/docs/html/index.html
+```
 
 ## Citing
 
@@ -200,6 +206,10 @@ GitHub's "Cite this repository" button reads [`CITATION.cff`](CITATION.cff).
   license = {MIT}
 }
 ```
+
+## Project status
+
+The current release is v2.0.0. See the [changelog](CHANGELOG.md) for what changed from the original scaffold.
 
 ## Contributing
 

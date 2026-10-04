@@ -4,7 +4,7 @@ Thank you for considering a contribution. This document describes how to build, 
 
 ## Prerequisites
 
-- A C++20 compiler: GCC 13+, Clang 17+, Apple Clang 15+ or MSVC 19.38+ (Visual Studio 2022 17.8+)
+- A C++20 compiler: GCC 13+, Clang 17+, Apple Clang 16+ or MSVC 19.38+ (Visual Studio 2022 17.8+)
 - CMake 3.25+ and Ninja
 - Optional: clang-format 18, clang-tidy 18, cppcheck, Doxygen + Graphviz, gcovr
 
