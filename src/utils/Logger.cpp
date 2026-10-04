@@ -1,496 +1,563 @@
-// File: src/utils/Logger.cpp
-// Comprehensive Logging System Implementation
+/**
+ * @file Logger.cpp
+ * @brief Implementation of the thread-safe logging subsystem declared in Logger.hpp.
+ */
+#include "utils/Logger.hpp"
 
-#include "Logger.hpp"
-#include <filesystem>
-#include <cstdlib>
+#include "utils/TimeUtils.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
+#include <system_error>
 
 namespace CppVerseHub::Utils {
 
-// ===== LOGGER CONFIGURATION UTILITIES =====
-
-namespace LoggerConfig {
-    
-    void setupDefaultConsoleLogger(const std::string& logger_name, LogLevel level = LogLevel::INFO) {
-        auto logger = LoggerManager::getInstance().getLogger(logger_name);
-        logger->setLogLevel(level);
-        
-        // Add console appender with colors
-        auto console_appender = std::make_unique<ConsoleAppender>(true);
-        auto formatter = std::make_unique<DefaultFormatter>("%Y-%m-%d %H:%M:%S", true, true);
-        console_appender->setFormatter(std::move(formatter));
-        
-        logger->addAppender(std::move(console_appender));
-    }
-    
-    void setupFileLogger(const std::string& logger_name, const std::string& log_file,
-                        LogLevel level = LogLevel::INFO) {
-        auto logger = LoggerManager::getInstance().getLogger(logger_name);
-        logger->setLogLevel(level);
-        
-        // Create directory if it doesn't exist
-        std::filesystem::path file_path(log_file);
-        if (file_path.has_parent_path()) {
-            std::filesystem::create_directories(file_path.parent_path());
-        }
-        
-        // Add file appender
-        auto file_appender = std::make_unique<FileAppender>(log_file);
-        auto formatter = std::make_unique<DefaultFormatter>("%Y-%m-%d %H:%M:%S", true, true);
-        file_appender->setFormatter(std::move(formatter));
-        
-        logger->addAppender(std::move(file_appender));
-    }
-    
-    void setupRotatingFileLogger(const std::string& logger_name, const std::string& base_filename,
-                               std::chrono::hours rotation_interval = std::chrono::hours(24),
-                               LogLevel level = LogLevel::INFO) {
-        auto logger = LoggerManager::getInstance().getLogger(logger_name);
-        logger->setLogLevel(level);
-        
-        // Create directory if it doesn't exist
-        std::filesystem::path file_path(base_filename);
-        if (file_path.has_parent_path()) {
-            std::filesystem::create_directories(file_path.parent_path());
-        }
-        
-        // Add rotating file appender
-        auto rotating_appender = std::make_unique<RotatingFileAppender>(base_filename, rotation_interval);
-        auto formatter = std::make_unique<DefaultFormatter>("%Y-%m-%d %H:%M:%S", true, true);
-        rotating_appender->setFormatter(std::move(formatter));
-        
-        logger->addAppender(std::move(rotating_appender));
-    }
-    
-    void setupJsonLogger(const std::string& logger_name, const std::string& log_file,
-                        LogLevel level = LogLevel::INFO) {
-        auto logger = LoggerManager::getInstance().getLogger(logger_name);
-        logger->setLogLevel(level);
-        
-        // Create directory if it doesn't exist
-        std::filesystem::path file_path(log_file);
-        if (file_path.has_parent_path()) {
-            std::filesystem::create_directories(file_path.parent_path());
-        }
-        
-        // Add file appender with JSON formatter
-        auto file_appender = std::make_unique<FileAppender>(log_file);
-        auto formatter = std::make_unique<JsonFormatter>();
-        file_appender->setFormatter(std::move(formatter));
-        
-        logger->addAppender(std::move(file_appender));
-    }
-    
-    void setupSpaceGameLoggers() {
-        // Main game logger
-        auto game_logger = LoggerManager::getInstance().getLogger("Game");
-        game_logger->setLogLevel(LogLevel::INFO);
-        
-        // Console output
-        auto console_appender = std::make_unique<ConsoleAppender>(true);
-        auto console_formatter = std::make_unique<DefaultFormatter>("%H:%M:%S", false, false);
-        console_appender->setFormatter(std::move(console_formatter));
-        game_logger->addAppender(std::move(console_appender));
-        
-        // File output
-        auto file_appender = std::make_unique<FileAppender>("logs/game.log");
-        auto file_formatter = std::make_unique<DefaultFormatter>("%Y-%m-%d %H:%M:%S", true, true);
-        file_appender->setFormatter(std::move(file_formatter));
-        game_logger->addAppender(std::move(file_appender));
-        
-        // Fleet operations logger
-        setupFileLogger("Fleet", "logs/fleet.log", LogLevel::DEBUG);
-        
-        // Mission logger with JSON format for analytics
-        setupJsonLogger("Mission", "logs/missions.json", LogLevel::INFO);
-        
-        // Error logger with rotating files
-        setupRotatingFileLogger("Error", "logs/errors", std::chrono::hours(168), LogLevel::ERROR); // Weekly rotation
-        
-        // Performance logger
-        setupFileLogger("Performance", "logs/performance.log", LogLevel::INFO);
-        
-        // Network logger
-        setupFileLogger("Network", "logs/network.log", LogLevel::WARN);
-    }
-    
-} // namespace LoggerConfig
-
-// ===== PERFORMANCE LOGGER =====
-
-class PerformanceLogger {
-private:
-    std::shared_ptr<AsyncLogger> logger_;
-    std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> start_times_;
-    std::mutex mutex_;
-    
-public:
-    PerformanceLogger() : logger_(LoggerManager::getInstance().getLogger("Performance")) {}
-    
-    void startTimer(const std::string& operation) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        start_times_[operation] = std::chrono::high_resolution_clock::now();
-        
-        std::ostringstream oss;
-        oss << "Started operation: " << operation;
-        LOG_DEBUG(logger_, oss.str());
-    }
-    
-    void endTimer(const std::string& operation) {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = start_times_.find(operation);
-        if (it != start_times_.end()) {
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                end_time - it->second);
-            
-            std::ostringstream oss;
-            oss << "Completed operation: " << operation 
-                << " (duration: " << duration.count() << " μs)";
-            LOG_INFO(logger_, oss.str());
-            
-            start_times_.erase(it);
-        } else {
-            std::ostringstream oss;
-            oss << "End timer called for unknown operation: " << operation;
-            LOG_WARN(logger_, oss.str());
+std::optional<LogLevel> parseLogLevel(std::string_view text) noexcept {
+    std::string upper;
+    upper.reserve(text.size());
+    for (const char c : text) {
+        if (std::isspace(static_cast<unsigned char>(c)) == 0) {
+            upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
         }
     }
-    
-    static PerformanceLogger& getInstance() {
-        static PerformanceLogger instance;
-        return instance;
-    }
-};
-
-// ===== SCOPED PERFORMANCE TIMER =====
-
-class ScopedPerformanceTimer {
-private:
-    std::string operation_name_;
-    
-public:
-    explicit ScopedPerformanceTimer(const std::string& operation) : operation_name_(operation) {
-        PerformanceLogger::getInstance().startTimer(operation_name_);
-    }
-    
-    ~ScopedPerformanceTimer() {
-        PerformanceLogger::getInstance().endTimer(operation_name_);
-    }
-};
-
-// ===== MEMORY APPENDER =====
-
-class MemoryAppender : public LogAppender {
-private:
-    std::unique_ptr<LogFormatter> formatter_;
-    std::deque<std::string> log_buffer_;
-    std::mutex mutex_;
-    size_t max_entries_;
-    
-public:
-    explicit MemoryAppender(size_t max_entries = 1000)
-        : formatter_(std::make_unique<DefaultFormatter>()), max_entries_(max_entries) {}
-    
-    void append(const LogEntry& entry) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        log_buffer_.push_back(formatter_->format(entry));
-        
-        // Remove old entries if we exceed the limit
-        while (log_buffer_.size() > max_entries_) {
-            log_buffer_.pop_front();
-        }
-    }
-    
-    void flush() override {
-        // Memory appender doesn't need to flush
-    }
-    
-    void setFormatter(std::unique_ptr<LogFormatter> formatter) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatter_ = std::move(formatter);
-    }
-    
-    std::unique_ptr<LogAppender> clone() const override {
-        auto cloned = std::make_unique<MemoryAppender>(max_entries_);
-        cloned->setFormatter(formatter_->clone());
-        return std::move(cloned);
-    }
-    
-    std::vector<std::string> getLogs() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return std::vector<std::string>(log_buffer_.begin(), log_buffer_.end());
-    }
-    
-    void clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        log_buffer_.clear();
-    }
-    
-    size_t size() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return log_buffer_.size();
-    }
-};
-
-// ===== NETWORK APPENDER (TCP/UDP) =====
-
-class NetworkAppender : public LogAppender {
-private:
-    std::unique_ptr<LogFormatter> formatter_;
-    std::string host_;
-    int port_;
-    std::mutex mutex_;
-    // Note: Real implementation would include socket handling
-    
-public:
-    NetworkAppender(const std::string& host, int port)
-        : formatter_(std::make_unique<JsonFormatter>()), host_(host), port_(port) {
-        // Initialize network connection
-        std::ostringstream oss;
-        oss << "NetworkAppender configured for " << host_ << ":" << port_;
-        std::cout << oss.str() << std::endl; // Placeholder for actual logging
-    }
-    
-    void append(const LogEntry& entry) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        std::string formatted = formatter_->format(entry);
-        
-        // Placeholder for actual network transmission
-        std::ostringstream oss;
-        oss << "[NETWORK " << host_ << ":" << port_ << "] " << formatted;
-        std::cout << oss.str() << std::endl;
-    }
-    
-    void flush() override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        // Flush network buffer
-    }
-    
-    void setFormatter(std::unique_ptr<LogFormatter> formatter) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatter_ = std::move(formatter);
-    }
-    
-    std::unique_ptr<LogAppender> clone() const override {
-        auto cloned = std::make_unique<NetworkAppender>(host_, port_);
-        cloned->setFormatter(formatter_->clone());
-        return std::move(cloned);
-    }
-};
-
-// ===== LOGGER UTILITIES =====
-
-namespace LoggerUtils {
-    
-    void configureFromEnvironment() {
-        // Check environment variables for log configuration
-        const char* log_level_env = std::getenv("CPPVERSEHUB_LOG_LEVEL");
-        if (log_level_env) {
-            LogLevel level = stringToLogLevel(log_level_env);
-            LoggerManager::getInstance().setDefaultLogLevel(level);
-        }
-        
-        const char* log_file_env = std::getenv("CPPVERSEHUB_LOG_FILE");
-        if (log_file_env) {
-            LoggerConfig::setupFileLogger("DefaultFile", log_file_env);
-        }
-        
-        const char* log_json_env = std::getenv("CPPVERSEHUB_LOG_JSON");
-        if (log_json_env && std::string(log_json_env) == "true") {
-            LoggerConfig::setupJsonLogger("DefaultJson", "logs/application.json");
-        }
-    }
-    
-    void demonstrateLogging() {
-        std::cout << "\n=== Comprehensive Logging System Demonstration ===" << std::endl;
-        
-        // Setup space game loggers
-        LoggerConfig::setupSpaceGameLoggers();
-        
-        // Get various loggers
-        auto game_logger = LoggerManager::getInstance().getLogger("Game");
-        auto fleet_logger = LoggerManager::getInstance().getLogger("Fleet");
-        auto mission_logger = LoggerManager::getInstance().getLogger("Mission");
-        auto error_logger = LoggerManager::getInstance().getLogger("Error");
-        
-        // Demonstrate different log levels
-        LOG_TRACE(game_logger, "Game initialization starting...");
-        LOG_DEBUG(game_logger, "Loading configuration files");
-        LOG_INFO(game_logger, "CppVerseHub Space Game v1.0 started successfully");
-        LOG_WARN(game_logger, "Low memory warning: 85% used");
-        LOG_ERROR(error_logger, "Failed to connect to remote server");
-        LOG_FATAL(error_logger, "Critical system failure detected");
-        
-        // Fleet operations
-        LOG_INFO(fleet_logger, "Fleet Alpha deployed to sector 7");
-        LOG_DEBUG(fleet_logger, "Fleet composition: 5 fighters, 2 cruisers, 1 carrier");
-        LOG_WARN(fleet_logger, "Fleet Beta fuel level below 30%");
-        
-        // Mission logging (JSON format)
-        LOG_INFO(mission_logger, "Mission 'Explore Alpha Centauri' completed successfully");
-        LOG_INFO(mission_logger, "Mission 'Colonize Kepler-442b' started with 3 ships");
-        LOG_WARN(mission_logger, "Mission 'Rescue Stranded Crew' delayed due to asteroid field");
-        
-        // Performance logging demonstration
-        {
-            ScopedPerformanceTimer timer("GameUpdate");
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        
-        PerformanceLogger::getInstance().startTimer("ResourceCalculation");
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        PerformanceLogger::getInstance().endTimer("ResourceCalculation");
-        
-        // Memory appender demonstration
-        auto memory_logger = LoggerManager::getInstance().getLogger("Memory");
-        auto memory_appender = std::make_unique<MemoryAppender>(100);
-        memory_logger->addAppender(std::move(memory_appender));
-        
-        LOG_INFO(memory_logger, "First memory log entry");
-        LOG_INFO(memory_logger, "Second memory log entry");
-        LOG_INFO(memory_logger, "Third memory log entry");
-        
-        // Network appender demonstration
-        auto network_logger = LoggerManager::getInstance().getLogger("Network");
-        auto network_appender = std::make_unique<NetworkAppender>("logserver.example.com", 9999);
-        network_logger->addAppender(std::move(network_appender));
-        
-        LOG_INFO(network_logger, "Network log entry sent to remote server");
-        
-        // Function scope logging
-        {
-            LOG_FUNCTION_SCOPE(game_logger);
-            LOG_INFO(game_logger, "Performing complex calculation inside scoped function");
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-        
-        // Wait a moment for async logging to complete
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
-        // Flush all loggers
-        game_logger->flush();
-        fleet_logger->flush();
-        mission_logger->flush();
-        error_logger->flush();
-        
-        std::cout << "Logging demonstration completed. Check log files in 'logs/' directory." << std::endl;
-        std::cout << "Active loggers: " << LoggerManager::getInstance().getLoggerCount() << std::endl;
-    }
-    
-    void benchmarkLogging() {
-        std::cout << "\n=== Logging Performance Benchmark ===" << std::endl;
-        
-        const int num_messages = 10000;
-        
-        // Setup benchmark logger
-        auto benchmark_logger = LoggerManager::getInstance().getLogger("Benchmark");
-        benchmark_logger->setLogLevel(LogLevel::INFO);
-        
-        auto file_appender = std::make_unique<FileAppender>("logs/benchmark.log");
-        benchmark_logger->addAppender(std::move(file_appender));
-        
-        // Benchmark async logging
-        auto start_time = std::chrono::high_resolution_clock::now();
-        
-        for (int i = 0; i < num_messages; ++i) {
-            std::ostringstream oss;
-            oss << "Benchmark message #" << i << " with some additional data";
-            LOG_INFO(benchmark_logger, oss.str());
-        }
-        
-        benchmark_logger->flush();
-        
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        
-        std::cout << "Logged " << num_messages << " messages in " << duration.count() << " ms" << std::endl;
-        std::cout << "Average: " << (static_cast<double>(duration.count()) / num_messages) << " ms per message" << std::endl;
-        std::cout << "Throughput: " << (num_messages * 1000 / duration.count()) << " messages/second" << std::endl;
-    }
-    
-    void testErrorRecovery() {
-        std::cout << "\n=== Testing Error Recovery ===" << std::endl;
-        
-        auto test_logger = LoggerManager::getInstance().getLogger("ErrorRecoveryTest");
-        
-        // Test with invalid file path
-        try {
-            auto invalid_appender = std::make_unique<FileAppender>("/invalid/path/test.log");
-            test_logger->addAppender(std::move(invalid_appender));
-        } catch (const std::exception& e) {
-            std::cout << "Expected error caught: " << e.what() << std::endl;
-        }
-        
-        // Test with valid appender
-        auto valid_appender = std::make_unique<ConsoleAppender>();
-        test_logger->addAppender(std::move(valid_appender));
-        
-        LOG_INFO(test_logger, "Error recovery test completed successfully");
-        
-        std::cout << "Logger continues to work after error recovery" << std::endl;
-    }
-    
-} // namespace LoggerUtils
-
-// ===== CLEANUP UTILITIES =====
-
-class LoggerCleanup {
-public:
-    static void cleanupOldLogs(const std::string& log_directory, int max_age_days = 30) {
-        try {
-            if (!std::filesystem::exists(log_directory)) {
-                return;
-            }
-            
-            auto cutoff_time = std::chrono::system_clock::now() - std::chrono::hours(24 * max_age_days);
-            
-            for (const auto& entry : std::filesystem::directory_iterator(log_directory)) {
-                if (entry.is_regular_file()) {
-                    auto file_time = std::filesystem::last_write_time(entry);
-                    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                        file_time - std::filesystem::file_time_type::clock::now() + 
-                        std::chrono::system_clock::now());
-                    
-                    if (sctp < cutoff_time) {
-                        std::filesystem::remove(entry.path());
-                        std::cout << "Removed old log file: " << entry.path() << std::endl;
-                    }
-                }
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Error during log cleanup: " << e.what() << std::endl;
-        }
-    }
-    
-    static void compressOldLogs(const std::string& log_directory, int compress_age_days = 7) {
-        // Placeholder for log compression functionality
-        std::cout << "Log compression functionality would be implemented here for directory: " 
-                  << log_directory << " (age: " << compress_age_days << " days)" << std::endl;
-    }
-};
-
-} // namespace CppVerseHub::Utils
-
-// ===== GLOBAL CLEANUP FUNCTION =====
+    if (upper == "TRACE") return LogLevel::Trace;
+    if (upper == "DEBUG") return LogLevel::Debug;
+    if (upper == "INFO") return LogLevel::Info;
+    if (upper == "WARN" || upper == "WARNING") return LogLevel::Warn;
+    if (upper == "ERROR") return LogLevel::Error;
+    if (upper == "FATAL" || upper == "CRITICAL") return LogLevel::Fatal;
+    if (upper == "OFF" || upper == "NONE") return LogLevel::Off;
+    return std::nullopt;
+}
 
 namespace {
-    bool cleanup_registered = false;
-    
-    void cleanup_loggers() {
-        CppVerseHub::Utils::LoggerManager::getInstance().shutdown();
+
+std::string threadIdString(std::thread::id id) {
+    std::ostringstream oss;
+    oss << id;
+    return oss.str();
+}
+
+std::string_view baseName(std::string_view path) noexcept {
+    const auto pos = path.find_last_of("/\\");
+    return pos == std::string_view::npos ? path : path.substr(pos + 1);
+}
+
+} // namespace
+
+// ===================================================================================================
+// Formatters
+// ===================================================================================================
+
+std::string PatternFormatter::format(const LogRecord& record) const {
+    std::string line;
+    line.reserve(record.message.size() + 64);
+    auto separate = [&line] {
+        if (!line.empty()) {
+            line.push_back(' ');
+        }
+    };
+    if (options_.timestamp) {
+        line += Time::formatIso8601(record.timestamp);
     }
-    
-    void register_cleanup() {
-        if (!cleanup_registered) {
-            std::atexit(cleanup_loggers);
-            cleanup_registered = true;
+    if (options_.level) {
+        separate();
+        line.push_back('[');
+        line += toString(record.level);
+        line.push_back(']');
+    }
+    if (options_.loggerName && !record.loggerName.empty()) {
+        separate();
+        line.push_back('[');
+        line += record.loggerName;
+        line.push_back(']');
+    }
+    if (options_.threadId) {
+        separate();
+        line += "[tid ";
+        line += threadIdString(record.threadId);
+        line.push_back(']');
+    }
+    if (options_.location) {
+        separate();
+        line.push_back('(');
+        line += baseName(record.location.file_name());
+        line.push_back(':');
+        line += std::to_string(record.location.line());
+        line.push_back(')');
+    }
+    separate();
+    line += record.message;
+    return line;
+}
+
+std::string JsonFormatter::escape(std::string_view text) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(text.size() + 8);
+    for (const char c : text) {
+        switch (c) {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\f': out += "\\f"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default: {
+            const auto u = static_cast<unsigned char>(c);
+            if (u < 0x20U) {
+                out += "\\u00";
+                out.push_back(kHex[u >> 4U]);
+                out.push_back(kHex[u & 0x0FU]);
+            } else {
+                out.push_back(c);
+            }
+        }
+        }
+    }
+    return out;
+}
+
+std::string JsonFormatter::format(const LogRecord& record) const {
+    std::string line = "{\"timestamp\":\"";
+    line += Time::formatIso8601(record.timestamp);
+    line += "\",\"level\":\"";
+    line += toString(record.level);
+    line += "\",\"logger\":\"";
+    line += escape(record.loggerName);
+    line += "\",\"message\":\"";
+    line += escape(record.message);
+    line += "\",\"thread\":\"";
+    line += escape(threadIdString(record.threadId));
+    line += "\",\"file\":\"";
+    line += escape(baseName(record.location.file_name()));
+    line += "\",\"line\":";
+    line += std::to_string(record.location.line());
+    line += '}';
+    return line;
+}
+
+// ===================================================================================================
+// Sink base
+// ===================================================================================================
+
+Sink::Sink() : formatter_(std::make_shared<PatternFormatter>()) {}
+
+void Sink::write(const LogRecord& record) {
+    if (record.level == LogLevel::Off || record.level < level()) {
+        return;
+    }
+    const std::lock_guard lock(mutex_);
+    if (wantsFormattedLine()) {
+        const std::string line = formatter_->format(record);
+        consume(line, record);
+    } else {
+        consume({}, record);
+    }
+    written_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void Sink::flush() {
+    const std::lock_guard lock(mutex_);
+    doFlush();
+}
+
+void Sink::setFormatter(std::shared_ptr<const Formatter> formatter) {
+    const std::lock_guard lock(mutex_);
+    formatter_ = formatter ? std::move(formatter) : std::make_shared<PatternFormatter>();
+}
+
+// ===================================================================================================
+// Concrete sinks
+// ===================================================================================================
+
+void OStreamSink::consume(std::string_view line, const LogRecord& /*record*/) {
+    *stream_ << line << '\n';
+    if (flushEachLine_) {
+        stream_->flush();
+    }
+}
+
+void OStreamSink::doFlush() { stream_->flush(); }
+
+std::string StringSink::str() const {
+    const std::lock_guard lock(mutex_);
+    std::string all;
+    for (const auto& l : lines_) {
+        all += l;
+        all.push_back('\n');
+    }
+    return all;
+}
+
+std::vector<std::string> StringSink::lines() const {
+    const std::lock_guard lock(mutex_);
+    return lines_;
+}
+
+void StringSink::clear() {
+    const std::lock_guard lock(mutex_);
+    lines_.clear();
+}
+
+void StringSink::consume(std::string_view line, const LogRecord& /*record*/) { lines_.emplace_back(line); }
+
+RingBufferSink::RingBufferSink(std::size_t capacity) : capacity_(std::max<std::size_t>(capacity, 1)) {}
+
+std::vector<std::string> RingBufferSink::lines() const {
+    const std::lock_guard lock(mutex_);
+    return {buffer_.begin(), buffer_.end()};
+}
+
+void RingBufferSink::consume(std::string_view line, const LogRecord& /*record*/) {
+    if (buffer_.size() == capacity_) {
+        buffer_.pop_front();
+    }
+    buffer_.emplace_back(line);
+}
+
+void CallbackSink::consume(std::string_view line, const LogRecord& record) {
+    if (callback_) {
+        callback_(line, record);
+    }
+}
+
+FileSink::FileSink(std::filesystem::path path, std::uintmax_t maxBytes, unsigned maxBackups)
+    : path_(std::move(path)), maxBytes_(maxBytes), maxBackups_(maxBackups) {
+    if (path_.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(path_.parent_path(), ec);
+    }
+    file_.open(path_, std::ios::out | std::ios::app);
+    if (!file_.is_open()) {
+        throw std::runtime_error("FileSink: cannot open log file '" + path_.string() + "'");
+    }
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path_, ec);
+    currentBytes_ = ec ? 0 : size;
+}
+
+std::size_t FileSink::rotations() const {
+    const std::lock_guard lock(mutex_);
+    return rotations_;
+}
+
+void FileSink::consume(std::string_view line, const LogRecord& /*record*/) {
+    if (!file_.is_open()) {
+        return;
+    }
+    file_ << line << '\n';
+    currentBytes_ += line.size() + 1;
+    if (maxBytes_ > 0 && currentBytes_ >= maxBytes_) {
+        rotate();
+    }
+}
+
+void FileSink::doFlush() {
+    if (file_.is_open()) {
+        file_.flush();
+    }
+}
+
+void FileSink::rotate() {
+    file_.close();
+    std::error_code ec;
+    auto backup = [this](unsigned index) {
+        std::filesystem::path p = path_;
+        p += "." + std::to_string(index);
+        return p;
+    };
+    if (maxBackups_ == 0) {
+        std::filesystem::remove(path_, ec);
+    } else {
+        std::filesystem::remove(backup(maxBackups_), ec);
+        for (unsigned i = maxBackups_; i > 1; --i) {
+            if (std::filesystem::exists(backup(i - 1), ec)) {
+                std::filesystem::rename(backup(i - 1), backup(i), ec);
+            }
+        }
+        std::filesystem::rename(path_, backup(1), ec);
+    }
+    file_.open(path_, std::ios::out | std::ios::trunc);
+    currentBytes_ = 0;
+    ++rotations_;
+}
+
+AsyncSink::AsyncSink(std::shared_ptr<Sink> target, std::size_t maxQueue)
+    : target_(std::move(target)), maxQueue_(std::max<std::size_t>(maxQueue, 1)) {
+    if (!target_) {
+        throw std::invalid_argument("AsyncSink: target sink must not be null");
+    }
+    worker_ = std::thread([this] { run(); });
+}
+
+AsyncSink::~AsyncSink() {
+    {
+        const std::lock_guard lock(queueMutex_);
+        stopping_ = true;
+    }
+    queueCv_.notify_all();
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+}
+
+void AsyncSink::consume(std::string_view /*line*/, const LogRecord& record) {
+    {
+        const std::lock_guard lock(queueMutex_);
+        if (queue_.size() >= maxQueue_) {
+            queue_.pop_front();
+            dropped_.fetch_add(1, std::memory_order_relaxed);
+        }
+        queue_.push_back(record);
+    }
+    queueCv_.notify_one();
+}
+
+void AsyncSink::doFlush() {
+    {
+        std::unique_lock lock(queueMutex_);
+        idleCv_.wait(lock, [this] { return queue_.empty() && !busy_; });
+    }
+    target_->flush();
+}
+
+void AsyncSink::run() {
+    std::unique_lock lock(queueMutex_);
+    while (true) {
+        queueCv_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
+        if (queue_.empty()) {
+            if (stopping_) {
+                break;
+            }
+            continue;
+        }
+        LogRecord record = std::move(queue_.front());
+        queue_.pop_front();
+        busy_ = true;
+        lock.unlock();
+        try {
+            target_->write(record);
+        } catch (...) { // NOLINT(bugprone-empty-catch): a failing sink must not kill the worker
+        }
+        lock.lock();
+        busy_ = false;
+        if (queue_.empty()) {
+            idleCv_.notify_all();
+        }
+    }
+    lock.unlock();
+    try {
+        target_->flush();
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+    }
+}
+
+// ===================================================================================================
+// Logger
+// ===================================================================================================
+
+Logger::Logger(std::string name, LogLevel level) : name_(std::move(name)), level_(level) {}
+
+void Logger::addSink(std::shared_ptr<Sink> sink) {
+    if (!sink) {
+        return;
+    }
+    const std::unique_lock lock(sinksMutex_);
+    sinks_.push_back(std::move(sink));
+    sinkCount_.store(sinks_.size(), std::memory_order_relaxed);
+}
+
+bool Logger::removeSink(const std::shared_ptr<Sink>& sink) {
+    const std::unique_lock lock(sinksMutex_);
+    const auto it = std::find(sinks_.begin(), sinks_.end(), sink);
+    if (it == sinks_.end()) {
+        return false;
+    }
+    sinks_.erase(it);
+    sinkCount_.store(sinks_.size(), std::memory_order_relaxed);
+    return true;
+}
+
+void Logger::clearSinks() {
+    const std::unique_lock lock(sinksMutex_);
+    sinks_.clear();
+    sinkCount_.store(0, std::memory_order_relaxed);
+}
+
+std::vector<std::shared_ptr<Sink>> Logger::snapshotSinks() const {
+    const std::shared_lock lock(sinksMutex_);
+    return sinks_;
+}
+
+void Logger::log(LogLevel messageLevel, std::string_view message, std::source_location location) {
+    if (!shouldLog(messageLevel)) {
+        return;
+    }
+    const auto sinks = snapshotSinks();
+    if (sinks.empty()) {
+        return;
+    }
+    LogRecord record;
+    record.timestamp = std::chrono::system_clock::now();
+    record.level = messageLevel;
+    record.loggerName = name_;
+    record.message = std::string{message};
+    record.location = location;
+    record.threadId = std::this_thread::get_id();
+
+    counts_[static_cast<std::size_t>(messageLevel)].fetch_add(1, std::memory_order_relaxed);
+    for (const auto& sink : sinks) {
+        try {
+            sink->write(record);
+        } catch (...) {
+            sinkErrors_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
 
-// Auto-register cleanup on library load
-static int auto_register = (CppVerseHub::Utils::register_cleanup(), 0);
+void Logger::flush() {
+    for (const auto& sink : snapshotSinks()) {
+        try {
+            sink->flush();
+        } catch (...) {
+            sinkErrors_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+}
+
+std::size_t Logger::count(LogLevel messageLevel) const noexcept {
+    const auto index = static_cast<std::size_t>(messageLevel);
+    return index < counts_.size() ? counts_[index].load(std::memory_order_relaxed) : 0;
+}
+
+// ===================================================================================================
+// LoggerRegistry
+// ===================================================================================================
+
+LoggerRegistry& LoggerRegistry::instance() {
+    static LoggerRegistry registry;
+    return registry;
+}
+
+std::shared_ptr<Logger> LoggerRegistry::get(const std::string& name) {
+    const std::lock_guard lock(mutex_);
+    auto& slot = loggers_[name];
+    if (!slot) {
+        slot = std::make_shared<Logger>(name, defaultLevel_);
+    }
+    return slot;
+}
+
+bool LoggerRegistry::contains(const std::string& name) const {
+    const std::lock_guard lock(mutex_);
+    return loggers_.find(name) != loggers_.end();
+}
+
+void LoggerRegistry::setGlobalLevel(LogLevel level) {
+    const std::lock_guard lock(mutex_);
+    defaultLevel_ = level;
+    for (auto& [name, logger] : loggers_) {
+        logger->setLevel(level);
+    }
+}
+
+bool LoggerRegistry::remove(const std::string& name) {
+    const std::lock_guard lock(mutex_);
+    return loggers_.erase(name) > 0;
+}
+
+void LoggerRegistry::clear() {
+    const std::lock_guard lock(mutex_);
+    loggers_.clear();
+}
+
+std::size_t LoggerRegistry::size() const {
+    const std::lock_guard lock(mutex_);
+    return loggers_.size();
+}
+
+// ===================================================================================================
+// ScopedLogTimer
+// ===================================================================================================
+
+ScopedLogTimer::ScopedLogTimer(Logger& logger, std::string label, LogLevel level)
+    : logger_(&logger), label_(std::move(label)), level_(level), start_(std::chrono::steady_clock::now()) {}
+
+ScopedLogTimer::~ScopedLogTimer() {
+    try {
+        if (logger_->shouldLog(level_)) {
+            const auto us =
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_);
+            logger_->log(level_, detail::concat(label_, " took ", us.count(), " us"));
+        }
+    } catch (...) { // NOLINT(bugprone-empty-catch): destructors must not throw
+    }
+}
+
+// ===================================================================================================
+// Demo
+// ===================================================================================================
+
+void demonstrateLogging(std::ostream& out) {
+    out << "=== Logging ===\n";
+
+    Logger silent{"silent"};
+    silent.info("nobody hears this");
+    out << "Logger without sinks emitted " << silent.count(LogLevel::Info) << " records (silent by default)\n";
+
+    // Human-readable output straight to the caller's stream (timestamps omitted for determinism).
+    Logger logger{"demo", LogLevel::Debug};
+    auto streamSink = std::make_shared<OStreamSink>(out);
+    PatternFormatter::Options opts;
+    opts.timestamp = false;
+    streamSink->setFormatter(std::make_shared<PatternFormatter>(opts));
+    logger.addSink(streamSink);
+
+    logger.trace("filtered out: below Debug");
+    logger.debug("debug message");
+    logger.info("fleet ready");
+    logger.logArgs(LogLevel::Warn, "fuel at ", 12.5, "%");
+    CPPVERSEHUB_LOG(logger, LogLevel::Error, "shield failure on deck ", 7);
+
+    // Per-sink filtering and JSON formatting.
+    auto jsonSink = std::make_shared<StringSink>();
+    jsonSink->setFormatter(std::make_shared<JsonFormatter>());
+    jsonSink->setLevel(LogLevel::Error);
+    logger.addSink(jsonSink);
+    logger.error("reactor \"core\" overheating");
+    out << "JSON sink captured: " << jsonSink->lines().size() << " line(s)\n";
+
+    // Asynchronous fan-in from several threads into a ring buffer.
+    auto ring = std::make_shared<RingBufferSink>(5);
+    {
+        Logger asyncLogger{"async", LogLevel::Info};
+        auto async = std::make_shared<AsyncSink>(ring);
+        asyncLogger.addSink(async);
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 4; ++t) {
+            threads.emplace_back([&asyncLogger, t] {
+                for (int i = 0; i < 25; ++i) {
+                    asyncLogger.logArgs(LogLevel::Info, "thread ", t, " message ", i);
+                }
+            });
+        }
+        for (auto& th : threads) {
+            th.join();
+        }
+        asyncLogger.flush();
+        out << "AsyncSink delivered " << ring->recordsWritten() << " records; ring keeps last "
+            << ring->lines().size() << '\n';
+    }
+
+    {
+        ScopedLogTimer timer{logger, "scoped work", LogLevel::Off};
+    }
+    out << "Records emitted by 'demo': info=" << logger.count(LogLevel::Info)
+        << " warn=" << logger.count(LogLevel::Warn) << " error=" << logger.count(LogLevel::Error) << '\n';
+    logger.flush();
+}
+
+} // namespace CppVerseHub::Utils

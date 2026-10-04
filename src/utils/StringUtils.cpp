@@ -1,1009 +1,896 @@
-// File: src/utils/StringUtils.cpp
-// String Manipulation Utilities Implementation
+/**
+ * @file StringUtils.cpp
+ * @brief Implementation of the string utilities declared in StringUtils.hpp.
+ */
+#include "utils/StringUtils.hpp"
 
-#include "StringUtils.hpp"
-#include <iostream>
-#include <chrono>
-#include <ctime>
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
 #include <iomanip>
+#include <limits>
+#include <locale>
+#include <stdexcept>
 
 namespace CppVerseHub::Utils::String {
 
-// ===== STRING CONSTANTS =====
+namespace {
 
-namespace Constants {
-    const std::string WHITESPACE_CHARS = " \t\n\r\f\v";
-    const std::string ALPHANUMERIC_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const std::string ALPHABETIC_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const std::string NUMERIC_CHARS = "0123456789";
-    const std::string HEX_CHARS = "0123456789ABCDEFabcdef";
-    const std::string SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?";
-    const std::string VOWELS = "aeiouAEIOU";
-    const std::string CONSONANTS = "bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ";
+constexpr bool isSpace(char c) noexcept {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
+constexpr bool isUpper(char c) noexcept { return c >= 'A' && c <= 'Z'; }
+constexpr bool isLower(char c) noexcept { return c >= 'a' && c <= 'z'; }
+constexpr bool isDigit(char c) noexcept { return c >= '0' && c <= '9'; }
+constexpr bool isAlpha(char c) noexcept { return isUpper(c) || isLower(c); }
+constexpr bool isAlnum(char c) noexcept { return isAlpha(c) || isDigit(c); }
+constexpr char upper(char c) noexcept { return isLower(c) ? static_cast<char>(c - 'a' + 'A') : c; }
+constexpr char lower(char c) noexcept { return isUpper(c) ? static_cast<char>(c - 'A' + 'a') : c; }
 
-// ===== BASIC STRING OPERATIONS =====
-
-std::string trim(const std::string& str) {
-    size_t start = str.find_first_not_of(Constants::WHITESPACE_CHARS);
-    if (start == std::string::npos) return "";
-    
-    size_t end = str.find_last_not_of(Constants::WHITESPACE_CHARS);
-    return str.substr(start, end - start + 1);
-}
-
-std::string trimLeft(const std::string& str) {
-    size_t start = str.find_first_not_of(Constants::WHITESPACE_CHARS);
-    return (start == std::string::npos) ? "" : str.substr(start);
-}
-
-std::string trimRight(const std::string& str) {
-    size_t end = str.find_last_not_of(Constants::WHITESPACE_CHARS);
-    return (end == std::string::npos) ? "" : str.substr(0, end + 1);
-}
-
-std::string trimChars(const std::string& str, const std::string& chars) {
-    size_t start = str.find_first_not_of(chars);
-    if (start == std::string::npos) return "";
-    
-    size_t end = str.find_last_not_of(chars);
-    return str.substr(start, end - start + 1);
-}
-
-std::string toUpper(const std::string& str) {
-    std::string result = str;
-    std::transform(result.begin(), result.end(), result.begin(), ::toupper);
-    return result;
-}
-
-std::string toLower(const std::string& str) {
-    std::string result = str;
-    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
-    return result;
-}
-
-std::string toTitle(const std::string& str) {
-    std::string result = str;
-    bool capitalize_next = true;
-    
-    for (char& c : result) {
-        if (std::isalpha(c)) {
-            c = capitalize_next ? std::toupper(c) : std::tolower(c);
-            capitalize_next = false;
-        } else {
-            capitalize_next = true;
+/// Splits identifiers into lower-cased words at separators and lower->upper transitions.
+std::vector<std::string> identifierWords(std::string_view text) {
+    std::vector<std::string> words;
+    std::string current;
+    auto flush = [&] {
+        if (!current.empty()) {
+            words.push_back(std::move(current));
+            current.clear();
         }
-    }
-    
-    return result;
-}
-
-std::string toCamelCase(const std::string& str) {
-    std::vector<std::string> words = splitByWhitespace(str);
-    if (words.empty()) return "";
-    
-    std::string result = toLower(words[0]);
-    for (size_t i = 1; i < words.size(); ++i) {
-        if (!words[i].empty()) {
-            result += static_cast<char>(std::toupper(words[i][0]));
-            result += toLower(words[i].substr(1));
+    };
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (!isAlnum(c)) {
+            flush();
+            continue;
         }
-    }
-    
-    return result;
-}
-
-std::string toPascalCase(const std::string& str) {
-    std::vector<std::string> words = splitByWhitespace(str);
-    std::string result;
-    
-    for (const auto& word : words) {
-        if (!word.empty()) {
-            result += static_cast<char>(std::toupper(word[0]));
-            result += toLower(word.substr(1));
-        }
-    }
-    
-    return result;
-}
-
-std::string toSnakeCase(const std::string& str) {
-    std::string result;
-    for (size_t i = 0; i < str.length(); ++i) {
-        if (std::isupper(str[i])) {
-            if (i > 0 && std::islower(str[i-1])) {
-                result += '_';
+        if (isUpper(c) && !current.empty()) {
+            const bool prevLower = isLower(text[i - 1]) || isDigit(text[i - 1]);
+            const bool nextLower = i + 1 < text.size() && isLower(text[i + 1]);
+            // "parseHTTPResponse" -> parse, http, response
+            if (prevLower || (isUpper(text[i - 1]) && nextLower)) {
+                flush();
             }
-            result += static_cast<char>(std::tolower(str[i]));
-        } else if (std::isspace(str[i])) {
-            result += '_';
-        } else {
-            result += str[i];
         }
+        current.push_back(lower(c));
     }
-    
-    return result;
+    flush();
+    return words;
 }
 
-std::string toKebabCase(const std::string& str) {
-    return replaceAll(toSnakeCase(str), "_", "-");
+constexpr std::string_view kBase64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+constexpr int base64Value(char c) noexcept {
+    if (isUpper(c)) return c - 'A';
+    if (isLower(c)) return c - 'a' + 26;
+    if (isDigit(c)) return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
 }
 
-// ===== STRING PREDICATES =====
-
-bool startsWith(const std::string& str, const std::string& prefix) {
-    return str.length() >= prefix.length() && 
-           str.compare(0, prefix.length(), prefix) == 0;
+constexpr int hexValue(char c) noexcept {
+    if (isDigit(c)) return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
 }
 
-bool endsWith(const std::string& str, const std::string& suffix) {
-    return str.length() >= suffix.length() && 
-           str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
-}
+constexpr char kHexDigits[] = "0123456789abcdef";
 
-bool contains(const std::string& str, const std::string& substring) {
-    return str.find(substring) != std::string::npos;
-}
-
-bool containsIgnoreCase(const std::string& str, const std::string& substring) {
-    return contains(toLower(str), toLower(substring));
-}
-
-bool isAlpha(const std::string& str) {
-    return !str.empty() && std::all_of(str.begin(), str.end(), [](char c) { return std::isalpha(c); });
-}
-
-bool isNumeric(const std::string& str) {
-    if (str.empty()) return false;
-    
-    size_t start = 0;
-    if (str[0] == '-' || str[0] == '+') start = 1;
-    
-    bool has_dot = false;
-    for (size_t i = start; i < str.length(); ++i) {
-        if (str[i] == '.' && !has_dot) {
-            has_dot = true;
-        } else if (!std::isdigit(str[i])) {
-            return false;
+/// Decodes one UTF-8 sequence starting at `i`; returns code point and advances `i`, or nullopt.
+std::optional<char32_t> decodeOne(std::string_view text, std::size_t& i) noexcept {
+    const auto b0 = static_cast<unsigned char>(text[i]);
+    std::size_t length = 0;
+    char32_t cp = 0;
+    char32_t minimum = 0;
+    if (b0 < 0x80U) {
+        ++i;
+        return static_cast<char32_t>(b0);
+    }
+    if ((b0 & 0xE0U) == 0xC0U) {
+        length = 2;
+        cp = b0 & 0x1FU;
+        minimum = 0x80;
+    } else if ((b0 & 0xF0U) == 0xE0U) {
+        length = 3;
+        cp = b0 & 0x0FU;
+        minimum = 0x800;
+    } else if ((b0 & 0xF8U) == 0xF0U) {
+        length = 4;
+        cp = b0 & 0x07U;
+        minimum = 0x10000;
+    } else {
+        return std::nullopt;
+    }
+    if (i + length > text.size()) {
+        return std::nullopt;
+    }
+    for (std::size_t k = 1; k < length; ++k) {
+        const auto b = static_cast<unsigned char>(text[i + k]);
+        if ((b & 0xC0U) != 0x80U) {
+            return std::nullopt;
         }
+        cp = (cp << 6U) | (b & 0x3FU);
     }
-    
-    return start < str.length();
-}
-
-bool isAlphaNumeric(const std::string& str) {
-    return !str.empty() && std::all_of(str.begin(), str.end(), [](char c) { return std::isalnum(c); });
-}
-
-bool isEmpty(const std::string& str) {
-    return str.empty();
-}
-
-bool isWhitespace(const std::string& str) {
-    return !str.empty() && std::all_of(str.begin(), str.end(), [](char c) { return std::isspace(c); });
-}
-
-// ===== SPLITTING AND JOINING =====
-
-std::vector<std::string> split(const std::string& str, char delimiter) {
-    std::vector<std::string> tokens;
-    std::stringstream ss(str);
-    std::string token;
-    
-    while (std::getline(ss, token, delimiter)) {
-        tokens.push_back(token);
+    if (cp < minimum || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+        return std::nullopt;
     }
-    
-    return tokens;
+    i += length;
+    return cp;
 }
 
-std::vector<std::string> split(const std::string& str, const std::string& delimiter) {
-    std::vector<std::string> tokens;
-    
+} // namespace
+
+// ===================================================================================================
+// Trimming, splitting, joining
+// ===================================================================================================
+
+std::string trim(std::string_view text) { return std::string{trimView(text)}; }
+
+std::vector<std::string> split(std::string_view text, char delimiter, bool skipEmpty) {
+    std::vector<std::string> parts;
+    std::size_t start = 0;
+    while (true) {
+        const auto pos = text.find(delimiter, start);
+        const auto field = text.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start);
+        if (!skipEmpty || !field.empty()) {
+            parts.emplace_back(field);
+        }
+        if (pos == std::string_view::npos) {
+            break;
+        }
+        start = pos + 1;
+    }
+    return parts;
+}
+
+std::vector<std::string> split(std::string_view text, std::string_view delimiter, bool skipEmpty) {
     if (delimiter.empty()) {
-        tokens.push_back(str);
-        return tokens;
+        return {std::string{text}};
     }
-    
-    size_t start = 0;
-    size_t found = str.find(delimiter);
-    
-    while (found != std::string::npos) {
-        tokens.push_back(str.substr(start, found - start));
-        start = found + delimiter.length();
-        found = str.find(delimiter, start);
+    std::vector<std::string> parts;
+    std::size_t start = 0;
+    while (true) {
+        const auto pos = text.find(delimiter, start);
+        const auto field = text.substr(start, pos == std::string_view::npos ? std::string_view::npos : pos - start);
+        if (!skipEmpty || !field.empty()) {
+            parts.emplace_back(field);
+        }
+        if (pos == std::string_view::npos) {
+            break;
+        }
+        start = pos + delimiter.size();
     }
-    
-    tokens.push_back(str.substr(start));
-    return tokens;
+    return parts;
 }
 
-std::vector<std::string> splitByWhitespace(const std::string& str) {
+std::vector<std::string> splitWhitespace(std::string_view text) {
+    std::vector<std::string> words;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && isSpace(text[i])) {
+            ++i;
+        }
+        const std::size_t start = i;
+        while (i < text.size() && !isSpace(text[i])) {
+            ++i;
+        }
+        if (i > start) {
+            words.emplace_back(text.substr(start, i - start));
+        }
+    }
+    return words;
+}
+
+std::vector<std::string> tokenize(std::string_view text) {
     std::vector<std::string> tokens;
-    std::istringstream iss(str);
-    std::string token;
-    
-    while (iss >> token) {
-        tokens.push_back(token);
+    std::string current;
+    bool inToken = false;
+    char quote = '\0';
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (quote != '\0') {
+            if (c == quote) {
+                quote = '\0';
+            } else if (c == '\\' && quote == '"' && i + 1 < text.size()) {
+                current.push_back(text[++i]);
+            } else {
+                current.push_back(c);
+            }
+        } else if (c == '"' || c == '\'') {
+            quote = c;
+            inToken = true;
+        } else if (c == '\\' && i + 1 < text.size()) {
+            current.push_back(text[++i]);
+            inToken = true;
+        } else if (isSpace(c)) {
+            if (inToken) {
+                tokens.push_back(std::move(current));
+                current.clear();
+                inToken = false;
+            }
+        } else {
+            current.push_back(c);
+            inToken = true;
+        }
     }
-    
+    if (quote != '\0') {
+        throw std::invalid_argument("tokenize: unterminated quote");
+    }
+    if (inToken) {
+        tokens.push_back(std::move(current));
+    }
     return tokens;
 }
 
-std::vector<std::string> splitLines(const std::string& str) {
-    std::vector<std::string> lines;
-    std::stringstream ss(str);
-    std::string line;
-    
-    while (std::getline(ss, line)) {
-        lines.push_back(line);
+// ===================================================================================================
+// Case and predicates
+// ===================================================================================================
+
+std::string toUpper(std::string_view text) {
+    std::string out{text};
+    std::transform(out.begin(), out.end(), out.begin(), upper);
+    return out;
+}
+
+std::string toLower(std::string_view text) {
+    std::string out{text};
+    std::transform(out.begin(), out.end(), out.begin(), lower);
+    return out;
+}
+
+std::string toTitleCase(std::string_view text) {
+    std::string out{text};
+    bool startOfWord = true;
+    for (char& c : out) {
+        if (isAlnum(c)) {
+            c = startOfWord ? upper(c) : lower(c);
+            startOfWord = false;
+        } else {
+            startOfWord = true;
+        }
     }
-    
-    return lines;
+    return out;
 }
 
-std::vector<std::string> tokenize(const std::string& str, const std::string& delimiters) {
-    std::vector<std::string> tokens;
-    size_t start = str.find_first_not_of(delimiters);
-    
-    while (start != std::string::npos) {
-        size_t end = str.find_first_of(delimiters, start);
-        tokens.push_back(str.substr(start, end - start));
-        start = str.find_first_not_of(delimiters, end);
+std::string toCamelCase(std::string_view text) {
+    const auto words = identifierWords(text);
+    std::string out;
+    for (std::size_t i = 0; i < words.size(); ++i) {
+        std::string word = words[i];
+        if (i > 0 && !word.empty()) {
+            word[0] = upper(word[0]);
+        }
+        out += word;
     }
-    
-    return tokens;
+    return out;
 }
 
-std::string join(const std::vector<std::string>& strings, const std::string& separator) {
-    if (strings.empty()) return "";
-    
-    std::string result = strings[0];
-    for (size_t i = 1; i < strings.size(); ++i) {
-        result += separator + strings[i];
+std::string toSnakeCase(std::string_view text) { return join(identifierWords(text), "_"); }
+
+std::string toKebabCase(std::string_view text) { return join(identifierWords(text), "-"); }
+
+bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return lower(x) == lower(y); });
+}
+
+std::size_t countOccurrences(std::string_view text, std::string_view needle) noexcept {
+    if (needle.empty()) {
+        return 0;
     }
-    
-    return result;
-}
-
-std::string join(const std::vector<std::string>& strings, char separator) {
-    return join(strings, std::string(1, separator));
-}
-
-// ===== SEARCH AND REPLACE =====
-
-std::string replace(const std::string& str, const std::string& from, const std::string& to) {
-    return replaceFirst(str, from, to);
-}
-
-std::string replaceAll(const std::string& str, const std::string& from, const std::string& to) {
-    if (from.empty()) return str;
-    
-    std::string result = str;
-    size_t pos = 0;
-    
-    while ((pos = result.find(from, pos)) != std::string::npos) {
-        result.replace(pos, from.length(), to);
-        pos += to.length();
-    }
-    
-    return result;
-}
-
-std::string replaceFirst(const std::string& str, const std::string& from, const std::string& to) {
-    size_t pos = str.find(from);
-    if (pos != std::string::npos) {
-        std::string result = str;
-        result.replace(pos, from.length(), to);
-        return result;
-    }
-    return str;
-}
-
-std::string replaceLast(const std::string& str, const std::string& from, const std::string& to) {
-    size_t pos = str.rfind(from);
-    if (pos != std::string::npos) {
-        std::string result = str;
-        result.replace(pos, from.length(), to);
-        return result;
-    }
-    return str;
-}
-
-size_t findNth(const std::string& str, const std::string& substring, size_t n) {
-    size_t pos = 0;
-    
-    for (size_t i = 0; i < n; ++i) {
-        pos = str.find(substring, pos);
-        if (pos == std::string::npos) break;
-        if (i < n - 1) pos += substring.length();
-    }
-    
-    return pos;
-}
-
-std::vector<size_t> findAll(const std::string& str, const std::string& substring) {
-    std::vector<size_t> positions;
-    size_t pos = str.find(substring);
-    
-    while (pos != std::string::npos) {
-        positions.push_back(pos);
-        pos = str.find(substring, pos + 1);
-    }
-    
-    return positions;
-}
-
-size_t countOccurrences(const std::string& str, const std::string& substring) {
-    if (substring.empty()) return 0;
-    
-    size_t count = 0;
-    size_t pos = str.find(substring);
-    
-    while (pos != std::string::npos) {
+    std::size_t count = 0;
+    for (auto pos = text.find(needle); pos != std::string_view::npos; pos = text.find(needle, pos + needle.size())) {
         ++count;
-        pos = str.find(substring, pos + substring.length());
     }
-    
     return count;
 }
 
-size_t countOccurrences(const std::string& str, char character) {
-    return std::count(str.begin(), str.end(), character);
-}
-
-// ===== PADDING AND ALIGNMENT =====
-
-std::string padLeft(const std::string& str, size_t width, char pad_char) {
-    if (str.length() >= width) return str;
-    return std::string(width - str.length(), pad_char) + str;
-}
-
-std::string padRight(const std::string& str, size_t width, char pad_char) {
-    if (str.length() >= width) return str;
-    return str + std::string(width - str.length(), pad_char);
-}
-
-std::string padCenter(const std::string& str, size_t width, char pad_char) {
-    if (str.length() >= width) return str;
-    
-    size_t pad_total = width - str.length();
-    size_t pad_left = pad_total / 2;
-    size_t pad_right = pad_total - pad_left;
-    
-    return std::string(pad_left, pad_char) + str + std::string(pad_right, pad_char);
-}
-
-std::string repeat(const std::string& str, size_t count) {
-    std::string result;
-    result.reserve(str.length() * count);
-    
-    for (size_t i = 0; i < count; ++i) {
-        result += str;
-    }
-    
-    return result;
-}
-
-std::string repeat(char character, size_t count) {
-    return std::string(count, character);
-}
-
-// ===== FORMATTING UTILITIES =====
-
-std::string formatNumber(double number, int precision) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(precision) << number;
-    return oss.str();
-}
-
-std::string formatInteger(long long number, bool use_thousands_separator) {
-    std::ostringstream oss;
-    
-    if (use_thousands_separator) {
-        oss.imbue(std::locale(""));
-    }
-    
-    oss << number;
-    return oss.str();
-}
-
-std::string formatBytes(size_t bytes) {
-    const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
-    int unit_index = 0;
-    double size = static_cast<double>(bytes);
-    
-    while (size >= 1024.0 && unit_index < 5) {
-        size /= 1024.0;
-        ++unit_index;
-    }
-    
-    std::ostringstream oss;
-    if (unit_index == 0) {
-        oss << static_cast<size_t>(size) << " " << units[unit_index];
-    } else {
-        oss << std::fixed << std::setprecision(1) << size << " " << units[unit_index];
-    }
-    
-    return oss.str();
-}
-
-std::string formatPercent(double value, int precision) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(precision) << (value * 100.0) << "%";
-    return oss.str();
-}
-
-std::string formatDuration(double seconds) {
-    int days = static_cast<int>(seconds / 86400);
-    seconds = std::fmod(seconds, 86400);
-    
-    int hours = static_cast<int>(seconds / 3600);
-    seconds = std::fmod(seconds, 3600);
-    
-    int minutes = static_cast<int>(seconds / 60);
-    seconds = std::fmod(seconds, 60);
-    
-    std::ostringstream oss;
-    
-    if (days > 0) {
-        oss << days << "d ";
-    }
-    if (hours > 0 || days > 0) {
-        oss << hours << "h ";
-    }
-    if (minutes > 0 || hours > 0 || days > 0) {
-        oss << minutes << "m ";
-    }
-    
-    oss << std::fixed << std::setprecision(1) << seconds << "s";
-    
-    return oss.str();
-}
-
-std::string formatFileSize(size_t bytes) {
-    return formatBytes(bytes);
-}
-
-// ===== VALIDATION AND PARSING =====
-
-bool isValidEmail(const std::string& email) {
-    std::regex email_regex(R"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})");
-    return std::regex_match(email, email_regex);
-}
-
-bool isValidUrl(const std::string& url) {
-    std::regex url_regex(R"(https?://[^\s/$.?#].[^\s]*)");
-    return std::regex_match(url, url_regex);
-}
-
-bool isValidIPv4(const std::string& ip) {
-    std::regex ipv4_regex(R"(^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)");
-    return std::regex_match(ip, ipv4_regex);
-}
-
-bool isValidIPv6(const std::string& ip) {
-    // Simplified IPv6 validation
-    std::regex ipv6_regex(R"(^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$)");
-    return std::regex_match(ip, ipv6_regex);
-}
-
-bool isValidHexColor(const std::string& color) {
-    std::regex color_regex(R"(^#[0-9a-fA-F]{6}$)");
-    return std::regex_match(color, color_regex);
-}
-
-bool isValidUUID(const std::string& uuid) {
-    std::regex uuid_regex(R"(^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$)");
-    return std::regex_match(uuid, uuid_regex);
-}
-
-std::optional<int> parseInt(const std::string& str) {
-    try {
-        return std::stoi(str);
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-std::optional<double> parseDouble(const std::string& str) {
-    try {
-        return std::stod(str);
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-std::optional<bool> parseBool(const std::string& str) {
-    std::string lower = toLower(trim(str));
-    
-    if (lower == "true" || lower == "1" || lower == "yes" || lower == "on") {
+bool isPalindrome(std::string_view text) noexcept {
+    if (text.empty()) {
         return true;
-    } else if (lower == "false" || lower == "0" || lower == "no" || lower == "off") {
-        return false;
     }
-    
-    return std::nullopt;
-}
-
-// ===== ENCODING AND ESCAPING =====
-
-std::string urlEncode(const std::string& str) {
-    std::ostringstream encoded;
-    encoded.fill('0');
-    encoded << std::hex;
-    
-    for (char c : str) {
-        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            encoded << c;
+    std::size_t i = 0;
+    std::size_t j = text.size() - 1;
+    while (i < j) {
+        if (!isAlnum(text[i])) {
+            ++i;
+        } else if (!isAlnum(text[j])) {
+            --j;
         } else {
-            encoded << std::uppercase << '%' << std::setw(2) << static_cast<int>(static_cast<unsigned char>(c));
-        }
-    }
-    
-    return encoded.str();
-}
-
-std::string urlDecode(const std::string& str) {
-    std::string decoded;
-    
-    for (size_t i = 0; i < str.length(); ++i) {
-        if (str[i] == '%' && i + 2 < str.length()) {
-            std::string hex = str.substr(i + 1, 2);
-            char c = static_cast<char>(std::stoi(hex, nullptr, 16));
-            decoded += c;
-            i += 2;
-        } else if (str[i] == '+') {
-            decoded += ' ';
-        } else {
-            decoded += str[i];
-        }
-    }
-    
-    return decoded;
-}
-
-std::string htmlEncode(const std::string& str) {
-    std::string encoded;
-    encoded.reserve(str.length() * 1.1);  // Rough estimate
-    
-    for (char c : str) {
-        switch (c) {
-            case '<': encoded += "&lt;"; break;
-            case '>': encoded += "&gt;"; break;
-            case '&': encoded += "&amp;"; break;
-            case '"': encoded += "&quot;"; break;
-            case '\'': encoded += "&apos;"; break;
-            default: encoded += c; break;
-        }
-    }
-    
-    return encoded;
-}
-
-std::string htmlDecode(const std::string& str) {
-    std::string decoded = str;
-    decoded = replaceAll(decoded, "&lt;", "<");
-    decoded = replaceAll(decoded, "&gt;", ">");
-    decoded = replaceAll(decoded, "&amp;", "&");
-    decoded = replaceAll(decoded, "&quot;", "\"");
-    decoded = replaceAll(decoded, "&apos;", "'");
-    return decoded;
-}
-
-std::string jsonEscape(const std::string& str) {
-    std::string escaped;
-    escaped.reserve(str.length() * 1.1);
-    
-    for (char c : str) {
-        switch (c) {
-            case '"': escaped += "\\\""; break;
-            case '\\': escaped += "\\\\"; break;
-            case '\b': escaped += "\\b"; break;
-            case '\f': escaped += "\\f"; break;
-            case '\n': escaped += "\\n"; break;
-            case '\r': escaped += "\\r"; break;
-            case '\t': escaped += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    escaped += "\\u";
-                    escaped += "0000";
-                    // Convert to hex
-                    char hex[3];
-                    sprintf(hex, "%02x", static_cast<unsigned char>(c));
-                    escaped[escaped.length()-2] = hex[0];
-                    escaped[escaped.length()-1] = hex[1];
-                } else {
-                    escaped += c;
-                }
-                break;
-        }
-    }
-    
-    return escaped;
-}
-
-std::string csvEscape(const std::string& str) {
-    bool needs_quoting = contains(str, ",") || contains(str, "\"") || contains(str, "\n");
-    
-    if (!needs_quoting) return str;
-    
-    std::string escaped = "\"" + replaceAll(str, "\"", "\"\"") + "\"";
-    return escaped;
-}
-
-// Simplified base64 implementation
-std::string base64Encode(const std::string& str) {
-    static const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string encoded;
-    int padding = str.length() % 3;
-    
-    for (size_t i = 0; i < str.length(); i += 3) {
-        uint32_t temp = 0;
-        
-        for (int j = 0; j < 3; ++j) {
-            temp <<= 8;
-            if (i + j < str.length()) {
-                temp |= static_cast<unsigned char>(str[i + j]);
+            if (lower(text[i]) != lower(text[j])) {
+                return false;
             }
-        }
-        
-        for (int j = 3; j >= 0; --j) {
-            if (i * 4 / 3 + j < (str.length() * 4 + 2) / 3) {
-                encoded += chars[(temp >> (j * 6)) & 0x3F];
-            }
+            ++i;
+            --j;
         }
     }
-    
-    if (padding > 0) {
-        encoded += std::string(3 - padding, '=');
-    }
-    
-    return encoded;
+    return true;
 }
 
-std::string base64Decode(const std::string& str) {
-    // Simplified implementation - in production use a more robust library
-    static const int decode_table[256] = {
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63,
-        52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1,
-        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
-        15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,
-        -1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
-        41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1
-    };
-    
-    std::string decoded;
-    uint32_t temp = 0;
-    int bits = 0;
-    
-    for (char c : str) {
-        if (c == '=') break;
-        
-        int val = decode_table[static_cast<unsigned char>(c)];
-        if (val == -1) continue;
-        
-        temp = (temp << 6) | val;
-        bits += 6;
-        
-        if (bits >= 8) {
-            decoded += static_cast<char>((temp >> (bits - 8)) & 0xFF);
-            bits -= 8;
-        }
-    }
-    
-    return decoded;
-}
-
-// ===== ADVANCED STRING OPERATIONS =====
-
-std::string reverse(const std::string& str) {
-    std::string reversed = str;
-    std::reverse(reversed.begin(), reversed.end());
-    return reversed;
-}
-
-std::string removeChars(const std::string& str, const std::string& chars_to_remove) {
-    std::string result;
-    result.reserve(str.length());
-    
-    for (char c : str) {
-        if (chars_to_remove.find(c) == std::string::npos) {
-            result += c;
-        }
-    }
-    
-    return result;
-}
-
-std::string keepChars(const std::string& str, const std::string& chars_to_keep) {
-    std::string result;
-    result.reserve(str.length());
-    
-    for (char c : str) {
-        if (chars_to_keep.find(c) != std::string::npos) {
-            result += c;
-        }
-    }
-    
-    return result;
-}
-
-std::string insertAt(const std::string& str, size_t position, const std::string& insertion) {
-    if (position >= str.length()) {
-        return str + insertion;
-    }
-    
-    return str.substr(0, position) + insertion + str.substr(position);
-}
-
-std::string removeAt(const std::string& str, size_t position, size_t length) {
-    if (position >= str.length()) {
-        return str;
-    }
-    
-    return str.substr(0, position) + str.substr(position + length);
-}
-
-std::string substring(const std::string& str, size_t start, size_t length) {
-    if (start >= str.length()) {
-        return "";
-    }
-    
-    return str.substr(start, length);
-}
-
-std::string left(const std::string& str, size_t count) {
-    return str.substr(0, count);
-}
-
-std::string right(const std::string& str, size_t count) {
-    if (count >= str.length()) {
-        return str;
-    }
-    
-    return str.substr(str.length() - count);
-}
-
-std::string mid(const std::string& str, size_t start, size_t length) {
-    return substring(str, start, length);
-}
-
-// ===== TEXT ANALYSIS =====
-
-size_t wordCount(const std::string& str) {
-    auto words = splitByWhitespace(str);
-    return words.size();
-}
-
-size_t lineCount(const std::string& str) {
-    return countOccurrences(str, '\n') + 1;
-}
-
-size_t characterCount(const std::string& str, bool include_spaces) {
-    if (include_spaces) {
-        return str.length();
-    }
-    
-    return str.length() - countOccurrences(str, ' ');
-}
-
-std::map<char, size_t> characterFrequency(const std::string& str) {
-    std::map<char, size_t> frequency;
-    
-    for (char c : str) {
-        frequency[c]++;
-    }
-    
-    return frequency;
-}
-
-double readabilityScore(const std::string& text) {
-    // Simple Flesch Reading Ease approximation
-    auto sentences = split(text, '.');
-    auto words = splitByWhitespace(text);
-    
-    if (sentences.empty() || words.empty()) {
-        return 0.0;
-    }
-    
-    size_t total_syllables = 0;
-    for (const auto& word : words) {
-        // Simple syllable counting heuristic
-        size_t syllables = std::max(1ul, countOccurrences(toLower(word), "aeiou"));
-        total_syllables += syllables;
-    }
-    
-    double avg_sentence_length = static_cast<double>(words.size()) / sentences.size();
-    double avg_syllables_per_word = static_cast<double>(total_syllables) / words.size();
-    
-    return 206.835 - (1.015 * avg_sentence_length) - (84.6 * avg_syllables_per_word);
-}
-
-// ===== STRING GENERATION =====
-
-std::string generateRandom(size_t length, const std::string& charset) {
-    static std::random_device rd;
-    static std::mt19937 generator(rd());
-    
-    std::uniform_int_distribution<> distribution(0, charset.size() - 1);
-    std::string result;
-    result.reserve(length);
-    
-    for (size_t i = 0; i < length; ++i) {
-        result += charset[distribution(generator)];
-    }
-    
-    return result;
-}
-
-std::string generateUUID() {
-    static std::random_device rd;
-    static std::mt19937 generator(rd());
-    static std::uniform_int_distribution<> hex_dist(0, 15);
-    
-    std::string uuid;
-    uuid.reserve(36);
-    
-    for (int i = 0; i < 36; ++i) {
-        if (i == 8 || i == 13 || i == 18 || i == 23) {
-            uuid += '-';
-        } else if (i == 14) {
-            uuid += '4';  // Version 4
-        } else if (i == 19) {
-            uuid += "89ab"[hex_dist(generator) % 4];  // Variant bits
+bool wildcardMatch(std::string_view text, std::string_view pattern) noexcept {
+    std::size_t t = 0;
+    std::size_t p = 0;
+    std::size_t starP = std::string_view::npos;
+    std::size_t starT = 0;
+    while (t < text.size()) {
+        if (p < pattern.size() && (pattern[p] == '?' || pattern[p] == text[t])) {
+            ++t;
+            ++p;
+        } else if (p < pattern.size() && pattern[p] == '*') {
+            starP = p++;
+            starT = t;
+        } else if (starP != std::string_view::npos) {
+            p = starP + 1;
+            t = ++starT;
         } else {
-            uuid += "0123456789abcdef"[hex_dist(generator)];
+            return false;
         }
     }
-    
-    return uuid;
+    while (p < pattern.size() && pattern[p] == '*') {
+        ++p;
+    }
+    return p == pattern.size();
 }
 
-std::string generatePassword(size_t length, bool include_symbols, bool include_numbers) {
-    std::string charset = Constants::ALPHABETIC_CHARS;
-    
-    if (include_numbers) {
-        charset += Constants::NUMERIC_CHARS;
+// ===================================================================================================
+// Transformations
+// ===================================================================================================
+
+std::string replaceAll(std::string_view text, std::string_view from, std::string_view to) {
+    if (from.empty()) {
+        return std::string{text};
     }
-    
-    if (include_symbols) {
-        charset += Constants::SPECIAL_CHARS;
+    std::string out;
+    out.reserve(text.size());
+    std::size_t start = 0;
+    for (auto pos = text.find(from); pos != std::string_view::npos; pos = text.find(from, start)) {
+        out += text.substr(start, pos - start);
+        out += to;
+        start = pos + from.size();
     }
-    
-    return generateRandom(length, charset);
+    out += text.substr(start);
+    return out;
 }
 
-// ===== UTILITY FUNCTIONS =====
-
-std::string escapeRegex(const std::string& str) {
-    std::string escaped;
-    const std::string special_chars = ".^$*+?()[{\\|";
-    
-    for (char c : str) {
-        if (special_chars.find(c) != std::string::npos) {
-            escaped += '\\';
-        }
-        escaped += c;
+std::string repeat(std::string_view text, std::size_t times) {
+    std::string out;
+    out.reserve(text.size() * times);
+    for (std::size_t i = 0; i < times; ++i) {
+        out += text;
     }
-    
-    return escaped;
+    return out;
 }
 
-std::string wrapText(const std::string& text, size_t width, const std::string& indent) {
-    if (width == 0) return text;
-    
-    std::vector<std::string> words = splitByWhitespace(text);
-    if (words.empty()) return text;
-    
+std::string padLeft(std::string_view text, std::size_t width, char fill) {
+    if (text.size() >= width) {
+        return std::string{text};
+    }
+    return std::string(width - text.size(), fill) + std::string{text};
+}
+
+std::string padRight(std::string_view text, std::size_t width, char fill) {
+    std::string out{text};
+    if (out.size() < width) {
+        out.append(width - out.size(), fill);
+    }
+    return out;
+}
+
+std::string center(std::string_view text, std::size_t width, char fill) {
+    if (text.size() >= width) {
+        return std::string{text};
+    }
+    const std::size_t total = width - text.size();
+    const std::size_t left = total / 2;
+    return std::string(left, fill) + std::string{text} + std::string(total - left, fill);
+}
+
+std::string reverse(std::string_view text) { return {text.rbegin(), text.rend()}; }
+
+std::vector<std::string> wordWrap(std::string_view text, std::size_t width) {
     std::vector<std::string> lines;
-    std::string current_line = indent;
-    
-    for (const auto& word : words) {
-        if (current_line.length() + word.length() + 1 > width && current_line != indent) {
-            lines.push_back(current_line);
-            current_line = indent;
+    std::string line;
+    for (const auto& word : splitWhitespace(text)) {
+        if (!line.empty() && line.size() + 1 + word.size() > width) {
+            lines.push_back(std::move(line));
+            line.clear();
         }
-        
-        if (current_line != indent) {
-            current_line += " ";
+        if (!line.empty()) {
+            line.push_back(' ');
         }
-        current_line += word;
+        line += word;
     }
-    
-    if (!current_line.empty()) {
-        lines.push_back(current_line);
+    if (!line.empty()) {
+        lines.push_back(std::move(line));
     }
-    
-    return join(lines, "\n");
+    return lines;
 }
 
-std::string expandTabs(const std::string& str, size_t tab_size) {
-    std::string result;
-    size_t column = 0;
-    
-    for (char c : str) {
-        if (c == '\t') {
-            size_t spaces = tab_size - (column % tab_size);
-            result += std::string(spaces, ' ');
-            column += spaces;
-        } else if (c == '\n') {
-            result += c;
-            column = 0;
-        } else {
-            result += c;
-            ++column;
+std::string truncate(std::string_view text, std::size_t maxLength, std::string_view ellipsis) {
+    if (text.size() <= maxLength) {
+        return std::string{text};
+    }
+    if (maxLength <= ellipsis.size()) {
+        return std::string{ellipsis.substr(0, maxLength)};
+    }
+    return std::string{text.substr(0, maxLength - ellipsis.size())} + std::string{ellipsis};
+}
+
+// ===================================================================================================
+// Algorithms
+// ===================================================================================================
+
+std::size_t levenshteinDistance(std::string_view a, std::string_view b) {
+    if (a.size() < b.size()) {
+        std::swap(a, b);
+    }
+    // b is the shorter string: keep one row of length |b| + 1.
+    std::vector<std::size_t> row(b.size() + 1);
+    for (std::size_t j = 0; j <= b.size(); ++j) {
+        row[j] = j;
+    }
+    for (std::size_t i = 1; i <= a.size(); ++i) {
+        std::size_t diagonal = row[0];
+        row[0] = i;
+        for (std::size_t j = 1; j <= b.size(); ++j) {
+            const std::size_t above = row[j];
+            const std::size_t cost = a[i - 1] == b[j - 1] ? 0 : 1;
+            row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + cost});
+            diagonal = above;
         }
     }
-    
+    return row[b.size()];
+}
+
+double similarity(std::string_view a, std::string_view b) {
+    const std::size_t longest = std::max(a.size(), b.size());
+    if (longest == 0) {
+        return 1.0;
+    }
+    return 1.0 - static_cast<double>(levenshteinDistance(a, b)) / static_cast<double>(longest);
+}
+
+std::string longestCommonSubsequence(std::string_view a, std::string_view b) {
+    const std::size_t n = a.size();
+    const std::size_t m = b.size();
+    std::vector<std::size_t> table((n + 1) * (m + 1), 0);
+    auto at = [m, &table](std::size_t i, std::size_t j) -> std::size_t& { return table[i * (m + 1) + j]; };
+    for (std::size_t i = 1; i <= n; ++i) {
+        for (std::size_t j = 1; j <= m; ++j) {
+            at(i, j) = a[i - 1] == b[j - 1] ? at(i - 1, j - 1) + 1 : std::max(at(i - 1, j), at(i, j - 1));
+        }
+    }
+    std::string result;
+    std::size_t i = n;
+    std::size_t j = m;
+    while (i > 0 && j > 0) {
+        if (a[i - 1] == b[j - 1]) {
+            result.push_back(a[i - 1]);
+            --i;
+            --j;
+        } else if (at(i - 1, j) >= at(i, j - 1)) {
+            --i;
+        } else {
+            --j;
+        }
+    }
+    std::reverse(result.begin(), result.end());
     return result;
 }
 
-bool isAnagram(const std::string& str1, const std::string& str2) {
-    std::string s1 = toLower(removeChars(str1, " "));
-    std::string s2 = toLower(removeChars(str2, " "));
-    
-    if (s1.length() != s2.length()) return false;
-    
-    std::sort(s1.begin(), s1.end());
-    std::sort(s2.begin(), s2.end());
-    
-    return s1 == s2;
-}
-
-bool isPalindrome(const std::string& str, bool ignore_case, bool ignore_spaces) {
-    std::string processed = str;
-    
-    if (ignore_case) {
-        processed = toLower(processed);
-    }
-    
-    if (ignore_spaces) {
-        processed = removeChars(processed, " ");
-    }
-    
-    return processed == reverse(processed);
-}
-
-int levenshteinDistance(const std::string& str1, const std::string& str2) {
-    const size_t len1 = str1.length();
-    const size_t len2 = str2.length();
-    
-    std::vector<std::vector<int>> matrix(len1 + 1, std::vector<int>(len2 + 1));
-    
-    for (size_t i = 0; i <= len1; ++i) {
-        matrix[i][0] = i;
-    }
-    
-    for (size_t j = 0; j <= len2; ++j) {
-        matrix[0][j] = j;
-    }
-    
-    for (size_t i = 1; i <= len1; ++i) {
-        for (size_t j = 1; j <= len2; ++j) {
-            int cost = (str1[i - 1] == str2[j - 1]) ? 0 : 1;
-            
-            matrix[i][j] = std::min({
-                matrix[i - 1][j] + 1,      // deletion
-                matrix[i][j - 1] + 1,      // insertion
-                matrix[i - 1][j - 1] + cost // substitution
-            });
+std::map<std::string, std::size_t> wordFrequency(std::string_view text) {
+    std::map<std::string, std::size_t> freq;
+    std::string word;
+    for (const char c : text) {
+        if (isAlnum(c) || c == '\'') {
+            word.push_back(lower(c));
+        } else if (!word.empty()) {
+            ++freq[word];
+            word.clear();
         }
     }
-    
-    return matrix[len1][len2];
+    if (!word.empty()) {
+        ++freq[word];
+    }
+    return freq;
 }
 
-double similarityRatio(const std::string& str1, const std::string& str2) {
-    if (str1.empty() && str2.empty()) return 1.0;
-    if (str1.empty() || str2.empty()) return 0.0;
-    
-    int distance = levenshteinDistance(str1, str2);
-    int max_length = std::max(str1.length(), str2.length());
-    
-    return 1.0 - (static_cast<double>(distance) / max_length);
+// ===================================================================================================
+// Numbers
+// ===================================================================================================
+
+std::optional<double> detail::parseDouble(std::string_view text) noexcept {
+    if (!text.empty() && text.front() == '+') {
+        text.remove_prefix(1);
+    }
+    if (text.empty()) {
+        return std::nullopt;
+    }
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+    double value = 0.0;
+    const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (ec != std::errc{} || ptr != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+#else
+    // Fallback for standard libraries without floating-point from_chars: a classic-locale stream.
+    try {
+        for (const char c : text) {
+            if (!(isDigit(c) || c == '.' || c == '-' || c == 'e' || c == 'E' || c == '+')) {
+                return std::nullopt;
+            }
+        }
+        std::istringstream iss{std::string{text}};
+        iss.imbue(std::locale::classic());
+        double value = 0.0;
+        iss >> value;
+        if (iss.fail() || iss.peek() != std::char_traits<char>::eof()) {
+            return std::nullopt;
+        }
+        return value;
+    } catch (...) {
+        return std::nullopt;
+    }
+#endif
+}
+
+std::string formatFixed(double value, int precision) {
+    std::ostringstream oss;
+    oss.imbue(std::locale::classic());
+    oss << std::fixed << std::setprecision(std::max(precision, 0)) << value;
+    return oss.str();
+}
+
+std::string withThousandsSeparator(long long value, char separator) {
+    const bool negative = value < 0;
+    // Work with the unsigned magnitude so LLONG_MIN is handled.
+    const unsigned long long magnitude =
+        negative ? 0ULL - static_cast<unsigned long long>(value) : static_cast<unsigned long long>(value);
+    const std::string digits = std::to_string(magnitude);
+    std::string out;
+    out.reserve(digits.size() + digits.size() / 3 + 1);
+    const std::size_t lead = digits.size() % 3;
+    for (std::size_t i = 0; i < digits.size(); ++i) {
+        if (i != 0 && i >= lead && (i - lead) % 3 == 0) {
+            out.push_back(separator);
+        }
+        out.push_back(digits[i]);
+    }
+    return negative ? "-" + out : out;
+}
+
+std::string formatBytes(std::uint64_t bytes) {
+    static constexpr std::array<std::string_view, 7> kUnits = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+    if (bytes < 1024) {
+        return std::to_string(bytes) + " B";
+    }
+    double value = static_cast<double>(bytes);
+    std::size_t unit = 0;
+    while (value >= 1024.0 && unit + 1 < kUnits.size()) {
+        value /= 1024.0;
+        ++unit;
+    }
+    return formatFixed(value, 2) + " " + std::string{kUnits[unit]};
+}
+
+// ===================================================================================================
+// Encodings
+// ===================================================================================================
+
+std::string base64Encode(std::string_view data) {
+    std::string out;
+    out.reserve((data.size() + 2) / 3 * 4);
+    std::size_t i = 0;
+    for (; i + 2 < data.size(); i += 3) {
+        const std::uint32_t n = (static_cast<std::uint32_t>(static_cast<unsigned char>(data[i])) << 16U) |
+                                (static_cast<std::uint32_t>(static_cast<unsigned char>(data[i + 1])) << 8U) |
+                                static_cast<std::uint32_t>(static_cast<unsigned char>(data[i + 2]));
+        out.push_back(kBase64Alphabet[(n >> 18U) & 0x3FU]);
+        out.push_back(kBase64Alphabet[(n >> 12U) & 0x3FU]);
+        out.push_back(kBase64Alphabet[(n >> 6U) & 0x3FU]);
+        out.push_back(kBase64Alphabet[n & 0x3FU]);
+    }
+    const std::size_t rest = data.size() - i;
+    if (rest > 0) {
+        std::uint32_t n = static_cast<std::uint32_t>(static_cast<unsigned char>(data[i])) << 16U;
+        if (rest == 2) {
+            n |= static_cast<std::uint32_t>(static_cast<unsigned char>(data[i + 1])) << 8U;
+        }
+        out.push_back(kBase64Alphabet[(n >> 18U) & 0x3FU]);
+        out.push_back(kBase64Alphabet[(n >> 12U) & 0x3FU]);
+        out.push_back(rest == 2 ? kBase64Alphabet[(n >> 6U) & 0x3FU] : '=');
+        out.push_back('=');
+    }
+    return out;
+}
+
+std::optional<std::string> base64Decode(std::string_view text) {
+    std::string clean;
+    clean.reserve(text.size());
+    for (const char c : text) {
+        if (!isSpace(c)) {
+            clean.push_back(c);
+        }
+    }
+    if (clean.size() % 4 != 0) {
+        return std::nullopt;
+    }
+    std::string out;
+    out.reserve(clean.size() / 4 * 3);
+    for (std::size_t i = 0; i < clean.size(); i += 4) {
+        std::uint32_t n = 0;
+        int padding = 0;
+        for (std::size_t k = 0; k < 4; ++k) {
+            const char c = clean[i + k];
+            int v = 0;
+            if (c == '=') {
+                // Padding is only allowed in the last two positions of the final quantum.
+                if (i + 4 != clean.size() || k < 2) {
+                    return std::nullopt;
+                }
+                ++padding;
+            } else {
+                if (padding > 0) {
+                    return std::nullopt;
+                }
+                v = base64Value(c);
+                if (v < 0) {
+                    return std::nullopt;
+                }
+            }
+            n = (n << 6U) | static_cast<std::uint32_t>(v);
+        }
+        out.push_back(static_cast<char>((n >> 16U) & 0xFFU));
+        if (padding < 2) {
+            out.push_back(static_cast<char>((n >> 8U) & 0xFFU));
+        }
+        if (padding < 1) {
+            out.push_back(static_cast<char>(n & 0xFFU));
+        }
+    }
+    return out;
+}
+
+std::string urlEncode(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text) {
+        if (isAlnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push_back(c);
+        } else {
+            const auto u = static_cast<unsigned char>(c);
+            out.push_back('%');
+            out.push_back(upper(kHexDigits[u >> 4U]));
+            out.push_back(upper(kHexDigits[u & 0x0FU]));
+        }
+    }
+    return out;
+}
+
+std::optional<std::string> urlDecode(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '%') {
+            if (i + 2 >= text.size()) {
+                return std::nullopt;
+            }
+            const int hi = hexValue(text[i + 1]);
+            const int lo = hexValue(text[i + 2]);
+            if (hi < 0 || lo < 0) {
+                return std::nullopt;
+            }
+            out.push_back(static_cast<char>(hi * 16 + lo));
+            i += 2;
+        } else if (c == '+') {
+            out.push_back(' ');
+        } else {
+            out.push_back(c);
+        }
+    }
+    return out;
+}
+
+std::string escapeHtml(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text) {
+        switch (c) {
+        case '&': out += "&amp;"; break;
+        case '<': out += "&lt;"; break;
+        case '>': out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        case '\'': out += "&#39;"; break;
+        default: out.push_back(c);
+        }
+    }
+    return out;
+}
+
+std::string toHex(std::string_view data) {
+    std::string out;
+    out.reserve(data.size() * 2);
+    for (const char c : data) {
+        const auto u = static_cast<unsigned char>(c);
+        out.push_back(kHexDigits[u >> 4U]);
+        out.push_back(kHexDigits[u & 0x0FU]);
+    }
+    return out;
+}
+
+// ===================================================================================================
+// Unicode
+// ===================================================================================================
+
+bool Unicode::isValidUtf8(std::string_view text) noexcept { return codePointCount(text).has_value(); }
+
+std::optional<std::size_t> Unicode::codePointCount(std::string_view text) noexcept {
+    std::size_t count = 0;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        if (!decodeOne(text, i)) {
+            return std::nullopt;
+        }
+        ++count;
+    }
+    return count;
+}
+
+std::string Unicode::encodeUtf8(char32_t cp) {
+    std::string out;
+    if (cp < 0x80) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp < 0x800) {
+        out.push_back(static_cast<char>(0xC0U | (cp >> 6U)));
+        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
+    } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+        return {};
+    } else if (cp < 0x10000) {
+        out.push_back(static_cast<char>(0xE0U | (cp >> 12U)));
+        out.push_back(static_cast<char>(0x80U | ((cp >> 6U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
+    } else if (cp <= 0x10FFFF) {
+        out.push_back(static_cast<char>(0xF0U | (cp >> 18U)));
+        out.push_back(static_cast<char>(0x80U | ((cp >> 12U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | ((cp >> 6U) & 0x3FU)));
+        out.push_back(static_cast<char>(0x80U | (cp & 0x3FU)));
+    }
+    return out;
+}
+
+std::optional<std::u32string> Unicode::decodeUtf8(std::string_view text) {
+    std::u32string out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const auto cp = decodeOne(text, i);
+        if (!cp) {
+            return std::nullopt;
+        }
+        out.push_back(*cp);
+    }
+    return out;
+}
+
+// ===================================================================================================
+// StringTemplate / StringPool
+// ===================================================================================================
+
+StringTemplate::StringTemplate(std::string_view text) {
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const auto open = text.find("{{", pos);
+        if (open == std::string_view::npos) {
+            parts_.push_back({false, std::string{text.substr(pos)}});
+            break;
+        }
+        if (open > pos) {
+            parts_.push_back({false, std::string{text.substr(pos, open - pos)}});
+        }
+        const auto close = text.find("}}", open + 2);
+        if (close == std::string_view::npos) {
+            throw std::invalid_argument("StringTemplate: unterminated placeholder");
+        }
+        const auto name = trimView(text.substr(open + 2, close - open - 2));
+        if (name.empty()) {
+            throw std::invalid_argument("StringTemplate: empty placeholder");
+        }
+        parts_.push_back({true, std::string{name}});
+        pos = close + 2;
+    }
+}
+
+std::string StringTemplate::render(const std::unordered_map<std::string, std::string>& values, bool strict) const {
+    std::string out;
+    for (const auto& part : parts_) {
+        if (!part.isPlaceholder) {
+            out += part.text;
+            continue;
+        }
+        const auto it = values.find(part.text);
+        if (it != values.end()) {
+            out += it->second;
+        } else if (strict) {
+            throw std::out_of_range("StringTemplate: missing value for '" + part.text + "'");
+        } else {
+            out += "{{" + part.text + "}}";
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> StringTemplate::placeholders() const {
+    std::vector<std::string> names;
+    for (const auto& part : parts_) {
+        if (part.isPlaceholder && std::find(names.begin(), names.end(), part.text) == names.end()) {
+            names.push_back(part.text);
+        }
+    }
+    return names;
+}
+
+std::string_view StringPool::intern(std::string_view text) {
+    const std::lock_guard lock(mutex_);
+    return *strings_.emplace(text).first;
+}
+
+bool StringPool::contains(std::string_view text) const {
+    const std::lock_guard lock(mutex_);
+    return strings_.find(std::string{text}) != strings_.end();
+}
+
+std::size_t StringPool::size() const {
+    const std::lock_guard lock(mutex_);
+    return strings_.size();
+}
+
+// ===================================================================================================
+// Demo
+// ===================================================================================================
+
+void demonstrateStrings(std::ostream& out) {
+    out << "=== String utilities ===\n";
+    out << "trim(\"  warp drive  \")       = '" << trim("  warp drive  ") << "'\n";
+    out << "split(\"a,b,,c\", ',')         = [" << join(split("a,b,,c", ','), "|") << "]\n";
+    out << "tokenize(move \"Fleet A\" 'x') = [" << join(tokenize(R"(move "Fleet A" 'x y')"), "|") << "]\n";
+    out << "toSnakeCase(parseHTTPReply) = " << toSnakeCase("parseHTTPReply") << '\n';
+    out << "toCamelCase(warp_core_temp) = " << toCamelCase("warp_core_temp") << '\n';
+    out << "levenshtein(kitten,sitting) = " << levenshteinDistance("kitten", "sitting") << '\n';
+    out << "LCS(ABCBDAB, BDCABA)        = " << longestCommonSubsequence("ABCBDAB", "BDCABA") << '\n';
+    out << "wildcard(nebula.log,*.log)  = " << std::boolalpha << wildcardMatch("nebula.log", "*.log") << '\n';
+    out << "isPalindrome(Racecar)       = " << isPalindrome("Racecar") << '\n';
+    out << "base64(\"Hello, Mars!\")     = " << base64Encode("Hello, Mars!") << '\n';
+    out << "urlEncode(\"a b&c\")         = " << urlEncode("a b&c") << '\n';
+    out << "withThousandsSeparator      = " << withThousandsSeparator(299792458) << '\n';
+    out << "formatBytes(5'000'000)      = " << formatBytes(5'000'000) << '\n';
+    out << "parseNumber<int>(\" 42 \")    = " << parseNumber<int>(" 42 ").value_or(-1) << '\n';
+    out << "UTF-8 code points in \"h\\u00e9llo\" = "
+        << Unicode::codePointCount("h\xC3\xA9llo").value_or(0) << '\n';
+
+    switch (fnv1a("launch")) {
+    case fnv1a("launch"): out << "constexpr fnv1a switch dispatched 'launch'\n"; break;
+    default: out << "unexpected\n"; break;
+    }
+
+    const StringTemplate tmpl{"Captain {{name}} commands the {{ship}}."};
+    out << tmpl.render({{"name", "Vega"}, {"ship", "Endeavour"}}) << '\n';
+
+    StringBuilder sb;
+    sb << "Fleet size: " << 12 << ", morale: " << 0.75;
+    out << sb.view() << '\n';
+
+    for (const auto& line : wordWrap("The quick brown fox jumps over the lazy dog near the orbital station", 24)) {
+        out << "  | " << line << '\n';
+    }
+
+    StringPool pool;
+    const auto a = pool.intern("Andromeda");
+    const auto b = pool.intern(std::string{"Andro"} + "meda");
+    out << "StringPool shares storage: " << (a.data() == b.data()) << ", unique=" << pool.size() << '\n';
+    out << std::noboolalpha;
 }
 
 } // namespace CppVerseHub::Utils::String

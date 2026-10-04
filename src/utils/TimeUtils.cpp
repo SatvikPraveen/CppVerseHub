@@ -1,963 +1,632 @@
-// File: src/utils/TimeUtils.cpp
-// Date/Time Handling Utilities Implementation
+/**
+ * @file TimeUtils.cpp
+ * @brief Implementation of the `<chrono>` utilities declared in TimeUtils.hpp.
+ */
+#include "utils/TimeUtils.hpp"
 
-#include "TimeUtils.hpp"
-#include <iostream>
-#include <thread>
+#include <algorithm>
+#include <cctype>
 #include <cmath>
-#include <regex>
+#include <iomanip>
+#include <sstream>
+#include <stdexcept>
+#include <thread>
+#include <utility>
 
 namespace CppVerseHub::Utils::Time {
 
-// ===== TIME FORMATTER IMPLEMENTATION =====
+namespace {
 
-const std::string TimeFormatter::ISO8601_FORMAT = "%Y-%m-%dT%H:%M:%SZ";
-const std::string TimeFormatter::RFC3339_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ";
-const std::string TimeFormatter::READABLE_FORMAT = "%B %d, %Y %I:%M:%S %p";
-const std::string TimeFormatter::SHORT_DATE_FORMAT = "%m/%d/%Y";
-const std::string TimeFormatter::LONG_DATE_FORMAT = "%A, %B %d, %Y";
-const std::string TimeFormatter::TIME_ONLY_FORMAT = "%H:%M:%S";
-const std::string TimeFormatter::TIME_12H_FORMAT = "%I:%M:%S %p";
-const std::string TimeFormatter::COMPACT_FORMAT = "%Y%m%d_%H%M%S";
-const std::string TimeFormatter::LOG_FORMAT = "[%Y-%m-%d %H:%M:%S.%f]";
+using std::chrono::duration_cast;
 
-std::string TimeFormatter::format(const TimePoint& tp, const std::string& format_str) {
-    auto time_t = Clock::to_time_t(tp);
+std::string fixed3(double value, std::string_view unit) {
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t), format_str.c_str());
+    oss << std::fixed << std::setprecision(3) << value << ' ' << unit;
     return oss.str();
 }
 
-std::string TimeFormatter::formatISO8601(const TimePoint& tp, bool include_milliseconds) {
-    auto time_t = Clock::to_time_t(tp);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        tp.time_since_epoch()) % 1000;
-    
+std::string twoDigits(long long value) {
     std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%S");
-    
-    if (include_milliseconds) {
-        oss << "." << std::setfill('0') << std::setw(3) << ms.count();
+    oss << std::setw(2) << std::setfill('0') << value;
+    return oss.str();
+}
+
+/// Cursor over the text being parsed.
+struct Cursor {
+    std::string_view text;
+    std::size_t pos = 0;
+
+    [[nodiscard]] bool done() const noexcept { return pos >= text.size(); }
+    [[nodiscard]] char peek() const noexcept { return done() ? '\0' : text[pos]; }
+    bool consume(char c) noexcept {
+        if (peek() == c) {
+            ++pos;
+            return true;
+        }
+        return false;
     }
-    
-    oss << "Z";
-    return oss.str();
-}
+    /// Reads exactly `count` decimal digits.
+    std::optional<int> digits(std::size_t count) noexcept {
+        if (pos + count > text.size()) {
+            return std::nullopt;
+        }
+        int value = 0;
+        for (std::size_t i = 0; i < count; ++i) {
+            const char c = text[pos + i];
+            if (c < '0' || c > '9') {
+                return std::nullopt;
+            }
+            value = value * 10 + (c - '0');
+        }
+        pos += count;
+        return value;
+    }
+};
 
-std::string TimeFormatter::formatRFC3339(const TimePoint& tp) {
-    return formatISO8601(tp, true);
-}
+} // namespace
 
-std::string TimeFormatter::formatReadable(const TimePoint& tp) {
-    return format(tp, "%B %d, %Y %I:%M:%S %p");
-}
-
-std::string TimeFormatter::formatShortDate(const TimePoint& tp) {
-    return format(tp, "%m/%d/%Y");
-}
-
-std::string TimeFormatter::formatLongDate(const TimePoint& tp) {
-    return format(tp, "%A, %B %d, %Y");
-}
-
-std::string TimeFormatter::formatTimeOnly(const TimePoint& tp, bool use_24h) {
-    return format(tp, use_24h ? "%H:%M:%S" : "%I:%M:%S %p");
-}
-
-std::string TimeFormatter::formatCompact(const TimePoint& tp) {
-    return format(tp, "%Y%m%d_%H%M%S");
-}
-
-std::string TimeFormatter::formatForLog(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        tp.time_since_epoch()) % 1000;
-    
-    std::ostringstream oss;
-    oss << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
-        << "." << std::setfill('0') << std::setw(3) << ms.count() << "]";
-    
-    return oss.str();
-}
-
-std::string TimeFormatter::formatDuration(const Duration& duration) {
-    auto total_seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-    
-    int days = static_cast<int>(total_seconds / Constants::SECONDS_PER_DAY);
-    total_seconds %= Constants::SECONDS_PER_DAY;
-    
-    int hours = static_cast<int>(total_seconds / Constants::SECONDS_PER_HOUR);
-    total_seconds %= Constants::SECONDS_PER_HOUR;
-    
-    int minutes = static_cast<int>(total_seconds / Constants::SECONDS_PER_MINUTE);
-    int seconds = static_cast<int>(total_seconds % Constants::SECONDS_PER_MINUTE);
-    
-    std::ostringstream oss;
-    
+std::string formatDuration(Nanoseconds duration) {
+    using namespace std::chrono;
+    if (duration < Nanoseconds::zero()) {
+        // Avoid overflow on the most negative value by formatting its magnitude via microseconds.
+        if (duration == Nanoseconds::min()) {
+            return "-" + formatDuration(Nanoseconds::max());
+        }
+        return "-" + formatDuration(-duration);
+    }
+    const auto ns = duration.count();
+    if (duration < 1us) {
+        return std::to_string(ns) + " ns";
+    }
+    if (duration < 1ms) {
+        return fixed3(static_cast<double>(ns) / 1e3, "us");
+    }
+    if (duration < 1s) {
+        return fixed3(static_cast<double>(ns) / 1e6, "ms");
+    }
+    if (duration < 60s) {
+        return fixed3(static_cast<double>(ns) / 1e9, "s");
+    }
+    const auto totalSeconds = duration_cast<seconds>(duration).count();
+    const auto days = totalSeconds / 86'400;
+    const auto hours = (totalSeconds % 86'400) / 3'600;
+    const auto minutes = (totalSeconds % 3'600) / 60;
+    const auto secs = totalSeconds % 60;
     if (days > 0) {
-        oss << days << "d ";
+        return std::to_string(days) + "d " + twoDigits(hours) + "h " + twoDigits(minutes) + "m";
     }
-    if (hours > 0 || days > 0) {
-        oss << hours << "h ";
+    if (hours > 0) {
+        return std::to_string(hours) + "h " + twoDigits(minutes) + "m " + twoDigits(secs) + "s";
     }
-    if (minutes > 0 || hours > 0 || days > 0) {
-        oss << minutes << "m ";
-    }
-    
-    oss << seconds << "s";
-    
-    return oss.str();
+    return std::to_string(minutes) + "m " + twoDigits(secs) + "s";
 }
 
-std::string TimeFormatter::formatDurationPrecise(const Duration& duration) {
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-    auto seconds_part = std::chrono::duration_cast<std::chrono::seconds>(ms);
-    auto ms_part = ms - seconds_part;
-    
-    std::string base = formatDuration(seconds_part);
-    if (ms_part.count() > 0) {
-        base += " " + std::to_string(ms_part.count()) + "ms";
-    }
-    
-    return base;
-}
+std::string formatIso8601(SystemClock::time_point tp, bool withMillis, std::chrono::minutes utcOffset) {
+    using namespace std::chrono;
+    const auto local = time_point_cast<milliseconds>(tp) + utcOffset;
+    const auto dayPoint = floor<days>(local);
+    const year_month_day ymd{dayPoint};
+    const hh_mm_ss<milliseconds> hms{local - dayPoint};
 
-std::string TimeFormatter::formatElapsed(const TimePoint& start, const TimePoint& end) {
-    return formatDuration(end - start);
-}
-
-std::string TimeFormatter::formatAge(const TimePoint& timestamp) {
-    return formatElapsed(timestamp, Clock::now());
-}
-
-std::string TimeFormatter::formatRelative(const TimePoint& tp) {
-    auto now = Clock::now();
-    auto diff = now - tp;
-    
-    if (diff < std::chrono::seconds(60)) {
-        return "just now";
-    } else if (diff < std::chrono::minutes(60)) {
-        auto minutes = std::chrono::duration_cast<std::chrono::minutes>(diff).count();
-        return std::to_string(minutes) + " minute" + (minutes == 1 ? "" : "s") + " ago";
-    } else if (diff < std::chrono::hours(24)) {
-        auto hours = std::chrono::duration_cast<std::chrono::hours>(diff).count();
-        return std::to_string(hours) + " hour" + (hours == 1 ? "" : "s") + " ago";
-    } else if (diff < Days(7)) {
-        auto days = std::chrono::duration_cast<Days>(diff).count();
-        return std::to_string(days) + " day" + (days == 1 ? "" : "s") + " ago";
-    } else {
-        return formatShortDate(tp);
-    }
-}
-
-std::string TimeFormatter::formatTimeAgo(const TimePoint& tp) {
-    return formatRelative(tp);
-}
-
-std::string TimeFormatter::formatTimeUntil(const TimePoint& tp) {
-    auto now = Clock::now();
-    auto diff = tp - now;
-    
-    if (diff < std::chrono::seconds(0)) {
-        return "in the past";
-    } else if (diff < std::chrono::minutes(60)) {
-        auto minutes = std::chrono::duration_cast<std::chrono::minutes>(diff).count();
-        return "in " + std::to_string(minutes) + " minute" + (minutes == 1 ? "" : "s");
-    } else if (diff < std::chrono::hours(24)) {
-        auto hours = std::chrono::duration_cast<std::chrono::hours>(diff).count();
-        return "in " + std::to_string(hours) + " hour" + (hours == 1 ? "" : "s");
-    } else if (diff < Days(7)) {
-        auto days = std::chrono::duration_cast<Days>(diff).count();
-        return "in " + std::to_string(days) + " day" + (days == 1 ? "" : "s");
-    } else {
-        return "on " + formatShortDate(tp);
-    }
-}
-
-// ===== TIME PARSER IMPLEMENTATION =====
-
-std::optional<TimePoint> TimeParser::parseISO8601(const std::string& time_str) {
-    std::regex iso_regex(R"((\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z?)");
-    std::smatch match;
-    
-    if (!std::regex_match(time_str, match, iso_regex)) {
-        return std::nullopt;
-    }
-    
-    try {
-        std::tm tm = {};
-        tm.tm_year = std::stoi(match[1]) - 1900;
-        tm.tm_mon = std::stoi(match[2]) - 1;
-        tm.tm_mday = std::stoi(match[3]);
-        tm.tm_hour = std::stoi(match[4]);
-        tm.tm_min = std::stoi(match[5]);
-        tm.tm_sec = std::stoi(match[6]);
-        
-        auto time_t = std::mktime(&tm);
-        auto tp = Clock::from_time_t(time_t);
-        
-        // Add milliseconds if present
-        if (match[7].matched) {
-            std::string ms_str = match[7];
-            if (ms_str.length() > 3) {
-                ms_str = ms_str.substr(0, 3);  // Truncate to milliseconds
-            }
-            while (ms_str.length() < 3) {
-                ms_str += "0";  // Pad to 3 digits
-            }
-            
-            int ms = std::stoi(ms_str);
-            tp += std::chrono::milliseconds(ms);
-        }
-        
-        return tp;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-std::optional<TimePoint> TimeParser::parseRFC3339(const std::string& time_str) {
-    return parseISO8601(time_str);  // RFC3339 is a subset of ISO8601
-}
-
-std::optional<Duration> TimeParser::parseDuration(const std::string& duration_str) {
-    std::regex duration_regex(R"((?:(\d+)d\s*)?(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s\s*)?(?:(\d+)ms\s*)?)");
-    std::smatch match;
-    
-    if (!std::regex_match(duration_str, match, duration_regex)) {
-        return std::nullopt;
-    }
-    
-    try {
-        Duration total_duration{0};
-        
-        if (match[1].matched) {
-            int days = std::stoi(match[1]);
-            total_duration += Days(days);
-        }
-        if (match[2].matched) {
-            int hours = std::stoi(match[2]);
-            total_duration += std::chrono::hours(hours);
-        }
-        if (match[3].matched) {
-            int minutes = std::stoi(match[3]);
-            total_duration += std::chrono::minutes(minutes);
-        }
-        if (match[4].matched) {
-            int seconds = std::stoi(match[4]);
-            total_duration += std::chrono::seconds(seconds);
-        }
-        if (match[5].matched) {
-            int milliseconds = std::stoi(match[5]);
-            total_duration += std::chrono::milliseconds(milliseconds);
-        }
-        
-        return total_duration;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-std::optional<TimePoint> TimeParser::parseCustomFormat(const std::string& time_str, const std::string& format) {
-    std::tm tm = {};
-    std::istringstream ss(time_str);
-    ss >> std::get_time(&tm, format.c_str());
-    
-    if (ss.fail()) {
-        return std::nullopt;
-    }
-    
-    try {
-        auto time_t = std::mktime(&tm);
-        return Clock::from_time_t(time_t);
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-std::vector<TimePoint> TimeParser::parseMultiple(const std::vector<std::string>& time_strings,
-                                                  const std::string& format) {
-    std::vector<TimePoint> results;
-    results.reserve(time_strings.size());
-    
-    for (const auto& time_str : time_strings) {
-        auto parsed = parseCustomFormat(time_str, format);
-        if (parsed) {
-            results.push_back(*parsed);
-        }
-    }
-    
-    return results;
-}
-
-bool TimeParser::isValidFormat(const std::string& time_str, const std::string& format) {
-    return parseCustomFormat(time_str, format).has_value();
-}
-
-// ===== TIME ZONE HANDLER IMPLEMENTATION =====
-
-TimeZoneHandler::TimeZoneHandler() : local_offset_(calculateLocalOffset()) {}
-
-std::string TimeZoneHandler::getSystemTimeZone() const {
-    return "Local";  // Simplified implementation
-}
-
-TimePoint TimeZoneHandler::convertToUTC(const TimePoint& local_time) const {
-    return local_time - local_offset_;
-}
-
-TimePoint TimeZoneHandler::convertFromUTC(const TimePoint& utc_time) const {
-    return utc_time + local_offset_;
-}
-
-TimePoint TimeZoneHandler::convertToTimeZone(const TimePoint& utc_time, const std::string& timezone) const {
-    // Simplified implementation - in a real-world scenario, you'd use a timezone library
-    if (timezone == "UTC" || timezone == "GMT") {
-        return utc_time;
-    } else if (timezone == "EST" || timezone == "EDT") {
-        return utc_time - std::chrono::hours(5);
-    } else if (timezone == "PST" || timezone == "PDT") {
-        return utc_time - std::chrono::hours(8);
-    } else if (timezone == "JST") {
-        return utc_time + std::chrono::hours(9);
-    }
-    
-    // Default to local time
-    return convertFromUTC(utc_time);
-}
-
-std::chrono::hours TimeZoneHandler::getOffset(const std::string& timezone) const {
-    if (timezone == "UTC" || timezone == "GMT") {
-        return std::chrono::hours(0);
-    } else if (timezone == "EST" || timezone == "EDT") {
-        return std::chrono::hours(-5);
-    } else if (timezone == "PST" || timezone == "PDT") {
-        return std::chrono::hours(-8);
-    } else if (timezone == "JST") {
-        return std::chrono::hours(9);
-    }
-    
-    return std::chrono::duration_cast<std::chrono::hours>(local_offset_);
-}
-
-bool TimeZoneHandler::isDaylightSavingTime(const TimePoint& tp) const {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    return local_tm->tm_isdst > 0;
-}
-
-std::string TimeZoneHandler::formatWithTimeZone(const TimePoint& tp, const std::string& timezone) const {
-    auto converted = convertToTimeZone(tp, timezone);
-    return TimeFormatter::formatISO8601(converted) + " " + timezone;
-}
-
-Duration TimeZoneHandler::calculateLocalOffset() const {
-    auto now = std::chrono::system_clock::now();
-    auto time_t = Clock::to_time_t(now);
-    
-    std::tm* utc_tm = std::gmtime(&time_t);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    auto utc_time = std::mktime(utc_tm);
-    auto local_time = std::mktime(local_tm);
-    
-    return std::chrono::seconds(static_cast<int>(local_time - utc_time));
-}
-
-// ===== TIMER IMPLEMENTATION =====
-
-Timer::Timer() : start_time_(Clock::now()), is_running_(true) {}
-
-void Timer::start() {
-    start_time_ = Clock::now();
-    is_running_ = true;
-    laps_.clear();
-}
-
-void Timer::stop() {
-    if (is_running_) {
-        stop_time_ = Clock::now();
-        is_running_ = false;
-    }
-}
-
-void Timer::reset() {
-    start_time_ = Clock::now();
-    is_running_ = true;
-    laps_.clear();
-}
-
-void Timer::lap() {
-    if (is_running_) {
-        laps_.push_back(Clock::now());
-    }
-}
-
-Duration Timer::elapsed() const {
-    if (is_running_) {
-        return Clock::now() - start_time_;
-    } else {
-        return stop_time_ - start_time_;
-    }
-}
-
-Duration Timer::elapsedSinceStart() const {
-    return Clock::now() - start_time_;
-}
-
-std::vector<Duration> Timer::getLapTimes() const {
-    std::vector<Duration> lap_times;
-    lap_times.reserve(laps_.size());
-    
-    TimePoint previous = start_time_;
-    for (const auto& lap : laps_) {
-        lap_times.push_back(lap - previous);
-        previous = lap;
-    }
-    
-    return lap_times;
-}
-
-std::vector<Duration> Timer::getCumulativeTimes() const {
-    std::vector<Duration> cumulative_times;
-    cumulative_times.reserve(laps_.size());
-    
-    for (const auto& lap : laps_) {
-        cumulative_times.push_back(lap - start_time_);
-    }
-    
-    return cumulative_times;
-}
-
-bool Timer::isRunning() const {
-    return is_running_;
-}
-
-std::string Timer::toString() const {
     std::ostringstream oss;
-    oss << "Timer: " << TimeFormatter::formatDurationPrecise(elapsed());
-    if (!laps_.empty()) {
-        oss << " (" << laps_.size() << " laps)";
+    oss << std::setfill('0') << std::setw(4) << static_cast<int>(ymd.year()) << '-' << std::setw(2)
+        << static_cast<unsigned>(ymd.month()) << '-' << std::setw(2) << static_cast<unsigned>(ymd.day()) << 'T'
+        << std::setw(2) << hms.hours().count() << ':' << std::setw(2) << hms.minutes().count() << ':'
+        << std::setw(2) << hms.seconds().count();
+    if (withMillis) {
+        oss << '.' << std::setw(3) << hms.subseconds().count();
     }
-    oss << " [" << (is_running_ ? "running" : "stopped") << "]";
+    if (utcOffset == minutes{0}) {
+        oss << 'Z';
+    } else {
+        const auto total = utcOffset.count();
+        const auto magnitude = total < 0 ? -total : total;
+        oss << (total < 0 ? '-' : '+') << std::setw(2) << magnitude / 60 << ':' << std::setw(2) << magnitude % 60;
+    }
     return oss.str();
 }
 
-// ===== RATE LIMITER IMPLEMENTATION =====
-
-RateLimiter::RateLimiter(size_t max_requests, Duration window_size)
-    : max_requests_(max_requests), window_size_(window_size) {
-    requests_.reserve(max_requests);
-}
-
-bool RateLimiter::tryAcquire() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto now = Clock::now();
-    cleanOldRequests(now);
-    
-    if (requests_.size() < max_requests_) {
-        requests_.push_back(now);
-        return true;
+std::optional<SystemClock::time_point> parseIso8601(std::string_view text) {
+    using namespace std::chrono;
+    Cursor cur{text};
+    const auto y = cur.digits(4);
+    if (!y || !cur.consume('-')) {
+        return std::nullopt;
     }
-    
-    return false;
-}
-
-bool RateLimiter::canAcquire() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto now = Clock::now();
-    const_cast<RateLimiter*>(this)->cleanOldRequests(now);
-    
-    return requests_.size() < max_requests_;
-}
-
-Duration RateLimiter::timeUntilNextSlot() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    if (requests_.size() < max_requests_) {
-        return Duration::zero();
+    const auto mo = cur.digits(2);
+    if (!mo || !cur.consume('-')) {
+        return std::nullopt;
     }
-    
-    auto oldest_request = *std::min_element(requests_.begin(), requests_.end());
-    auto next_available = oldest_request + window_size_;
-    auto now = Clock::now();
-    
-    if (next_available <= now) {
-        return Duration::zero();
+    const auto d = cur.digits(2);
+    if (!d) {
+        return std::nullopt;
     }
-    
-    return next_available - now;
-}
-
-size_t RateLimiter::getCurrentLoad() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto now = Clock::now();
-    const_cast<RateLimiter*>(this)->cleanOldRequests(now);
-    
-    return requests_.size();
-}
-
-double RateLimiter::getLoadPercentage() const {
-    return static_cast<double>(getCurrentLoad()) / max_requests_ * 100.0;
-}
-
-void RateLimiter::reset() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    requests_.clear();
-}
-
-void RateLimiter::updateLimits(size_t max_requests, Duration window_size) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    max_requests_ = max_requests;
-    window_size_ = window_size;
-    requests_.reserve(max_requests);
-    
-    // Clean requests that no longer fit in the new window
-    auto now = Clock::now();
-    cleanOldRequests(now);
-}
-
-std::string RateLimiter::getStatus() const {
-    std::ostringstream oss;
-    oss << "RateLimiter: " << getCurrentLoad() << "/" << max_requests_ 
-        << " (" << std::fixed << std::setprecision(1) << getLoadPercentage() << "%)";
-    
-    auto next_slot = timeUntilNextSlot();
-    if (next_slot > Duration::zero()) {
-        oss << ", next slot in " << TimeFormatter::formatDurationPrecise(next_slot);
+    const year_month_day ymd{year{*y}, month{static_cast<unsigned>(*mo)}, day{static_cast<unsigned>(*d)}};
+    if (!ymd.ok()) {
+        return std::nullopt;
     }
-    
-    return oss.str();
+    Nanoseconds timeOfDay{0};
+    if (cur.consume('T') || cur.consume(' ')) {
+        const auto h = cur.digits(2);
+        if (!h || !cur.consume(':')) {
+            return std::nullopt;
+        }
+        const auto mi = cur.digits(2);
+        if (!mi) {
+            return std::nullopt;
+        }
+        int s = 0;
+        if (cur.consume(':')) {
+            const auto sec = cur.digits(2);
+            if (!sec) {
+                return std::nullopt;
+            }
+            s = *sec;
+        }
+        if (*h > 23 || *mi > 59 || s > 60) {
+            return std::nullopt;
+        }
+        timeOfDay = hours{*h} + minutes{*mi} + seconds{s};
+        if (cur.consume('.') || cur.consume(',')) {
+            std::int64_t fraction = 0;
+            int digitsRead = 0;
+            while (!cur.done() && std::isdigit(static_cast<unsigned char>(cur.peek())) != 0) {
+                if (digitsRead < 9) {
+                    fraction = fraction * 10 + (cur.peek() - '0');
+                    ++digitsRead;
+                }
+                ++cur.pos;
+            }
+            if (digitsRead == 0) {
+                return std::nullopt;
+            }
+            for (int i = digitsRead; i < 9; ++i) {
+                fraction *= 10;
+            }
+            timeOfDay += Nanoseconds{fraction};
+        }
+    }
+    minutes offset{0};
+    if (cur.consume('Z') || cur.consume('z')) {
+        // UTC
+    } else if (cur.peek() == '+' || cur.peek() == '-') {
+        const bool negative = cur.peek() == '-';
+        ++cur.pos;
+        const auto oh = cur.digits(2);
+        if (!oh) {
+            return std::nullopt;
+        }
+        cur.consume(':');
+        const auto om = cur.digits(2);
+        if (!om || *oh > 23 || *om > 59) {
+            return std::nullopt;
+        }
+        offset = hours{*oh} + minutes{*om};
+        if (negative) {
+            offset = -offset;
+        }
+    }
+    if (!cur.done()) {
+        return std::nullopt;
+    }
+    const auto local = sys_days{ymd} + duration_cast<SystemClock::duration>(timeOfDay);
+    return time_point_cast<SystemClock::duration>(local - offset);
 }
 
-void RateLimiter::cleanOldRequests(const TimePoint& now) {
-    auto cutoff = now - window_size_;
-    requests_.erase(
-        std::remove_if(requests_.begin(), requests_.end(),
-                      [cutoff](const TimePoint& tp) { return tp < cutoff; }),
-        requests_.end()
-    );
+std::optional<Nanoseconds> parseDuration(std::string_view text) {
+    Cursor cur{text};
+    double totalNs = 0.0;
+    bool any = false;
+    bool sawUnitless = false;
+    while (true) {
+        while (!cur.done() && std::isspace(static_cast<unsigned char>(cur.peek())) != 0) {
+            ++cur.pos;
+        }
+        if (cur.done()) {
+            break;
+        }
+        if (sawUnitless) {
+            return std::nullopt; // a bare number must be the only component
+        }
+        // Number: digits with an optional single decimal point.
+        const std::size_t start = cur.pos;
+        bool dot = false;
+        while (!cur.done()) {
+            const char c = cur.peek();
+            if (std::isdigit(static_cast<unsigned char>(c)) != 0) {
+                ++cur.pos;
+            } else if (c == '.' && !dot) {
+                dot = true;
+                ++cur.pos;
+            } else {
+                break;
+            }
+        }
+        const std::string_view number = text.substr(start, cur.pos - start);
+        if (number.empty() || number == ".") {
+            return std::nullopt;
+        }
+        // Locale-independent decimal conversion.
+        double value = 0.0;
+        double fractionScale = 0.0;
+        for (const char c : number) {
+            if (c == '.') {
+                fractionScale = 0.1;
+            } else if (fractionScale > 0.0) {
+                value += (c - '0') * fractionScale;
+                fractionScale *= 0.1;
+            } else {
+                value = value * 10.0 + (c - '0');
+            }
+        }
+        const std::size_t unitStart = cur.pos;
+        while (!cur.done() && std::isalpha(static_cast<unsigned char>(cur.peek())) != 0) {
+            ++cur.pos;
+        }
+        const std::string_view unit = text.substr(unitStart, cur.pos - unitStart);
+        double scale = 0.0;
+        if (unit.empty()) {
+            scale = 1e9;
+            sawUnitless = true;
+            if (any) {
+                return std::nullopt;
+            }
+        } else if (unit == "d") {
+            scale = 86'400e9;
+        } else if (unit == "h") {
+            scale = 3'600e9;
+        } else if (unit == "m" || unit == "min") {
+            scale = 60e9;
+        } else if (unit == "s") {
+            scale = 1e9;
+        } else if (unit == "ms") {
+            scale = 1e6;
+        } else if (unit == "us") {
+            scale = 1e3;
+        } else if (unit == "ns") {
+            scale = 1.0;
+        } else {
+            return std::nullopt;
+        }
+        totalNs += value * scale;
+        any = true;
+    }
+    if (!any || totalNs > 9.2e18) {
+        return std::nullopt;
+    }
+    return Nanoseconds{std::llround(totalNs)};
 }
 
-// ===== SCHEDULER IMPLEMENTATION =====
+// ===================================================================================================
+// Stopwatch
+// ===================================================================================================
 
-Scheduler::Scheduler() : running_(false) {}
-
-Scheduler::~Scheduler() {
-    stop();
+Stopwatch::Stopwatch(bool startImmediately) noexcept {
+    if (startImmediately) {
+        start();
+    }
 }
 
-void Scheduler::start() {
-    if (running_) return;
-    
-    running_ = true;
-    worker_thread_ = std::thread(&Scheduler::workerLoop, this);
+void Stopwatch::start() noexcept {
+    if (!running_) {
+        startTime_ = SteadyClock::now();
+        running_ = true;
+    }
 }
 
-void Scheduler::stop() {
-    if (!running_) return;
-    
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
+void Stopwatch::stop() noexcept {
+    if (running_) {
+        accumulated_ += std::chrono::duration_cast<Nanoseconds>(SteadyClock::now() - startTime_);
         running_ = false;
     }
-    
-    condition_.notify_all();
-    
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
+}
+
+void Stopwatch::reset() noexcept {
+    running_ = false;
+    accumulated_ = Nanoseconds{0};
+    lastLapMark_ = Nanoseconds{0};
+    laps_.clear();
+}
+
+void Stopwatch::restart() noexcept {
+    reset();
+    start();
+}
+
+Nanoseconds Stopwatch::elapsed() const noexcept {
+    if (running_) {
+        return accumulated_ + std::chrono::duration_cast<Nanoseconds>(SteadyClock::now() - startTime_);
+    }
+    return accumulated_;
+}
+
+double Stopwatch::elapsedSeconds() const noexcept {
+    return std::chrono::duration<double>(elapsed()).count();
+}
+
+Nanoseconds Stopwatch::lap() {
+    const Nanoseconds now = elapsed();
+    const Nanoseconds lapTime = now - lastLapMark_;
+    lastLapMark_ = now;
+    laps_.push_back(lapTime);
+    return lapTime;
+}
+
+// ===================================================================================================
+// GameTime
+// ===================================================================================================
+
+GameTime::Seconds GameTime::advance(Seconds realDelta) noexcept {
+    if (realDelta < Seconds::zero()) {
+        realDelta = Seconds::zero();
+    }
+    ++frames_;
+    realTime_ += realDelta;
+    if (paused_) {
+        return Seconds::zero();
+    }
+    const Seconds simDelta = realDelta * timeScale_;
+    simTime_ += simDelta;
+    return simDelta;
+}
+
+double GameTime::averageFps() const noexcept {
+    return realTime_.count() > 0.0 ? static_cast<double>(frames_) / realTime_.count() : 0.0;
+}
+
+// ===================================================================================================
+// TaskScheduler
+// ===================================================================================================
+
+TaskScheduler::TaskId TaskScheduler::scheduleOnce(Duration delay, Task task) {
+    const std::lock_guard lock(mutex_);
+    const TaskId id = nextId_++;
+    const Key key{now_ + std::max(delay, Duration{0}), id};
+    queue_.emplace(key, Entry{std::move(task), Duration{0}, 1});
+    index_.emplace(id, key);
+    return id;
+}
+
+TaskScheduler::TaskId TaskScheduler::scheduleRepeating(Duration interval, Task task, std::size_t repetitions) {
+    if (interval <= Duration{0}) {
+        throw std::invalid_argument("TaskScheduler: repeating interval must be positive");
+    }
+    const std::lock_guard lock(mutex_);
+    const TaskId id = nextId_++;
+    const Key key{now_ + interval, id};
+    queue_.emplace(key, Entry{std::move(task), interval, repetitions});
+    index_.emplace(id, key);
+    return id;
+}
+
+bool TaskScheduler::cancel(TaskId id) {
+    const std::lock_guard lock(mutex_);
+    const auto it = index_.find(id);
+    if (it == index_.end()) {
+        return false;
+    }
+    queue_.erase(it->second);
+    index_.erase(it);
+    return true;
+}
+
+std::size_t TaskScheduler::advance(Duration delta) {
+    std::size_t executed = 0;
+    Duration target{};
+    {
+        const std::lock_guard lock(mutex_);
+        target = now_ + std::max(delta, Duration{0});
+    }
+    while (true) {
+        Task task;
+        {
+            const std::lock_guard lock(mutex_);
+            if (queue_.empty() || queue_.begin()->first.first > target) {
+                now_ = target;
+                break;
+            }
+            auto node = queue_.extract(queue_.begin());
+            const auto [due, id] = node.key();
+            now_ = due;
+            Entry& entry = node.mapped();
+            const bool repeat = entry.interval > Duration{0} && entry.remaining != 1;
+            if (repeat) {
+                // Keep a copy of the callable in the queue for the next run.
+                task = entry.task;
+                if (entry.remaining > 1) {
+                    --entry.remaining;
+                }
+                node.key() = Key{due + entry.interval, id};
+                index_[id] = node.key();
+                queue_.insert(std::move(node));
+            } else {
+                task = std::move(entry.task);
+                index_.erase(id);
+            }
+        }
+        if (task) {
+            task();
+        }
+        ++executed;
+    }
+    return executed;
+}
+
+TaskScheduler::Duration TaskScheduler::now() const {
+    const std::lock_guard lock(mutex_);
+    return now_;
+}
+
+std::size_t TaskScheduler::pending() const {
+    const std::lock_guard lock(mutex_);
+    return queue_.size();
+}
+
+// ===================================================================================================
+// RateLimiter
+// ===================================================================================================
+
+RateLimiter::RateLimiter(double ratePerSecond, double burst) : rate_(ratePerSecond), burst_(burst), tokens_(burst) {
+    if (!(ratePerSecond > 0.0) || !(burst >= 1.0)) {
+        throw std::invalid_argument("RateLimiter: rate must be > 0 and burst >= 1");
     }
 }
 
-TaskId Scheduler::schedule(std::function<void()> task, const TimePoint& when) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    TaskId id = next_task_id_++;
-    ScheduledTask scheduled_task;
-    scheduled_task.id = id;
-    scheduled_task.task = std::move(task);
-    scheduled_task.scheduled_time = when;
-    scheduled_task.repeat_interval = Duration::zero();
-    scheduled_task.is_repeating = false;
-    
-    tasks_[id] = std::move(scheduled_task);
-    condition_.notify_one();
-    
-    return id;
-}
-
-TaskId Scheduler::scheduleRepeating(std::function<void()> task, const TimePoint& first_run, const Duration& interval) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    TaskId id = next_task_id_++;
-    ScheduledTask scheduled_task;
-    scheduled_task.id = id;
-    scheduled_task.task = std::move(task);
-    scheduled_task.scheduled_time = first_run;
-    scheduled_task.repeat_interval = interval;
-    scheduled_task.is_repeating = true;
-    
-    tasks_[id] = std::move(scheduled_task);
-    condition_.notify_one();
-    
-    return id;
-}
-
-TaskId Scheduler::scheduleDelayed(std::function<void()> task, const Duration& delay) {
-    return schedule(std::move(task), Clock::now() + delay);
-}
-
-TaskId Scheduler::scheduleInterval(std::function<void()> task, const Duration& interval) {
-    return scheduleRepeating(std::move(task), Clock::now() + interval, interval);
-}
-
-bool Scheduler::cancelTask(TaskId task_id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = tasks_.find(task_id);
-    if (it != tasks_.end()) {
-        tasks_.erase(it);
+bool RateLimiter::tryAcquire(SteadyClock::time_point now, double tokens) {
+    if (last_ && now > *last_) {
+        const double seconds = std::chrono::duration<double>(now - *last_).count();
+        tokens_ = std::min(burst_, tokens_ + seconds * rate_);
+    }
+    if (!last_ || now > *last_) {
+        last_ = now;
+    }
+    if (tokens_ + 1e-12 >= tokens) {
+        tokens_ -= tokens;
         return true;
     }
-    
     return false;
 }
 
-bool Scheduler::hasTask(TaskId task_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return tasks_.find(task_id) != tasks_.end();
-}
+// ===================================================================================================
+// PerformanceProfiler
+// ===================================================================================================
 
-size_t Scheduler::getTaskCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return tasks_.size();
-}
+PerformanceProfiler::Scope::Scope(PerformanceProfiler& profiler, std::string name)
+    : profiler_(&profiler), name_(std::move(name)), start_(SteadyClock::now()) {}
 
-std::vector<TaskId> Scheduler::getScheduledTasks() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    std::vector<TaskId> task_ids;
-    task_ids.reserve(tasks_.size());
-    
-    for (const auto& pair : tasks_) {
-        task_ids.push_back(pair.first);
-    }
-    
-    return task_ids;
-}
-
-void Scheduler::clearAllTasks() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    tasks_.clear();
-}
-
-bool Scheduler::isRunning() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return running_;
-}
-
-void Scheduler::workerLoop() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    
-    while (running_) {
-        if (tasks_.empty()) {
-            condition_.wait(lock);
-            continue;
-        }
-        
-        // Find the next task to execute
-        auto next_task_it = std::min_element(tasks_.begin(), tasks_.end(),
-            [](const auto& a, const auto& b) {
-                return a.second.scheduled_time < b.second.scheduled_time;
-            });
-        
-        if (next_task_it == tasks_.end()) {
-            condition_.wait(lock);
-            continue;
-        }
-        
-        auto& next_task = next_task_it->second;
-        auto now = Clock::now();
-        
-        if (next_task.scheduled_time > now) {
-            // Wait until the task should be executed
-            condition_.wait_until(lock, next_task.scheduled_time);
-            continue;
-        }
-        
-        // Execute the task
-        auto task_to_execute = next_task.task;
-        bool is_repeating = next_task.is_repeating;
-        Duration repeat_interval = next_task.repeat_interval;
-        TaskId task_id = next_task.id;
-        
-        if (is_repeating) {
-            // Reschedule for next execution
-            next_task.scheduled_time = now + repeat_interval;
-        } else {
-            // Remove one-time task
-            tasks_.erase(next_task_it);
-        }
-        
-        // Execute task without holding the lock
-        lock.unlock();
-        
-        try {
-            task_to_execute();
-        } catch (const std::exception& e) {
-            // Log error or handle exception as needed
-            std::cerr << "Task " << task_id << " threw exception: " << e.what() << std::endl;
-        } catch (...) {
-            std::cerr << "Task " << task_id << " threw unknown exception" << std::endl;
-        }
-        
-        lock.lock();
+PerformanceProfiler::Scope::~Scope() {
+    try {
+        profiler_->record(name_, std::chrono::duration_cast<Nanoseconds>(SteadyClock::now() - start_));
+    } catch (...) { // NOLINT(bugprone-empty-catch): destructors must not throw
     }
 }
 
-// ===== TIME UTILITIES IMPLEMENTATION =====
-
-TimePoint TimeUtils::now() {
-    return Clock::now();
-}
-
-TimePoint TimeUtils::today() {
-    auto now = Clock::now();
-    auto time_t = Clock::to_time_t(now);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-TimePoint TimeUtils::tomorrow() {
-    return today() + Days(1);
-}
-
-TimePoint TimeUtils::yesterday() {
-    return today() - Days(1);
-}
-
-TimePoint TimeUtils::startOfWeek(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    // Calculate days since Monday (assuming Monday is start of week)
-    int days_since_monday = (local_tm->tm_wday + 6) % 7;
-    
-    // Go back to Monday
-    auto monday = tp - Days(days_since_monday);
-    
-    // Set to start of day
-    time_t = Clock::to_time_t(monday);
-    local_tm = std::localtime(&time_t);
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-TimePoint TimeUtils::endOfWeek(const TimePoint& tp) {
-    return startOfWeek(tp) + Days(7) - std::chrono::seconds(1);
-}
-
-TimePoint TimeUtils::startOfMonth(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_mday = 1;
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-TimePoint TimeUtils::endOfMonth(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    // Go to first day of next month
-    local_tm->tm_mon++;
-    local_tm->tm_mday = 1;
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    auto next_month = Clock::from_time_t(std::mktime(local_tm));
-    return next_month - std::chrono::seconds(1);
-}
-
-TimePoint TimeUtils::startOfYear(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_mon = 0;
-    local_tm->tm_mday = 1;
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-TimePoint TimeUtils::endOfYear(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_year++;
-    local_tm->tm_mon = 0;
-    local_tm->tm_mday = 1;
-    local_tm->tm_hour = 0;
-    local_tm->tm_min = 0;
-    local_tm->tm_sec = 0;
-    
-    auto next_year = Clock::from_time_t(std::mktime(local_tm));
-    return next_year - std::chrono::seconds(1);
-}
-
-bool TimeUtils::isSameDay(const TimePoint& tp1, const TimePoint& tp2) {
-    auto time1 = Clock::to_time_t(tp1);
-    auto time2 = Clock::to_time_t(tp2);
-    
-    std::tm* tm1 = std::localtime(&time1);
-    std::tm* tm2 = std::localtime(&time2);
-    
-    return tm1->tm_year == tm2->tm_year &&
-           tm1->tm_mon == tm2->tm_mon &&
-           tm1->tm_mday == tm2->tm_mday;
-}
-
-bool TimeUtils::isWeekend(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    return local_tm->tm_wday == 0 || local_tm->tm_wday == 6; // Sunday or Saturday
-}
-
-bool TimeUtils::isWeekday(const TimePoint& tp) {
-    return !isWeekend(tp);
-}
-
-int TimeUtils::dayOfWeek(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    return local_tm->tm_wday;
-}
-
-int TimeUtils::dayOfMonth(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    return local_tm->tm_mday;
-}
-
-int TimeUtils::dayOfYear(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    return local_tm->tm_yday + 1; // tm_yday is 0-based
-}
-
-int TimeUtils::weekOfYear(const TimePoint& tp) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    // Simple calculation - more sophisticated implementations would handle edge cases
-    return (local_tm->tm_yday + 7 - local_tm->tm_wday) / 7;
-}
-
-TimePoint TimeUtils::addDays(const TimePoint& tp, int days) {
-    return tp + Days(days);
-}
-
-TimePoint TimeUtils::addWeeks(const TimePoint& tp, int weeks) {
-    return tp + Weeks(weeks);
-}
-
-TimePoint TimeUtils::addMonths(const TimePoint& tp, int months) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_mon += months;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-TimePoint TimeUtils::addYears(const TimePoint& tp, int years) {
-    auto time_t = Clock::to_time_t(tp);
-    std::tm* local_tm = std::localtime(&time_t);
-    
-    local_tm->tm_year += years;
-    
-    return Clock::from_time_t(std::mktime(local_tm));
-}
-
-Duration TimeUtils::timeBetween(const TimePoint& start, const TimePoint& end) {
-    return end - start;
-}
-
-double TimeUtils::daysBetween(const TimePoint& start, const TimePoint& end) {
-    auto diff = timeBetween(start, end);
-    return std::chrono::duration<double, std::ratio<86400>>(diff).count();
-}
-
-double TimeUtils::hoursBetween(const TimePoint& start, const TimePoint& end) {
-    auto diff = timeBetween(start, end);
-    return std::chrono::duration<double, std::ratio<3600>>(diff).count();
-}
-
-double TimeUtils::minutesBetween(const TimePoint& start, const TimePoint& end) {
-    auto diff = timeBetween(start, end);
-    return std::chrono::duration<double, std::ratio<60>>(diff).count();
-}
-
-void TimeUtils::sleep(const Duration& duration) {
-    std::this_thread::sleep_for(duration);
-}
-
-void TimeUtils::sleepUntil(const TimePoint& time_point) {
-    std::this_thread::sleep_until(time_point);
-}
-
-TimePoint TimeUtils::fromUnixTimestamp(int64_t timestamp) {
-    return Clock::from_time_t(static_cast<std::time_t>(timestamp));
-}
-
-int64_t TimeUtils::toUnixTimestamp(const TimePoint& tp) {
-    return static_cast<int64_t>(Clock::to_time_t(tp));
-}
-
-std::vector<TimePoint> TimeUtils::generateTimeRange(const TimePoint& start, const TimePoint& end, const Duration& step) {
-    std::vector<TimePoint> result;
-    
-    if (step <= Duration::zero()) {
-        return result;
+void PerformanceProfiler::record(const std::string& name, Nanoseconds duration) {
+    const std::lock_guard lock(mutex_);
+    Stats& s = stats_[name];
+    if (s.count == 0) {
+        s.min = duration;
+        s.max = duration;
+    } else {
+        s.min = std::min(s.min, duration);
+        s.max = std::max(s.max, duration);
     }
-    
-    for (auto current = start; current <= end; current += step) {
-        result.push_back(current);
+    ++s.count;
+    s.total += duration;
+}
+
+std::optional<PerformanceProfiler::Stats> PerformanceProfiler::stats(const std::string& name) const {
+    const std::lock_guard lock(mutex_);
+    const auto it = stats_.find(name);
+    if (it == stats_.end()) {
+        return std::nullopt;
     }
-    
-    return result;
+    return it->second;
 }
 
-bool TimeUtils::isInRange(const TimePoint& tp, const TimePoint& start, const TimePoint& end) {
-    return tp >= start && tp <= end;
+std::vector<std::string> PerformanceProfiler::sections() const {
+    const std::lock_guard lock(mutex_);
+    std::vector<std::string> names;
+    names.reserve(stats_.size());
+    for (const auto& [name, s] : stats_) {
+        names.push_back(name);
+    }
+    return names;
 }
 
-TimePoint TimeUtils::clamp(const TimePoint& tp, const TimePoint& min_time, const TimePoint& max_time) {
-    if (tp < min_time) return min_time;
-    if (tp > max_time) return max_time;
-    return tp;
+void PerformanceProfiler::reset() {
+    const std::lock_guard lock(mutex_);
+    stats_.clear();
+}
+
+void PerformanceProfiler::report(std::ostream& out) const {
+    const std::lock_guard lock(mutex_);
+    out << std::left << std::setw(20) << "section" << std::right << std::setw(8) << "count" << std::setw(16)
+        << "mean" << std::setw(16) << "total" << '\n';
+    for (const auto& [name, s] : stats_) {
+        out << std::left << std::setw(20) << name << std::right << std::setw(8) << s.count << std::setw(16)
+            << formatDuration(s.mean()) << std::setw(16) << formatDuration(s.total) << '\n';
+    }
+}
+
+// ===================================================================================================
+// SpaceTime
+// ===================================================================================================
+
+double SpaceTime::decimalYear(SystemClock::time_point tp) {
+    using namespace std::chrono;
+    const auto dayPoint = floor<days>(tp);
+    const year_month_day ymd{dayPoint};
+    const sys_days begin{ymd.year() / January / 1};
+    const sys_days end{(ymd.year() + years{1}) / January / 1};
+    const double fraction = duration<double>(tp - begin).count() / duration<double>(end - begin).count();
+    return static_cast<double>(static_cast<int>(ymd.year())) + fraction;
+}
+
+// ===================================================================================================
+// Demo
+// ===================================================================================================
+
+void demonstrateTime(std::ostream& out) {
+    using namespace std::chrono;
+    out << "=== Time utilities ===\n";
+
+    out << "formatDuration(1500us)  = " << formatDuration(1500us) << '\n';
+    out << "formatDuration(3723s)   = " << formatDuration(3723s) << '\n';
+
+    const auto epochPlus = sys_days{2024y / March / 1} + 12h + 34min + 56s + 789ms;
+    const SystemClock::time_point tp{duration_cast<SystemClock::duration>(epochPlus.time_since_epoch())};
+    out << "formatIso8601           = " << formatIso8601(tp) << '\n';
+    out << "formatIso8601(+05:30)   = " << formatIso8601(tp, false, 330min) << '\n';
+    if (const auto parsed = parseIso8601("2024-03-01T18:04:56.789+05:30")) {
+        out << "parseIso8601 round trip = " << formatIso8601(*parsed) << '\n';
+    }
+    if (const auto d = parseDuration("1h 30m 15s")) {
+        out << "parseDuration(1h30m15s) = " << duration_cast<seconds>(*d).count() << " s\n";
+    }
+
+    constexpr year_month_day landing{1969y / July / 20};
+    static_assert(dayOfWeek(landing) == 0, "20 July 1969 was a Sunday");
+    out << "Days from Apollo 11 landing to 2024-01-01: " << daysBetween(landing, 2024y / January / 1) << '\n';
+    out << "2024 is leap year: " << std::boolalpha << isLeapYear(2024) << '\n';
+
+    GameTime clock;
+    clock.setTimeScale(10.0);
+    for (int frame = 0; frame < 60; ++frame) {
+        clock.advance(GameTime::Seconds{1.0 / 60.0});
+    }
+    out << "GameTime: 1 s of real time at 10x = " << std::fixed << std::setprecision(2)
+        << clock.simulationTime().count() << " s simulated\n";
+
+    TaskScheduler scheduler;
+    std::vector<std::string> events;
+    scheduler.scheduleOnce(milliseconds{250}, [&events] { events.emplace_back("launch"); });
+    scheduler.scheduleRepeating(milliseconds{100}, [&events] { events.emplace_back("telemetry"); }, 3);
+    const auto runs = scheduler.advance(milliseconds{500});
+    out << "TaskScheduler ran " << runs << " tasks:";
+    for (const auto& e : events) {
+        out << ' ' << e;
+    }
+    out << '\n';
+
+    RateLimiter limiter{2.0, 3.0};
+    const auto t0 = SteadyClock::time_point{};
+    int granted = 0;
+    for (int i = 0; i < 5; ++i) {
+        granted += limiter.tryAcquire(t0) ? 1 : 0;
+    }
+    out << "RateLimiter burst of 5 requests -> " << granted << " granted\n";
+
+    PerformanceProfiler profiler;
+    profiler.record("physics", 1200us);
+    profiler.record("physics", 800us);
+    profiler.record("render", 4ms);
+    profiler.report(out);
+
+    out << "Light delay Earth->Sun: " << formatDuration(duration_cast<Nanoseconds>(
+                                             SpaceTime::lightTravelTime(SpaceTime::kAstronomicalUnit)))
+        << '\n';
+    out << std::defaultfloat;
 }
 
 } // namespace CppVerseHub::Utils::Time

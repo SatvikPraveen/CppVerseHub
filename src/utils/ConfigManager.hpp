@@ -1,597 +1,488 @@
-// File: src/utils/ConfigManager.hpp
-// Application Configuration Management System
-
+/**
+ * @file ConfigManager.hpp
+ * @brief Typed, thread-safe, observable configuration store with INI/JSON import and validation.
+ *
+ * Demonstrates: a closed set of value types modelled with `std::variant` and converted with
+ * `if constexpr`; reader/writer locking with `std::shared_mutex` (many concurrent readers, exclusive
+ * writers); the Observer pattern with callbacks invoked *outside* the lock to avoid re-entrancy
+ * deadlocks; per-key validators; dependency injection of the environment lookup so overrides are
+ * testable; and a fluent Builder. Keys are hierarchical, "section.key" ("graphics.width").
+ */
 #pragma once
 
-#include <string>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <iostream>
 #include <map>
-#include <unordered_map>
-#include <variant>
-#include <optional>
-#include <vector>
 #include <memory>
 #include <mutex>
-#include <fstream>
-#include <iostream>
+#include <optional>
+#include <ostream>
+#include <shared_mutex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <type_traits>
-#include <functional>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace CppVerseHub::Utils {
 
-// Forward declaration
 class JsonValue;
 
-// ===== CONFIGURATION VALUE TYPE =====
+/// @brief Error raised for missing keys, type mismatches, validation failures and malformed input.
+class ConfigError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
+/**
+ * @brief A single configuration value: bool, integer, floating point, string or list of strings.
+ */
 class ConfigValue {
 public:
-    using ValueType = std::variant<bool, int, double, std::string, std::vector<std::string>>;
-    
-private:
-    ValueType value_;
-    std::string description_;
-    bool is_readonly_;
-    
-public:
-    // Constructors
-    ConfigValue() : value_(std::string("")), is_readonly_(false) {}
-    
-    template<typename T>
-    ConfigValue(T&& value, const std::string& desc = "", bool readonly = false)
-        : value_(std::forward<T>(value)), description_(desc), is_readonly_(readonly) {}
-    
-    // Type checking
-    bool isBool() const { return std::holds_alternative<bool>(value_); }
-    bool isInt() const { return std::holds_alternative<int>(value_); }
-    bool isDouble() const { return std::holds_alternative<double>(value_); }
-    bool isString() const { return std::holds_alternative<std::string>(value_); }
-    bool isStringArray() const { return std::holds_alternative<std::vector<std::string>>(value_); }
-    
-    // Value access with type safety
-    template<typename T>
-    T get() const {
-        if constexpr (std::is_same_v<T, bool>) {
-            if (isBool()) return std::get<bool>(value_);
-            if (isString()) {
-                const std::string& str = std::get<std::string>(value_);
-                std::string lower = str;
-                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                return lower == "true" || lower == "1" || lower == "yes" || lower == "on";
-            }
-            if (isInt()) return std::get<int>(value_) != 0;
-            if (isDouble()) return std::get<double>(value_) != 0.0;
-        } else if constexpr (std::is_same_v<T, int>) {
-            if (isInt()) return std::get<int>(value_);
-            if (isDouble()) return static_cast<int>(std::get<double>(value_));
-            if (isString()) return std::stoi(std::get<std::string>(value_));
-            if (isBool()) return std::get<bool>(value_) ? 1 : 0;
-        } else if constexpr (std::is_same_v<T, double>) {
-            if (isDouble()) return std::get<double>(value_);
-            if (isInt()) return static_cast<double>(std::get<int>(value_));
-            if (isString()) return std::stod(std::get<std::string>(value_));
-            if (isBool()) return std::get<bool>(value_) ? 1.0 : 0.0;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            if (isString()) return std::get<std::string>(value_);
-            if (isBool()) return std::get<bool>(value_) ? "true" : "false";
-            if (isInt()) return std::to_string(std::get<int>(value_));
-            if (isDouble()) return std::to_string(std::get<double>(value_));
-        } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-            if (isStringArray()) return std::get<std::vector<std::string>>(value_);
+    using List = std::vector<std::string>;                                       ///< String list.
+    using Storage = std::variant<bool, std::int64_t, double, std::string, List>; ///< Underlying storage.
+
+    /// @brief Kind of value.
+    enum class Type : std::uint8_t { Bool, Int, Double, String, List };
+
+    /// @brief Empty string value.
+    ConfigValue() = default;
+    /// @brief Boolean. @param b Value.
+    ConfigValue(bool b) : value_(b) {} // NOLINT(google-explicit-constructor)
+    /// @brief Integer from any integral type. @param i Value.
+    template <std::integral I>
+        requires(!std::same_as<I, bool>)
+    ConfigValue(I i) : value_(static_cast<std::int64_t>(i)) {} // NOLINT(google-explicit-constructor)
+    /// @brief Floating point. @param d Value.
+    ConfigValue(double d) : value_(d) {} // NOLINT(google-explicit-constructor)
+    /// @brief String. @param s Value.
+    ConfigValue(std::string s) : value_(std::move(s)) {} // NOLINT(google-explicit-constructor)
+    /// @brief String. @param s Value.
+    ConfigValue(const char* s) : value_(std::string{s}) {} // NOLINT(google-explicit-constructor)
+    /// @brief String. @param s Value.
+    ConfigValue(std::string_view s) : value_(std::string{s}) {} // NOLINT(google-explicit-constructor)
+    /// @brief List. @param l Value.
+    ConfigValue(List l) : value_(std::move(l)) {} // NOLINT(google-explicit-constructor)
+
+    /**
+     * @brief Infers a typed value from text: "true"/"false"/"yes"/"no"/"on"/"off", integers, decimals,
+     * "[a, b, c]" lists; anything else (or text in double quotes) is a string.
+     * @param text Raw text.
+     * @return Typed value.
+     */
+    [[nodiscard]] static ConfigValue parse(std::string_view text);
+
+    /// @brief Kind of value. @return Type.
+    [[nodiscard]] Type type() const noexcept { return static_cast<Type>(value_.index()); }
+
+    /// @brief Name of the type. @return "bool", "int", "double", "string" or "list".
+    [[nodiscard]] std::string_view typeName() const noexcept;
+
+    /**
+     * @brief Exact-type test.
+     * @tparam T One of the storage types (or any integral type for Int).
+     * @return True if the value holds T.
+     */
+    template <typename T>
+    [[nodiscard]] bool is() const noexcept {
+        if constexpr (std::same_as<T, bool>) {
+            return std::holds_alternative<bool>(value_);
+        } else if constexpr (std::integral<T>) {
+            return std::holds_alternative<std::int64_t>(value_);
+        } else if constexpr (std::floating_point<T>) {
+            return std::holds_alternative<double>(value_);
+        } else if constexpr (std::same_as<T, std::string>) {
+            return std::holds_alternative<std::string>(value_);
+        } else if constexpr (std::same_as<T, List>) {
+            return std::holds_alternative<List>(value_);
+        } else {
+            return false;
         }
-        
-        throw std::runtime_error("Cannot convert config value to requested type");
     }
-    
-    // Optional value access
-    template<typename T>
-    std::optional<T> tryGet() const {
-        try {
-            return get<T>();
-        } catch (const std::exception&) {
+
+    /**
+     * @brief Converting accessor.
+     *
+     * Integers widen to floating point; floating values convert to integers only if integral; strings
+     * are parsed for numeric/bool targets; every value converts to `std::string`; a string converts to
+     * a one-element list.
+     * @tparam T bool, an integral type, a floating-point type, std::string or List.
+     * @return The converted value, or `std::nullopt` if conversion is impossible or out of range.
+     */
+    template <typename T>
+    [[nodiscard]] std::optional<T> as() const;
+
+    /**
+     * @brief Throwing variant of `as()`.
+     * @tparam T Target type.
+     * @return Converted value.
+     * @throws ConfigError if the conversion is impossible.
+     */
+    template <typename T>
+    [[nodiscard]] T get() const {
+        if (auto v = as<T>()) {
+            return std::move(*v);
+        }
+        throw ConfigError("ConfigValue: cannot convert " + std::string{typeName()} + " '" + toString() +
+                          "' to requested type");
+    }
+
+    /**
+     * @brief Canonical text form (lists as "[a, b]"); `parse(toString())` round-trips except for
+     * strings that look like other types.
+     * @return Text.
+     */
+    [[nodiscard]] std::string toString() const;
+
+    /// @brief Underlying variant. @return Storage.
+    [[nodiscard]] const Storage& storage() const noexcept { return value_; }
+
+    /// @brief Equality. @param a Lhs. @param b Rhs. @return True if same type and value.
+    friend bool operator==(const ConfigValue& a, const ConfigValue& b) = default;
+
+    /// @brief Streams `toString()`. @param os Stream. @param v Value. @return os.
+    friend std::ostream& operator<<(std::ostream& os, const ConfigValue& v) { return os << v.toString(); }
+
+private:
+    [[nodiscard]] std::optional<std::int64_t> toInt() const noexcept;
+    [[nodiscard]] std::optional<double> toDouble() const noexcept;
+    [[nodiscard]] std::optional<bool> toBool() const noexcept;
+
+    Storage value_{std::string{}};
+};
+
+template <typename T>
+std::optional<T> ConfigValue::as() const {
+    if constexpr (std::same_as<T, bool>) {
+        return toBool();
+    } else if constexpr (std::integral<T>) {
+        const auto i = toInt();
+        if (!i || !std::in_range<T>(*i)) {
             return std::nullopt;
         }
-    }
-    
-    // Value assignment
-    template<typename T>
-    void set(T&& new_value) {
-        if (is_readonly_) {
-            throw std::runtime_error("Cannot modify read-only configuration value");
+        return static_cast<T>(*i);
+    } else if constexpr (std::floating_point<T>) {
+        const auto d = toDouble();
+        if (!d) {
+            return std::nullopt;
         }
-        value_ = std::forward<T>(new_value);
+        return static_cast<T>(*d);
+    } else if constexpr (std::same_as<T, std::string>) {
+        return toString();
+    } else if constexpr (std::same_as<T, List>) {
+        if (const auto* l = std::get_if<List>(&value_)) {
+            return *l;
+        }
+        return List{toString()};
+    } else {
+        static_assert(sizeof(T) == 0, "ConfigValue::as: unsupported target type");
     }
-    
-    // Properties
-    const std::string& getDescription() const { return description_; }
-    void setDescription(const std::string& desc) { description_ = desc; }
-    
-    bool isReadOnly() const { return is_readonly_; }
-    void setReadOnly(bool readonly) { is_readonly_ = readonly; }
-    
-    // String representation
-    std::string toString() const {
-        return std::visit([](const auto& val) -> std::string {
-            using T = std::decay_t<decltype(val)>;
-            if constexpr (std::is_same_v<T, bool>) {
-                return val ? "true" : "false";
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                return val;
-            } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-                std::string result = "[";
-                for (size_t i = 0; i < val.size(); ++i) {
-                    if (i > 0) result += ", ";
-                    result += "\"" + val[i] + "\"";
-                }
-                result += "]";
-                return result;
-            } else {
-                return std::to_string(val);
-            }
-        }, value_);
-    }
-    
-    // Type name
-    std::string getTypeName() const {
-        return std::visit([](const auto& val) -> std::string {
-            using T = std::decay_t<decltype(val)>;
-            if constexpr (std::is_same_v<T, bool>) return "bool";
-            else if constexpr (std::is_same_v<T, int>) return "int";
-            else if constexpr (std::is_same_v<T, double>) return "double";
-            else if constexpr (std::is_same_v<T, std::string>) return "string";
-            else if constexpr (std::is_same_v<T, std::vector<std::string>>) return "string_array";
-            else return "unknown";
-        }, value_);
-    }
-};
+}
 
-// ===== CONFIGURATION SECTION =====
-
-class ConfigSection {
-private:
-    std::unordered_map<std::string, ConfigValue> values_;
-    std::string name_;
-    std::string description_;
-    mutable std::mutex mutex_;
-    
-public:
-    explicit ConfigSection(const std::string& section_name = "", const std::string& desc = "")
-        : name_(section_name), description_(desc) {}
-    
-    // Value access
-    template<typename T>
-    T get(const std::string& key, const T& default_value = T{}) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = values_.find(key);
-        if (it != values_.end()) {
-            auto opt_val = it->second.template tryGet<T>();
-            if (opt_val.has_value()) {
-                return opt_val.value();
-            }
-        }
-        return default_value;
-    }
-    
-    template<typename T>
-    void set(const std::string& key, T&& value, const std::string& description = "", bool readonly = false) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        values_[key] = ConfigValue(std::forward<T>(value), description, readonly);
-    }
-    
-    // Check if key exists
-    bool has(const std::string& key) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.find(key) != values_.end();
-    }
-    
-    // Remove key
-    bool remove(const std::string& key) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.erase(key) > 0;
-    }
-    
-    // Get all keys
-    std::vector<std::string> getKeys() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::vector<std::string> keys;
-        keys.reserve(values_.size());
-        for (const auto& pair : values_) {
-            keys.push_back(pair.first);
-        }
-        return keys;
-    }
-    
-    // Get config value (for metadata access)
-    std::optional<ConfigValue> getConfigValue(const std::string& key) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = values_.find(key);
-        if (it != values_.end()) {
-            return it->second;
-        }
-        return std::nullopt;
-    }
-    
-    // Section properties
-    const std::string& getName() const { return name_; }
-    const std::string& getDescription() const { return description_; }
-    void setDescription(const std::string& desc) { description_ = desc; }
-    
-    size_t size() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.size();
-    }
-    
-    bool empty() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.empty();
-    }
-    
-    // Clear all values
-    void clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        values_.clear();
-    }
-    
-    // Merge another section
-    void merge(const ConfigSection& other, bool overwrite = true) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::lock_guard<std::mutex> other_lock(other.mutex_);
-        
-        for (const auto& pair : other.values_) {
-            if (overwrite || values_.find(pair.first) == values_.end()) {
-                values_[pair.first] = pair.second;
-            }
-        }
-    }
-    
-    // Iterator support
-    auto begin() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.begin();
-    }
-    
-    auto end() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return values_.end();
-    }
-};
-
-// ===== CONFIGURATION MANAGER =====
-
+/**
+ * @brief Hierarchical key/value configuration with thread-safe access and change notification.
+ *
+ * Copying copies values and validators but not listeners (observers belong to one instance).
+ */
 class ConfigManager {
-private:
-    std::unordered_map<std::string, std::unique_ptr<ConfigSection>> sections_;
-    std::vector<std::string> config_file_paths_;
-    mutable std::mutex mutex_;
-    bool auto_save_;
-    std::string current_config_file_;
-    
-    // Validation callbacks
-    std::unordered_map<std::string, std::function<bool(const ConfigValue&)>> validators_;
-    
-    // Change notifications
-    std::unordered_map<std::string, std::vector<std::function<void(const std::string&, const ConfigValue&)>>> change_listeners_;
-    
-    // Singleton instance
-    static std::unique_ptr<ConfigManager> instance_;
-    static std::mutex instance_mutex_;
-    
-    ConfigManager() : auto_save_(false) {
-        initializeDefaults();
-    }
-    
-    void initializeDefaults();
-    void notifyChange(const std::string& section_key, const ConfigValue& value);
-    
 public:
-    // Singleton access
-    static ConfigManager& getInstance() {
-        std::lock_guard<std::mutex> lock(instance_mutex_);
-        if (!instance_) {
-            instance_ = std::unique_ptr<ConfigManager>(new ConfigManager());
+    /// @brief Description of one change delivered to listeners.
+    struct Change {
+        std::string key;                    ///< Affected key.
+        std::optional<ConfigValue> before;  ///< Previous value (nullopt if the key was new).
+        std::optional<ConfigValue> after;   ///< New value (nullopt if the key was removed).
+    };
+    using Listener = std::function<void(const Change&)>;            ///< Observer callback.
+    using ListenerId = std::uint64_t;                               ///< Handle for unsubscribing.
+    using Validator = std::function<bool(const ConfigValue&)>;      ///< Validation predicate.
+    using EnvLookup = std::function<std::optional<std::string>(const std::string&)>; ///< Env lookup.
+
+    ConfigManager() = default;
+    ~ConfigManager() = default;
+    /// @brief Copies values and validators. @param other Source.
+    ConfigManager(const ConfigManager& other);
+    /// @brief Moves values and validators. @param other Source.
+    ConfigManager(ConfigManager&& other) noexcept;
+    /// @brief Copy-assigns values and validators. @param other Source. @return `*this`.
+    ConfigManager& operator=(const ConfigManager& other);
+    /// @brief Move-assigns values and validators. @param other Source. @return `*this`.
+    ConfigManager& operator=(ConfigManager&& other) noexcept;
+
+    // ----- access ---------------------------------------------------------------------------------
+
+    /**
+     * @brief Stores a value after running the key's validator, then notifies listeners.
+     * @param key "section.key" (non-empty).
+     * @param value Value.
+     * @throws ConfigError if the key is empty or validation fails.
+     */
+    void set(const std::string& key, ConfigValue value);
+
+    /**
+     * @brief Returns whether a key exists.
+     * @param key Key.
+     * @return True if present.
+     */
+    [[nodiscard]] bool has(const std::string& key) const;
+
+    /**
+     * @brief Raw value lookup.
+     * @param key Key.
+     * @return Value, or `std::nullopt`.
+     */
+    [[nodiscard]] std::optional<ConfigValue> value(const std::string& key) const;
+
+    /**
+     * @brief Typed lookup.
+     * @tparam T Target type (see `ConfigValue::as`).
+     * @param key Key.
+     * @return Converted value, or `std::nullopt` if missing or not convertible.
+     */
+    template <typename T>
+    [[nodiscard]] std::optional<T> tryGet(const std::string& key) const {
+        const auto v = value(key);
+        return v ? v->template as<T>() : std::nullopt;
+    }
+
+    /**
+     * @brief Typed lookup that throws.
+     * @tparam T Target type.
+     * @param key Key.
+     * @return Converted value.
+     * @throws ConfigError if missing or not convertible.
+     */
+    template <typename T>
+    [[nodiscard]] T get(const std::string& key) const {
+        const auto v = value(key);
+        if (!v) {
+            throw ConfigError("ConfigManager: missing key '" + key + "'");
         }
-        return *instance_;
+        return v->template get<T>();
     }
-    
-    // Delete copy constructor and assignment
-    ConfigManager(const ConfigManager&) = delete;
-    ConfigManager& operator=(const ConfigManager&) = delete;
-    
-    // Section management
-    ConfigSection& getSection(const std::string& section_name) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = sections_.find(section_name);
-        if (it == sections_.end()) {
-            sections_[section_name] = std::make_unique<ConfigSection>(section_name);
-        }
-        return *sections_[section_name];
+
+    /**
+     * @brief Typed lookup with a fallback.
+     * @tparam T Target type.
+     * @param key Key.
+     * @param fallback Returned if missing or not convertible.
+     * @return Value or fallback.
+     */
+    template <typename T>
+    [[nodiscard]] T getOr(const std::string& key, T fallback) const {
+        auto v = tryGet<T>(key);
+        return v ? std::move(*v) : std::move(fallback);
     }
-    
-    bool hasSection(const std::string& section_name) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return sections_.find(section_name) != sections_.end();
+
+    /// @brief `getOr` overload so string literals deduce `std::string`.
+    /// @param key Key. @param fallback Fallback. @return Value or fallback.
+    [[nodiscard]] std::string getOr(const std::string& key, const char* fallback) const {
+        return getOr<std::string>(key, std::string{fallback});
     }
-    
-    bool removeSection(const std::string& section_name) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return sections_.erase(section_name) > 0;
-    }
-    
-    std::vector<std::string> getSectionNames() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::vector<std::string> names;
-        names.reserve(sections_.size());
-        for (const auto& pair : sections_) {
-            names.push_back(pair.first);
-        }
-        return names;
-    }
-    
-    // Convenience methods for direct value access
-    template<typename T>
-    T get(const std::string& section_name, const std::string& key, const T& default_value = T{}) {
-        return getSection(section_name).template get<T>(key, default_value);
-    }
-    
-    template<typename T>
-    void set(const std::string& section_name, const std::string& key, T&& value, 
-             const std::string& description = "", bool readonly = false) {
-        getSection(section_name).set(key, std::forward<T>(value), description, readonly);
-        
-        // Validate if validator exists
-        std::string full_key = section_name + "." + key;
-        auto validator_it = validators_.find(full_key);
-        if (validator_it != validators_.end()) {
-            auto config_val = getSection(section_name).getConfigValue(key);
-            if (config_val && !validator_it->second(*config_val)) {
-                throw std::runtime_error("Configuration value validation failed for: " + full_key);
-            }
-        }
-        
-        // Notify change
-        if (auto config_val = getSection(section_name).getConfigValue(key)) {
-            notifyChange(full_key, *config_val);
-        }
-        
-        // Auto-save if enabled
-        if (auto_save_ && !current_config_file_.empty()) {
-            saveToFile(current_config_file_);
-        }
-    }
-    
-    // File operations
-    bool loadFromFile(const std::string& filename);
-    bool saveToFile(const std::string& filename) const;
-    bool loadFromJson(const std::string& json_content);
-    std::string saveToJson() const;
-    
-    // Environment variable loading
-    void loadFromEnvironment(const std::string& prefix = "CPPVERSEHUB_");
-    
-    // Command line arguments
-    void loadFromCommandLine(int argc, char* argv[], const std::string& prefix = "--config-");
-    
-    // Auto-save functionality
-    void setAutoSave(bool enabled, const std::string& filename = "") {
-        auto_save_ = enabled;
-        if (!filename.empty()) {
-            current_config_file_ = filename;
-        }
-    }
-    
-    bool isAutoSaveEnabled() const { return auto_save_; }
-    const std::string& getCurrentConfigFile() const { return current_config_file_; }
-    
-    // Validation
-    void addValidator(const std::string& section_name, const std::string& key,
-                     std::function<bool(const ConfigValue&)> validator) {
-        std::string full_key = section_name + "." + key;
-        validators_[full_key] = std::move(validator);
-    }
-    
-    // Change notifications
-    void addChangeListener(const std::string& section_name, const std::string& key,
-                          std::function<void(const std::string&, const ConfigValue&)> listener) {
-        std::string full_key = section_name + "." + key;
-        change_listeners_[full_key].push_back(std::move(listener));
-    }
-    
-    // Configuration paths
-    void addConfigPath(const std::string& path) {
-        config_file_paths_.push_back(path);
-    }
-    
-    bool loadFromPaths() {
-        for (const auto& path : config_file_paths_) {
-            if (loadFromFile(path)) {
-                current_config_file_ = path;
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    // Utility methods
-    void clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        sections_.clear();
-        validators_.clear();
-        change_listeners_.clear();
-    }
-    
-    size_t getSectionCount() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return sections_.size();
-    }
-    
-    // Debug and introspection
-    void printConfiguration(std::ostream& os = std::cout) const;
-    std::string getConfigurationReport() const;
-    
-    // Backup and restore
-    std::string createBackup() const { return saveToJson(); }
-    void restoreFromBackup(const std::string& backup_json) { loadFromJson(backup_json); }
-    
-    // Configuration merging
-    void mergeFrom(const ConfigManager& other, bool overwrite = true);
-    
-    // Space game specific configurations
-    void setupSpaceGameDefaults();
-    void validateSpaceGameConfig();
+
+    /**
+     * @brief Removes a key and notifies listeners.
+     * @param key Key.
+     * @return True if the key existed.
+     */
+    bool remove(const std::string& key);
+
+    /// @brief Removes every key (listeners are not notified per key).
+    void clear();
+
+    /// @brief Number of keys. @return Count.
+    [[nodiscard]] std::size_t size() const;
+
+    /**
+     * @brief Keys starting with a prefix, sorted.
+     * @param prefix Prefix (e.g. "graphics." for one section); empty for all keys.
+     * @return Keys.
+     */
+    [[nodiscard]] std::vector<std::string> keys(std::string_view prefix = {}) const;
+
+    /// @brief Distinct section names (text before the first '.'), sorted. @return Sections.
+    [[nodiscard]] std::vector<std::string> sections() const;
+
+    /**
+     * @brief Copy of all entries in one section, keyed without the section prefix.
+     * @param section Section name.
+     * @return Entries.
+     */
+    [[nodiscard]] std::map<std::string, ConfigValue> section(std::string_view section) const;
+
+    /// @brief Copy of every entry. @return Entries.
+    [[nodiscard]] std::map<std::string, ConfigValue> snapshot() const;
+
+    // ----- import / export ------------------------------------------------------------------------
+
+    /**
+     * @brief Loads INI text: `[section]` headers, `key = value`, `;`/`#` comments, quoted strings.
+     * Keys before the first section have no prefix. Existing keys are overwritten.
+     * @param text INI text.
+     * @throws ConfigError with the line number on malformed lines or validation failure.
+     */
+    void loadIni(std::string_view text);
+
+    /**
+     * @brief Serialises to INI, grouping keys by section (deterministic order).
+     * @return INI text.
+     */
+    [[nodiscard]] std::string toIni() const;
+
+    /**
+     * @brief Imports a JSON object, flattening nested objects into dotted keys. Arrays of scalars become
+     * lists; numbers become Int when integral, else Double; null is skipped.
+     * @param json JSON value (must be an object).
+     * @throws ConfigError if `json` is not an object.
+     */
+    void loadJson(const JsonValue& json);
+
+    /**
+     * @brief Loads a file, choosing INI or JSON by extension (.json -> JSON, otherwise INI).
+     * @param path File path.
+     * @throws ConfigError or a ParseException subtype on failure.
+     */
+    void loadFile(const std::filesystem::path& path);
+
+    /**
+     * @brief Writes `toIni()` to a file.
+     * @param path File path.
+     * @throws std::runtime_error on I/O failure.
+     */
+    void saveIni(const std::filesystem::path& path) const;
+
+    /**
+     * @brief Copies entries from another manager.
+     * @param other Source.
+     * @param overwrite Whether to replace keys that already exist.
+     * @return Number of keys written.
+     */
+    std::size_t merge(const ConfigManager& other, bool overwrite = true);
+
+    /**
+     * @brief For every existing key `a.b`, checks the variable `PREFIX_A_B` and applies it when set.
+     * @param prefix Variable prefix (e.g. "CPPVERSEHUB"); empty means no prefix.
+     * @param lookup Environment lookup; defaults to the process environment.
+     * @return Number of overridden keys.
+     */
+    std::size_t applyEnvironmentOverrides(std::string_view prefix, const EnvLookup& lookup = systemEnvironment);
+
+    /**
+     * @brief Default lookup using the process environment.
+     * @param name Variable name.
+     * @return Value, if set.
+     */
+    [[nodiscard]] static std::optional<std::string> systemEnvironment(const std::string& name);
+
+    /**
+     * @brief Environment variable name for a key: ("app", "graphics.width") -> "APP_GRAPHICS_WIDTH".
+     * @param prefix Prefix.
+     * @param key Key.
+     * @return Variable name.
+     */
+    [[nodiscard]] static std::string environmentName(std::string_view prefix, std::string_view key);
+
+    // ----- validation & observers -----------------------------------------------------------------
+
+    /**
+     * @brief Registers a validator for a key; it also runs immediately against any existing value.
+     * @param key Key.
+     * @param validator Predicate.
+     * @param description Message used in errors.
+     * @throws ConfigError if the current value fails.
+     */
+    void addValidator(const std::string& key, Validator validator, std::string description = "invalid value");
+
+    /**
+     * @brief Re-validates every key that has a validator.
+     * @return Human-readable failure messages (empty if valid).
+     */
+    [[nodiscard]] std::vector<std::string> validate() const;
+
+    /**
+     * @brief Lists required keys that are missing.
+     * @param required Keys that must exist.
+     * @return Missing keys.
+     */
+    [[nodiscard]] std::vector<std::string> missingKeys(const std::vector<std::string>& required) const;
+
+    /**
+     * @brief Subscribes to changes. Callbacks run on the mutating thread after the lock is released.
+     * @param listener Callback.
+     * @return Subscription id.
+     */
+    ListenerId addListener(Listener listener);
+
+    /**
+     * @brief Unsubscribes.
+     * @param id Subscription id.
+     * @return True if removed.
+     */
+    bool removeListener(ListenerId id);
+
+private:
+    struct ValidatorEntry {
+        Validator check;
+        std::string description;
+    };
+
+    void notify(const Change& change) const;
+
+    mutable std::shared_mutex mutex_;
+    std::map<std::string, ConfigValue> values_;
+    std::map<std::string, ValidatorEntry> validators_;
+
+    mutable std::mutex listenersMutex_;
+    std::map<ListenerId, std::shared_ptr<const Listener>> listeners_;
+    ListenerId nextListenerId_ = 1;
 };
 
-// ===== CONFIGURATION PRESETS =====
-
-namespace ConfigPresets {
-    
-    // Graphics settings preset
-    struct GraphicsPreset {
-        std::string name;
-        int resolution_width;
-        int resolution_height;
-        bool fullscreen;
-        int quality_level; // 1-5
-        bool vsync;
-        int max_fps;
-        double render_scale;
-    };
-    
-    // Audio settings preset
-    struct AudioPreset {
-        std::string name;
-        double master_volume;
-        double music_volume;
-        double effects_volume;
-        double voice_volume;
-        bool surround_sound;
-        std::string audio_device;
-    };
-    
-    // Gameplay settings preset
-    struct GameplayPreset {
-        std::string name;
-        std::string difficulty;
-        bool auto_save;
-        int save_frequency; // minutes
-        bool pause_on_focus_loss;
-        std::vector<std::string> enabled_mods;
-    };
-    
-    // Network settings preset
-    struct NetworkPreset {
-        std::string name;
-        std::string server_address;
-        int server_port;
-        int max_players;
-        int timeout_seconds;
-        bool use_compression;
-        std::string encryption_level;
-    };
-    
-    // Preset manager
-    class PresetManager {
-    private:
-        std::vector<GraphicsPreset> graphics_presets_;
-        std::vector<AudioPreset> audio_presets_;
-        std::vector<GameplayPreset> gameplay_presets_;
-        std::vector<NetworkPreset> network_presets_;
-        
-    public:
-        PresetManager() { initializeDefaultPresets(); }
-        
-        void initializeDefaultPresets();
-        
-        // Apply presets to config manager
-        void applyGraphicsPreset(const std::string& preset_name, ConfigManager& config);
-        void applyAudioPreset(const std::string& preset_name, ConfigManager& config);
-        void applyGameplayPreset(const std::string& preset_name, ConfigManager& config);
-        void applyNetworkPreset(const std::string& preset_name, ConfigManager& config);
-        
-        // Get available presets
-        std::vector<std::string> getGraphicsPresetNames() const;
-        std::vector<std::string> getAudioPresetNames() const;
-        std::vector<std::string> getGameplayPresetNames() const;
-        std::vector<std::string> getNetworkPresetNames() const;
-        
-        // Custom preset creation
-        void addGraphicsPreset(const GraphicsPreset& preset);
-        void addAudioPreset(const AudioPreset& preset);
-        void addGameplayPreset(const GameplayPreset& preset);
-        void addNetworkPreset(const NetworkPreset& preset);
-    };
-    
-} // namespace ConfigPresets
-
-// ===== CONFIGURATION MACROS FOR CONVENIENCE =====
-
-#define CONFIG_GET(section, key, default_val) \
-    CppVerseHub::Utils::ConfigManager::getInstance().get(section, key, default_val)
-
-#define CONFIG_SET(section, key, value) \
-    CppVerseHub::Utils::ConfigManager::getInstance().set(section, key, value)
-
-#define CONFIG_GET_BOOL(section, key, default_val) \
-    CppVerseHub::Utils::ConfigManager::getInstance().get<bool>(section, key, default_val)
-
-#define CONFIG_GET_INT(section, key, default_val) \
-    CppVerseHub::Utils::ConfigManager::getInstance().get<int>(section, key, default_val)
-
-#define CONFIG_GET_DOUBLE(section, key, default_val) \
-    CppVerseHub::Utils::ConfigManager::getInstance().get<double>(section, key, default_val)
-
-#define CONFIG_GET_STRING(section, key, default_val) \
-    CppVerseHub::Utils::ConfigManager::getInstance().get<std::string>(section, key, default_val)
-
-// ===== CONFIGURATION BUILDER PATTERN =====
-
+/**
+ * @brief Fluent builder for `ConfigManager`: defaults, then INI text, then overrides.
+ */
 class ConfigBuilder {
-private:
-    ConfigManager& config_;
-    std::string current_section_;
-    
 public:
-    explicit ConfigBuilder(ConfigManager& config = ConfigManager::getInstance()) 
-        : config_(config) {}
-    
-    ConfigBuilder& section(const std::string& section_name) {
-        current_section_ = section_name;
-        return *this;
-    }
-    
-    template<typename T>
-    ConfigBuilder& set(const std::string& key, T&& value, const std::string& description = "", bool readonly = false) {
-        if (current_section_.empty()) {
-            throw std::runtime_error("No section specified in ConfigBuilder");
-        }
-        config_.set(current_section_, key, std::forward<T>(value), description, readonly);
-        return *this;
-    }
-    
-    ConfigBuilder& validator(const std::string& key, std::function<bool(const ConfigValue&)> validator_func) {
-        if (current_section_.empty()) {
-            throw std::runtime_error("No section specified in ConfigBuilder");
-        }
-        config_.addValidator(current_section_, key, std::move(validator_func));
-        return *this;
-    }
-    
-    ConfigBuilder& onChange(const std::string& key, 
-                           std::function<void(const std::string&, const ConfigValue&)> listener) {
-        if (current_section_.empty()) {
-            throw std::runtime_error("No section specified in ConfigBuilder");
-        }
-        config_.addChangeListener(current_section_, key, std::move(listener));
-        return *this;
-    }
-    
-    ConfigBuilder& loadFile(const std::string& filename) {
-        config_.loadFromFile(filename);
-        return *this;
-    }
-    
-    ConfigBuilder& autoSave(const std::string& filename) {
-        config_.setAutoSave(true, filename);
-        return *this;
-    }
+    /// @brief Adds a default value. @param key Key. @param value Value. @return `*this`.
+    ConfigBuilder& withDefault(std::string key, ConfigValue value);
+    /// @brief Adds INI text applied after defaults. @param text INI text. @return `*this`.
+    ConfigBuilder& withIni(std::string text);
+    /// @brief Adds an override applied last. @param key Key. @param value Value. @return `*this`.
+    ConfigBuilder& withOverride(std::string key, ConfigValue value);
+    /// @brief Adds a validator. @param key Key. @param validator Predicate. @param description Message.
+    /// @return `*this`.
+    ConfigBuilder& withValidator(std::string key, ConfigManager::Validator validator, std::string description);
+    /// @brief Marks a key as required. @param key Key. @return `*this`.
+    ConfigBuilder& require(std::string key);
+
+    /**
+     * @brief Builds the configuration.
+     * @return Configured manager.
+     * @throws ConfigError if a required key is missing or validation fails.
+     */
+    [[nodiscard]] ConfigManager build() const;
+
+private:
+    struct PendingValidator {
+        std::string key;
+        ConfigManager::Validator check;
+        std::string description;
+    };
+    std::vector<std::pair<std::string, ConfigValue>> defaults_;
+    std::vector<std::string> iniSources_;
+    std::vector<std::pair<std::string, ConfigValue>> overrides_;
+    std::vector<PendingValidator> validators_;
+    std::vector<std::string> required_;
 };
+
+/**
+ * @brief Runs the configuration showcase, writing only to `out`.
+ * @param out Destination stream.
+ */
+void demonstrateConfig(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Utils

@@ -1,716 +1,650 @@
-// File: src/utils/Logger.hpp
-// Comprehensive Logging System for Space Game
-
+/**
+ * @file Logger.hpp
+ * @brief Thread-safe, level-filtered logging with pluggable formatters and sinks.
+ *
+ * Demonstrates several classic C++ design techniques in one small subsystem:
+ *  - the Non-Virtual Interface (NVI) idiom: `Sink::write()` is public and non-virtual, it takes the
+ *    lock, filters by level and formats, then calls the private virtual `consume()`;
+ *  - the Strategy pattern for formatting (`Formatter`, `PatternFormatter`, `JsonFormatter`);
+ *  - a producer/consumer queue (`AsyncSink`) that moves I/O off the calling thread;
+ *  - `std::source_location` instead of `__FILE__`/`__LINE__` macros for call-site capture;
+ *  - lock-free level checks through `std::atomic` so disabled log statements cost one load.
+ *
+ * A `Logger` without sinks is completely silent; nothing is ever written to `std::cout` unless the
+ * caller attaches an `OStreamSink` for it explicitly.
+ */
 #pragma once
 
-#include <string>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <filesystem>
 #include <fstream>
+#include <functional>
+#include <iostream>
 #include <memory>
 #include <mutex>
-#include <chrono>
-#include <queue>
-#include <thread>
-#include <atomic>
-#include <condition_variable>
-#include <unordered_map>
-#include <iostream>
+#include <optional>
+#include <ostream>
+#include <shared_mutex>
+#include <source_location>
 #include <sstream>
-#include <iomanip>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace CppVerseHub::Utils {
 
-// ===== LOG LEVEL ENUMERATION =====
+/// @brief Severity of a log record, ordered from most verbose to most severe.
+enum class LogLevel : std::uint8_t { Trace = 0, Debug, Info, Warn, Error, Fatal, Off };
 
-enum class LogLevel {
-    TRACE = 0,
-    DEBUG = 1,
-    INFO = 2,
-    WARN = 3,
-    ERROR = 4,
-    FATAL = 5,
-    OFF = 6
-};
+/// @brief Number of real (non-`Off`) log levels.
+inline constexpr std::size_t kLogLevelCount = 6;
 
-// Helper function to convert LogLevel to string
-inline const char* logLevelToString(LogLevel level) {
+/**
+ * @brief Converts a level to its canonical upper-case name.
+ * @param level The level to convert.
+ * @return "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL" or "OFF".
+ */
+[[nodiscard]] constexpr std::string_view toString(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::TRACE: return "TRACE";
-        case LogLevel::DEBUG: return "DEBUG";
-        case LogLevel::INFO:  return "INFO ";
-        case LogLevel::WARN:  return "WARN ";
-        case LogLevel::ERROR: return "ERROR";
-        case LogLevel::FATAL: return "FATAL";
-        case LogLevel::OFF:   return "OFF  ";
-        default:              return "UNKNOWN";
+    case LogLevel::Trace: return "TRACE";
+    case LogLevel::Debug: return "DEBUG";
+    case LogLevel::Info: return "INFO";
+    case LogLevel::Warn: return "WARN";
+    case LogLevel::Error: return "ERROR";
+    case LogLevel::Fatal: return "FATAL";
+    case LogLevel::Off: return "OFF";
     }
+    return "UNKNOWN";
 }
 
-// Helper function to convert string to LogLevel
-inline LogLevel stringToLogLevel(const std::string& levelStr) {
-    std::string upper = levelStr;
-    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
-    
-    if (upper == "TRACE") return LogLevel::TRACE;
-    if (upper == "DEBUG") return LogLevel::DEBUG;
-    if (upper == "INFO")  return LogLevel::INFO;
-    if (upper == "WARN")  return LogLevel::WARN;
-    if (upper == "ERROR") return LogLevel::ERROR;
-    if (upper == "FATAL") return LogLevel::FATAL;
-    if (upper == "OFF")   return LogLevel::OFF;
-    
-    return LogLevel::INFO; // Default
+/**
+ * @brief Parses a level name case-insensitively ("warn", "WARNING", "Info", ...).
+ * @param text The text to parse.
+ * @return The level, or `std::nullopt` if the name is not recognised.
+ */
+[[nodiscard]] std::optional<LogLevel> parseLogLevel(std::string_view text) noexcept;
+
+/// @brief One log event, captured at the call site and handed to every sink.
+struct LogRecord {
+    std::chrono::system_clock::time_point timestamp{}; ///< Wall-clock time of the call.
+    LogLevel level{LogLevel::Info};                     ///< Severity.
+    std::string loggerName;                             ///< Name of the emitting logger.
+    std::string message;                                ///< Fully formatted message text.
+    std::source_location location{};                   ///< Call site.
+    std::thread::id threadId{};                         ///< Emitting thread.
+};
+
+// ===================================================================================================
+// Formatters
+// ===================================================================================================
+
+/// @brief Strategy interface that turns a record into a single line of text (without newline).
+class Formatter {
+public:
+    virtual ~Formatter() = default;
+    Formatter() = default;
+    Formatter(const Formatter&) = default;
+    Formatter& operator=(const Formatter&) = default;
+    Formatter(Formatter&&) = default;
+    Formatter& operator=(Formatter&&) = default;
+
+    /**
+     * @brief Formats a record.
+     * @param record The record to format.
+     * @return The formatted line.
+     */
+    [[nodiscard]] virtual std::string format(const LogRecord& record) const = 0;
+};
+
+/// @brief Human-readable "timestamp [LEVEL] [name] message" formatter with optional fields.
+class PatternFormatter final : public Formatter {
+public:
+    /// @brief Which optional fields are emitted.
+    struct Options {
+        bool timestamp = true;   ///< ISO-8601 UTC timestamp with milliseconds.
+        bool level = true;       ///< "[INFO]".
+        bool loggerName = true;  ///< "[name]" (omitted when the name is empty).
+        bool threadId = false;   ///< "[tid]".
+        bool location = false;   ///< "(file:line)".
+    };
+
+    /// @brief Constructs a formatter with default options.
+    PatternFormatter() = default;
+
+    /**
+     * @brief Constructs a formatter with the given options.
+     * @param options Fields to emit.
+     */
+    explicit PatternFormatter(Options options) noexcept : options_(options) {}
+
+    /// @copydoc Formatter::format
+    [[nodiscard]] std::string format(const LogRecord& record) const override;
+
+    /// @brief Returns the configured options.
+    /// @return The options.
+    [[nodiscard]] const Options& options() const noexcept { return options_; }
+
+private:
+    Options options_{};
+};
+
+/// @brief Emits one JSON object per record (JSON Lines), suitable for log shippers.
+class JsonFormatter final : public Formatter {
+public:
+    /// @copydoc Formatter::format
+    [[nodiscard]] std::string format(const LogRecord& record) const override;
+
+    /**
+     * @brief Escapes a string for inclusion inside a JSON string literal.
+     * @param text Raw text.
+     * @return Escaped text (without surrounding quotes).
+     */
+    [[nodiscard]] static std::string escape(std::string_view text);
+};
+
+// ===================================================================================================
+// Sinks
+// ===================================================================================================
+
+/**
+ * @brief Destination for log records.
+ *
+ * NVI: `write()` serialises access with the sink's own mutex, applies the sink's level filter and its
+ * formatter, then hands the finished line to the private virtual `consume()`. Derived classes therefore
+ * never need their own locking for `consume()`/`doFlush()`.
+ */
+class Sink {
+public:
+    /// @brief Creates a sink using a default `PatternFormatter` and accepting every level.
+    Sink();
+    virtual ~Sink() = default;
+    Sink(const Sink&) = delete;
+    Sink& operator=(const Sink&) = delete;
+    Sink(Sink&&) = delete;
+    Sink& operator=(Sink&&) = delete;
+
+    /**
+     * @brief Formats and writes a record if it passes the sink's level filter. Thread-safe.
+     * @param record The record.
+     */
+    void write(const LogRecord& record);
+
+    /// @brief Flushes buffered output. Thread-safe.
+    void flush();
+
+    /**
+     * @brief Replaces the formatter. Thread-safe.
+     * @param formatter New formatter; `nullptr` restores the default `PatternFormatter`.
+     */
+    void setFormatter(std::shared_ptr<const Formatter> formatter);
+
+    /**
+     * @brief Sets the minimum level this sink accepts (independent of the logger's level).
+     * @param level Minimum level.
+     */
+    void setLevel(LogLevel level) noexcept { level_.store(level, std::memory_order_relaxed); }
+
+    /// @brief Returns the sink's minimum level.
+    /// @return The level.
+    [[nodiscard]] LogLevel level() const noexcept { return level_.load(std::memory_order_relaxed); }
+
+    /// @brief Returns how many records this sink has accepted.
+    /// @return The count.
+    [[nodiscard]] std::size_t recordsWritten() const noexcept {
+        return written_.load(std::memory_order_relaxed);
+    }
+
+protected:
+    /// @brief Mutex guarding the sink's state; derived accessors may lock it too.
+    mutable std::mutex mutex_;
+
+private:
+    /**
+     * @brief Receives a formatted line. Called with `mutex_` held.
+     * @param line Formatted line without trailing newline.
+     * @param record The original record.
+     */
+    virtual void consume(std::string_view line, const LogRecord& record) = 0;
+
+    /// @brief Flushes any buffered output. Called with `mutex_` held.
+    virtual void doFlush() {}
+
+    /// @brief Whether `write()` should run the formatter (decorators that forward records skip it).
+    /// @return True by default.
+    [[nodiscard]] virtual bool wantsFormattedLine() const noexcept { return true; }
+
+    std::shared_ptr<const Formatter> formatter_;
+    std::atomic<LogLevel> level_{LogLevel::Trace};
+    std::atomic<std::size_t> written_{0};
+};
+
+/// @brief Writes lines to a caller-owned `std::ostream` (e.g. `std::cout` or a `std::ostringstream`).
+class OStreamSink final : public Sink {
+public:
+    /**
+     * @brief Creates a sink over a stream. The stream must outlive the sink.
+     * @param stream Destination stream.
+     * @param flushEachLine Whether to flush after every line.
+     */
+    explicit OStreamSink(std::ostream& stream, bool flushEachLine = false) noexcept
+        : stream_(&stream), flushEachLine_(flushEachLine) {}
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+    void doFlush() override;
+
+    std::ostream* stream_;
+    bool flushEachLine_;
+};
+
+/// @brief Accumulates every line in an internal string buffer; ideal for tests and demos.
+class StringSink final : public Sink {
+public:
+    /// @brief Returns everything written so far (newline-separated). Thread-safe.
+    /// @return A copy of the buffer.
+    [[nodiscard]] std::string str() const;
+
+    /// @brief Returns the individual lines written so far. Thread-safe.
+    /// @return Copy of the lines.
+    [[nodiscard]] std::vector<std::string> lines() const;
+
+    /// @brief Discards everything written so far. Thread-safe.
+    void clear();
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+
+    std::vector<std::string> lines_;
+};
+
+/// @brief Keeps only the most recent `capacity` lines (a "flight recorder").
+class RingBufferSink final : public Sink {
+public:
+    /**
+     * @brief Creates a ring buffer.
+     * @param capacity Maximum number of retained lines (at least 1).
+     */
+    explicit RingBufferSink(std::size_t capacity);
+
+    /// @brief Returns the retained lines, oldest first. Thread-safe.
+    /// @return Copy of the lines.
+    [[nodiscard]] std::vector<std::string> lines() const;
+
+    /// @brief Returns the capacity.
+    /// @return The capacity.
+    [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+
+    std::size_t capacity_;
+    std::deque<std::string> buffer_;
+};
+
+/// @brief Forwards each record to a user callback (bridge to other logging systems).
+class CallbackSink final : public Sink {
+public:
+    /// @brief Callback signature: formatted line and original record.
+    using Callback = std::function<void(std::string_view line, const LogRecord& record)>;
+
+    /**
+     * @brief Creates a callback sink.
+     * @param callback Function invoked for every accepted record (under the sink's lock).
+     */
+    explicit CallbackSink(Callback callback) : callback_(std::move(callback)) {}
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+
+    Callback callback_;
+};
+
+/// @brief Appends lines to a file, rotating to `file.1`, `file.2`, ... once a size limit is reached.
+class FileSink final : public Sink {
+public:
+    /**
+     * @brief Opens (or creates) the file in append mode, creating parent directories.
+     * @param path Log file path.
+     * @param maxBytes Rotate once the file grows beyond this many bytes (0 = never rotate).
+     * @param maxBackups Number of rotated backups to keep.
+     * @throws std::runtime_error if the file cannot be opened.
+     */
+    explicit FileSink(std::filesystem::path path, std::uintmax_t maxBytes = 0, unsigned maxBackups = 3);
+
+    /// @brief Returns the log file path.
+    /// @return The path.
+    [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
+
+    /// @brief Returns how many times the file has been rotated.
+    /// @return Rotation count.
+    [[nodiscard]] std::size_t rotations() const;
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+    void doFlush() override;
+    void rotate();
+
+    std::filesystem::path path_;
+    std::uintmax_t maxBytes_;
+    unsigned maxBackups_;
+    std::ofstream file_;
+    std::uintmax_t currentBytes_ = 0;
+    std::size_t rotations_ = 0;
+};
+
+/**
+ * @brief Decorator that moves writes to a background thread (producer/consumer queue).
+ *
+ * Records are copied into a bounded queue; when the queue is full the oldest record is dropped and
+ * counted, so logging never blocks the caller for long. The destructor drains the queue.
+ */
+class AsyncSink final : public Sink {
+public:
+    /**
+     * @brief Starts the worker thread.
+     * @param target Sink that receives records on the worker thread (must not be null).
+     * @param maxQueue Maximum queued records before dropping the oldest.
+     */
+    explicit AsyncSink(std::shared_ptr<Sink> target, std::size_t maxQueue = 8192);
+
+    /// @brief Drains outstanding records and joins the worker.
+    ~AsyncSink() override;
+    AsyncSink(const AsyncSink&) = delete;
+    AsyncSink& operator=(const AsyncSink&) = delete;
+    AsyncSink(AsyncSink&&) = delete;
+    AsyncSink& operator=(AsyncSink&&) = delete;
+
+    /// @brief Returns the number of records dropped because the queue was full.
+    /// @return Dropped count.
+    [[nodiscard]] std::size_t dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
+
+private:
+    void consume(std::string_view line, const LogRecord& record) override;
+    void doFlush() override;
+    [[nodiscard]] bool wantsFormattedLine() const noexcept override { return false; }
+    void run();
+
+    std::shared_ptr<Sink> target_;
+    std::size_t maxQueue_;
+    std::mutex queueMutex_;
+    std::condition_variable queueCv_;
+    std::condition_variable idleCv_;
+    std::deque<LogRecord> queue_;
+    bool stopping_ = false;
+    bool busy_ = false;
+    std::atomic<std::size_t> dropped_{0};
+    std::thread worker_;
+};
+
+// ===================================================================================================
+// Logger
+// ===================================================================================================
+
+namespace detail {
+/**
+ * @brief Streams all arguments into one string (used by the variadic logging helpers).
+ * @param args Values with an `operator<<`.
+ * @return The concatenation.
+ */
+template <typename... Args>
+[[nodiscard]] std::string concat(const Args&... args) {
+    std::ostringstream oss;
+    (oss << ... << args);
+    return oss.str();
 }
+} // namespace detail
 
-// ===== LOG ENTRY STRUCTURE =====
-
-struct LogEntry {
-    std::chrono::system_clock::time_point timestamp;
-    LogLevel level;
-    std::string logger_name;
-    std::string message;
-    std::string file;
-    std::string function;
-    int line;
-    std::thread::id thread_id;
-    
-    LogEntry() = default;
-    
-    LogEntry(LogLevel lvl, const std::string& name, const std::string& msg,
-             const std::string& file_name = "", const std::string& func_name = "", 
-             int line_num = 0)
-        : timestamp(std::chrono::system_clock::now())
-        , level(lvl)
-        , logger_name(name)
-        , message(msg)
-        , file(file_name)
-        , function(func_name)
-        , line(line_num)
-        , thread_id(std::this_thread::get_id()) {
-    }
-};
-
-// ===== LOG FORMATTER INTERFACE =====
-
-class LogFormatter {
+/**
+ * @brief Named, thread-safe logger fanning records out to any number of sinks.
+ *
+ * The level check is a single relaxed atomic load, so disabled statements are nearly free. Sinks are
+ * stored as `shared_ptr` and copied out under a shared lock before writing, so sinks can be added or
+ * removed concurrently with logging. Exceptions thrown by sinks are swallowed and counted: logging
+ * never propagates errors to the caller.
+ */
+class Logger {
 public:
-    virtual ~LogFormatter() = default;
-    virtual std::string format(const LogEntry& entry) const = 0;
-    virtual std::unique_ptr<LogFormatter> clone() const = 0;
-};
+    /**
+     * @brief Creates a logger with no sinks (silent).
+     * @param name Logger name, copied into each record.
+     * @param level Initial minimum level.
+     */
+    explicit Logger(std::string name = {}, LogLevel level = LogLevel::Info);
 
-// ===== DEFAULT FORMATTER IMPLEMENTATION =====
+    Logger(const Logger&) = delete;
+    Logger& operator=(const Logger&) = delete;
+    Logger(Logger&&) = delete;
+    Logger& operator=(Logger&&) = delete;
+    ~Logger() = default;
 
-class DefaultFormatter : public LogFormatter {
+    /// @brief Returns the logger name.
+    /// @return The name.
+    [[nodiscard]] const std::string& name() const noexcept { return name_; }
+
+    /**
+     * @brief Sets the minimum level.
+     * @param level New level; `LogLevel::Off` disables the logger.
+     */
+    void setLevel(LogLevel level) noexcept { level_.store(level, std::memory_order_relaxed); }
+
+    /// @brief Returns the minimum level.
+    /// @return The level.
+    [[nodiscard]] LogLevel level() const noexcept { return level_.load(std::memory_order_relaxed); }
+
+    /**
+     * @brief Returns whether a record at `level` would be emitted.
+     * @param messageLevel Level to test.
+     * @return True when enabled and at least one sink is attached.
+     */
+    [[nodiscard]] bool shouldLog(LogLevel messageLevel) const noexcept {
+        return messageLevel != LogLevel::Off && messageLevel >= level() &&
+               sinkCount_.load(std::memory_order_relaxed) > 0;
+    }
+
+    /**
+     * @brief Attaches a sink. Thread-safe.
+     * @param sink Sink to attach; null pointers are ignored.
+     */
+    void addSink(std::shared_ptr<Sink> sink);
+
+    /**
+     * @brief Detaches a sink. Thread-safe.
+     * @param sink Sink to remove.
+     * @return True if the sink was attached.
+     */
+    bool removeSink(const std::shared_ptr<Sink>& sink);
+
+    /// @brief Detaches every sink, making the logger silent again.
+    void clearSinks();
+
+    /// @brief Returns the number of attached sinks.
+    /// @return Sink count.
+    [[nodiscard]] std::size_t sinkCount() const noexcept { return sinkCount_.load(std::memory_order_relaxed); }
+
+    /**
+     * @brief Emits a message.
+     * @param messageLevel Severity.
+     * @param message Message text.
+     * @param location Call site (captured automatically).
+     */
+    void log(LogLevel messageLevel, std::string_view message,
+             std::source_location location = std::source_location::current());
+
+    /// @brief Emits at Trace. @param message Text. @param location Call site.
+    void trace(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Trace, message, location);
+    }
+    /// @brief Emits at Debug. @param message Text. @param location Call site.
+    void debug(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Debug, message, location);
+    }
+    /// @brief Emits at Info. @param message Text. @param location Call site.
+    void info(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Info, message, location);
+    }
+    /// @brief Emits at Warn. @param message Text. @param location Call site.
+    void warn(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Warn, message, location);
+    }
+    /// @brief Emits at Error. @param message Text. @param location Call site.
+    void error(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Error, message, location);
+    }
+    /// @brief Emits at Fatal (does not terminate). @param message Text. @param location Call site.
+    void fatal(std::string_view message, std::source_location location = std::source_location::current()) {
+        log(LogLevel::Fatal, message, location);
+    }
+
+    /**
+     * @brief Streams all arguments into a message, only if the level is enabled.
+     * @param messageLevel Severity.
+     * @param args Values with an `operator<<`.
+     */
+    template <typename... Args>
+    void logArgs(LogLevel messageLevel, const Args&... args) {
+        if (shouldLog(messageLevel)) {
+            log(messageLevel, detail::concat(args...));
+        }
+    }
+
+    /// @brief Flushes every attached sink.
+    void flush();
+
+    /**
+     * @brief Returns how many records were emitted at a level.
+     * @param messageLevel The level (Off returns 0).
+     * @return Count.
+     */
+    [[nodiscard]] std::size_t count(LogLevel messageLevel) const noexcept;
+
+    /// @brief Returns how many sink exceptions were swallowed.
+    /// @return Count.
+    [[nodiscard]] std::size_t sinkErrors() const noexcept { return sinkErrors_.load(std::memory_order_relaxed); }
+
 private:
-    std::string date_format_;
-    bool show_thread_id_;
-    bool show_location_;
-    
-public:
-    explicit DefaultFormatter(const std::string& date_fmt = "%Y-%m-%d %H:%M:%S",
-                             bool show_thread = true, bool show_loc = false)
-        : date_format_(date_fmt), show_thread_id_(show_thread), show_location_(show_loc) {}
-    
-    std::string format(const LogEntry& entry) const override {
-        std::ostringstream oss;
-        
-        // Timestamp
-        auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            entry.timestamp.time_since_epoch()) % 1000;
-        
-        oss << std::put_time(std::localtime(&time_t), date_format_.c_str())
-            << "." << std::setfill('0') << std::setw(3) << ms.count();
-        
-        // Log level
-        oss << " [" << logLevelToString(entry.level) << "]";
-        
-        // Logger name
-        if (!entry.logger_name.empty()) {
-            oss << " [" << entry.logger_name << "]";
-        }
-        
-        // Thread ID
-        if (show_thread_id_) {
-            oss << " [Thread-" << entry.thread_id << "]";
-        }
-        
-        // Location information
-        if (show_location_ && !entry.file.empty()) {
-            oss << " [" << entry.file;
-            if (!entry.function.empty()) {
-                oss << "::" << entry.function;
-            }
-            if (entry.line > 0) {
-                oss << ":" << entry.line;
-            }
-            oss << "]";
-        }
-        
-        // Message
-        oss << " - " << entry.message;
-        
-        return oss.str();
-    }
-    
-    std::unique_ptr<LogFormatter> clone() const override {
-        return std::make_unique<DefaultFormatter>(date_format_, show_thread_id_, show_location_);
-    }
-};
+    [[nodiscard]] std::vector<std::shared_ptr<Sink>> snapshotSinks() const;
 
-// ===== JSON FORMATTER =====
-
-class JsonFormatter : public LogFormatter {
-public:
-    std::string format(const LogEntry& entry) const override {
-        std::ostringstream oss;
-        
-        auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            entry.timestamp.time_since_epoch()) % 1000;
-        
-        oss << "{"
-            << "\"timestamp\":\"" << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%S")
-            << "." << std::setfill('0') << std::setw(3) << ms.count() << "Z\","
-            << "\"level\":\"" << logLevelToString(entry.level) << "\","
-            << "\"logger\":\"" << escapeJson(entry.logger_name) << "\","
-            << "\"message\":\"" << escapeJson(entry.message) << "\","
-            << "\"thread\":\"" << entry.thread_id << "\"";
-            
-        if (!entry.file.empty()) {
-            oss << ",\"file\":\"" << escapeJson(entry.file) << "\"";
-        }
-        if (!entry.function.empty()) {
-            oss << ",\"function\":\"" << escapeJson(entry.function) << "\"";
-        }
-        if (entry.line > 0) {
-            oss << ",\"line\":" << entry.line;
-        }
-        
-        oss << "}";
-        return oss.str();
-    }
-    
-    std::unique_ptr<LogFormatter> clone() const override {
-        return std::make_unique<JsonFormatter>();
-    }
-    
-private:
-    std::string escapeJson(const std::string& str) const {
-        std::string escaped;
-        escaped.reserve(str.length() + str.length() / 10); // Reserve extra space
-        
-        for (char c : str) {
-            switch (c) {
-                case '"':  escaped += "\\\""; break;
-                case '\\': escaped += "\\\\"; break;
-                case '\b': escaped += "\\b"; break;
-                case '\f': escaped += "\\f"; break;
-                case '\n': escaped += "\\n"; break;
-                case '\r': escaped += "\\r"; break;
-                case '\t': escaped += "\\t"; break;
-                default:
-                    if (c < 0x20) {
-                        escaped += "\\u";
-                        escaped += "0000";
-                        escaped[escaped.length()-2] = "0123456789abcdef"[c >> 4];
-                        escaped[escaped.length()-1] = "0123456789abcdef"[c & 0xF];
-                    } else {
-                        escaped += c;
-                    }
-                    break;
-            }
-        }
-        
-        return escaped;
-    }
-};
-
-// ===== LOG APPENDER INTERFACE =====
-
-class LogAppender {
-public:
-    virtual ~LogAppender() = default;
-    virtual void append(const LogEntry& entry) = 0;
-    virtual void flush() = 0;
-    virtual void setFormatter(std::unique_ptr<LogFormatter> formatter) = 0;
-    virtual std::unique_ptr<LogAppender> clone() const = 0;
-};
-
-// ===== CONSOLE APPENDER =====
-
-class ConsoleAppender : public LogAppender {
-private:
-    std::unique_ptr<LogFormatter> formatter_;
-    std::mutex mutex_;
-    bool use_colors_;
-    
-    // ANSI color codes
-    const char* getColorCode(LogLevel level) const {
-        if (!use_colors_) return "";
-        
-        switch (level) {
-            case LogLevel::TRACE: return "\033[37m";   // White
-            case LogLevel::DEBUG: return "\033[36m";   // Cyan
-            case LogLevel::INFO:  return "\033[32m";   // Green
-            case LogLevel::WARN:  return "\033[33m";   // Yellow
-            case LogLevel::ERROR: return "\033[31m";   // Red
-            case LogLevel::FATAL: return "\033[35m";   // Magenta
-            default:              return "\033[0m";    // Reset
-        }
-    }
-    
-    const char* getResetCode() const {
-        return use_colors_ ? "\033[0m" : "";
-    }
-    
-public:
-    explicit ConsoleAppender(bool colors = true)
-        : formatter_(std::make_unique<DefaultFormatter>()), use_colors_(colors) {}
-    
-    void append(const LogEntry& entry) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        auto& stream = (entry.level >= LogLevel::WARN) ? std::cerr : std::cout;
-        
-        stream << getColorCode(entry.level)
-               << formatter_->format(entry)
-               << getResetCode()
-               << std::endl;
-    }
-    
-    void flush() override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::cout.flush();
-        std::cerr.flush();
-    }
-    
-    void setFormatter(std::unique_ptr<LogFormatter> formatter) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatter_ = std::move(formatter);
-    }
-    
-    std::unique_ptr<LogAppender> clone() const override {
-        auto cloned = std::make_unique<ConsoleAppender>(use_colors_);
-        cloned->setFormatter(formatter_->clone());
-        return std::move(cloned);
-    }
-};
-
-// ===== FILE APPENDER =====
-
-class FileAppender : public LogAppender {
-private:
-    std::unique_ptr<LogFormatter> formatter_;
-    std::ofstream file_;
-    std::string filename_;
-    std::mutex mutex_;
-    size_t max_file_size_;
-    int max_backup_files_;
-    
-    void rotateFile() {
-        if (max_backup_files_ <= 0) return;
-        
-        file_.close();
-        
-        // Remove oldest backup
-        std::string oldest_backup = filename_ + "." + std::to_string(max_backup_files_);
-        std::remove(oldest_backup.c_str());
-        
-        // Rotate existing backups
-        for (int i = max_backup_files_ - 1; i >= 1; --i) {
-            std::string old_name = filename_ + "." + std::to_string(i);
-            std::string new_name = filename_ + "." + std::to_string(i + 1);
-            std::rename(old_name.c_str(), new_name.c_str());
-        }
-        
-        // Move current file to .1
-        std::string backup_name = filename_ + ".1";
-        std::rename(filename_.c_str(), backup_name.c_str());
-        
-        // Reopen file
-        file_.open(filename_, std::ios::app);
-    }
-    
-public:
-    explicit FileAppender(const std::string& filename, 
-                         size_t max_size = 10 * 1024 * 1024, // 10MB default
-                         int max_backups = 5)
-        : formatter_(std::make_unique<DefaultFormatter>())
-        , filename_(filename)
-        , max_file_size_(max_size)
-        , max_backup_files_(max_backups) {
-        
-        file_.open(filename_, std::ios::app);
-        if (!file_.is_open()) {
-            throw std::runtime_error("Failed to open log file: " + filename_);
-        }
-    }
-    
-    ~FileAppender() {
-        if (file_.is_open()) {
-            file_.close();
-        }
-    }
-    
-    void append(const LogEntry& entry) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        if (file_.is_open()) {
-            std::string formatted = formatter_->format(entry);
-            file_ << formatted << std::endl;
-            
-            // Check if rotation is needed
-            if (max_file_size_ > 0 && file_.tellp() > static_cast<std::streampos>(max_file_size_)) {
-                rotateFile();
-            }
-        }
-    }
-    
-    void flush() override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (file_.is_open()) {
-            file_.flush();
-        }
-    }
-    
-    void setFormatter(std::unique_ptr<LogFormatter> formatter) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatter_ = std::move(formatter);
-    }
-    
-    std::unique_ptr<LogAppender> clone() const override {
-        auto cloned = std::make_unique<FileAppender>(filename_, max_file_size_, max_backup_files_);
-        cloned->setFormatter(formatter_->clone());
-        return std::move(cloned);
-    }
-};
-
-// ===== ROTATING FILE APPENDER =====
-
-class RotatingFileAppender : public LogAppender {
-private:
-    std::unique_ptr<LogFormatter> formatter_;
-    std::ofstream file_;
-    std::string base_filename_;
-    std::mutex mutex_;
-    std::chrono::system_clock::time_point last_rotation_;
-    std::chrono::hours rotation_interval_;
-    
-    void rotateFile() {
-        if (file_.is_open()) {
-            file_.close();
-        }
-        
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
-        
-        std::ostringstream oss;
-        oss << base_filename_ << "."
-            << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S")
-            << ".log";
-        
-        file_.open(oss.str(), std::ios::app);
-        last_rotation_ = now;
-    }
-    
-public:
-    explicit RotatingFileAppender(const std::string& base_filename,
-                                 std::chrono::hours interval = std::chrono::hours(24))
-        : formatter_(std::make_unique<DefaultFormatter>())
-        , base_filename_(base_filename)
-        , last_rotation_(std::chrono::system_clock::now())
-        , rotation_interval_(interval) {
-        
-        rotateFile();
-    }
-    
-    ~RotatingFileAppender() {
-        if (file_.is_open()) {
-            file_.close();
-        }
-    }
-    
-    void append(const LogEntry& entry) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        // Check if rotation is needed
-        auto now = std::chrono::system_clock::now();
-        if (now - last_rotation_ >= rotation_interval_) {
-            rotateFile();
-        }
-        
-        if (file_.is_open()) {
-            file_ << formatter_->format(entry) << std::endl;
-        }
-    }
-    
-    void flush() override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (file_.is_open()) {
-            file_.flush();
-        }
-    }
-    
-    void setFormatter(std::unique_ptr<LogFormatter> formatter) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        formatter_ = std::move(formatter);
-    }
-    
-    std::unique_ptr<LogAppender> clone() const override {
-        auto cloned = std::make_unique<RotatingFileAppender>(base_filename_, rotation_interval_);
-        cloned->setFormatter(formatter_->clone());
-        return std::move(cloned);
-    }
-};
-
-// ===== ASYNC LOGGER IMPLEMENTATION =====
-
-class AsyncLogger {
-private:
-    std::queue<LogEntry> log_queue_;
-    std::vector<std::unique_ptr<LogAppender>> appenders_;
-    std::mutex queue_mutex_;
-    std::condition_variable condition_;
-    std::thread worker_thread_;
-    std::atomic<bool> shutdown_;
-    LogLevel min_level_;
     std::string name_;
-    
-    void workerFunction() {
-        while (!shutdown_.load()) {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            condition_.wait(lock, [this]() { return !log_queue_.empty() || shutdown_.load(); });
-            
-            while (!log_queue_.empty()) {
-                LogEntry entry = std::move(log_queue_.front());
-                log_queue_.pop();
-                lock.unlock();
-                
-                // Write to all appenders
-                for (auto& appender : appenders_) {
-                    try {
-                        appender->append(entry);
-                    } catch (const std::exception& e) {
-                        std::cerr << "Logger error in appender: " << e.what() << std::endl;
-                    }
-                }
-                
-                lock.lock();
-            }
-        }
-        
-        // Flush all appenders on shutdown
-        for (auto& appender : appenders_) {
-            appender->flush();
-        }
-    }
-    
-public:
-    explicit AsyncLogger(const std::string& name, LogLevel min_level = LogLevel::INFO)
-        : shutdown_(false), min_level_(min_level), name_(name) {
-        worker_thread_ = std::thread(&AsyncLogger::workerFunction, this);
-    }
-    
-    ~AsyncLogger() {
-        shutdown();
-    }
-    
-    void shutdown() {
-        if (!shutdown_.load()) {
-            shutdown_.store(true);
-            condition_.notify_all();
-            if (worker_thread_.joinable()) {
-                worker_thread_.join();
-            }
-        }
-    }
-    
-    void addAppender(std::unique_ptr<LogAppender> appender) {
-        std::lock_guard<std::mutex> lock(queue_mutex_);
-        appenders_.push_back(std::move(appender));
-    }
-    
-    void setLogLevel(LogLevel level) {
-        min_level_ = level;
-    }
-    
-    LogLevel getLogLevel() const {
-        return min_level_;
-    }
-    
-    bool shouldLog(LogLevel level) const {
-        return level >= min_level_;
-    }
-    
-    void log(LogLevel level, const std::string& message,
-             const std::string& file = "", const std::string& function = "", int line = 0) {
-        if (!shouldLog(level)) return;
-        
-        LogEntry entry(level, name_, message, file, function, line);
-        
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            log_queue_.push(std::move(entry));
-        }
-        condition_.notify_one();
-    }
-    
-    // Convenience methods
-    void trace(const std::string& message, const std::string& file = "", 
-               const std::string& function = "", int line = 0) {
-        log(LogLevel::TRACE, message, file, function, line);
-    }
-    
-    void debug(const std::string& message, const std::string& file = "", 
-               const std::string& function = "", int line = 0) {
-        log(LogLevel::DEBUG, message, file, function, line);
-    }
-    
-    void info(const std::string& message, const std::string& file = "", 
-              const std::string& function = "", int line = 0) {
-        log(LogLevel::INFO, message, file, function, line);
-    }
-    
-    void warn(const std::string& message, const std::string& file = "", 
-              const std::string& function = "", int line = 0) {
-        log(LogLevel::WARN, message, file, function, line);
-    }
-    
-    void error(const std::string& message, const std::string& file = "", 
-               const std::string& function = "", int line = 0) {
-        log(LogLevel::ERROR, message, file, function, line);
-    }
-    
-    void fatal(const std::string& message, const std::string& file = "", 
-               const std::string& function = "", int line = 0) {
-        log(LogLevel::FATAL, message, file, function, line);
-    }
-    
-    void flush() {
-        std::lock_guard<std::mutex> lock(queue_mutex_);
-        for (auto& appender : appenders_) {
-            appender->flush();
-        }
-    }
-    
-    const std::string& getName() const { return name_; }
+    std::atomic<LogLevel> level_;
+    mutable std::shared_mutex sinksMutex_;
+    std::vector<std::shared_ptr<Sink>> sinks_;
+    std::atomic<std::size_t> sinkCount_{0};
+    std::array<std::atomic<std::size_t>, kLogLevelCount> counts_{};
+    std::atomic<std::size_t> sinkErrors_{0};
 };
 
-// ===== LOGGER MANAGER =====
+/**
+ * @brief Process-wide registry of named loggers (thread-safe Meyers singleton).
+ *
+ * Loggers are created lazily with the registry's default level and live until `clear()` or process
+ * exit. A fresh logger has no sinks, so the registry never produces output by itself.
+ */
+class LoggerRegistry {
+public:
+    /// @brief Returns the global registry.
+    /// @return The instance.
+    [[nodiscard]] static LoggerRegistry& instance();
 
-class LoggerManager {
+    LoggerRegistry() = default;
+    LoggerRegistry(const LoggerRegistry&) = delete;
+    LoggerRegistry& operator=(const LoggerRegistry&) = delete;
+    LoggerRegistry(LoggerRegistry&&) = delete;
+    LoggerRegistry& operator=(LoggerRegistry&&) = delete;
+    ~LoggerRegistry() = default;
+
+    /**
+     * @brief Returns the logger with `name`, creating it if necessary.
+     * @param name Logger name.
+     * @return Shared handle (never null).
+     */
+    [[nodiscard]] std::shared_ptr<Logger> get(const std::string& name);
+
+    /**
+     * @brief Returns whether a logger exists.
+     * @param name Logger name.
+     * @return True if present.
+     */
+    [[nodiscard]] bool contains(const std::string& name) const;
+
+    /**
+     * @brief Sets the default level for new loggers and applies it to existing ones.
+     * @param level Level.
+     */
+    void setGlobalLevel(LogLevel level);
+
+    /**
+     * @brief Removes a logger (outstanding handles stay valid).
+     * @param name Logger name.
+     * @return True if a logger was removed.
+     */
+    bool remove(const std::string& name);
+
+    /// @brief Removes every logger.
+    void clear();
+
+    /// @brief Returns the number of registered loggers.
+    /// @return Count.
+    [[nodiscard]] std::size_t size() const;
+
 private:
-    std::unordered_map<std::string, std::unique_ptr<AsyncLogger>> loggers_;
-    std::mutex loggers_mutex_;
-    LogLevel default_level_;
-    
-    LoggerManager() : default_level_(LogLevel::INFO) {}
-    
-public:
-    static LoggerManager& getInstance() {
-        static LoggerManager instance;
-        return instance;
-    }
-    
-    // Delete copy constructor and assignment operator
-    LoggerManager(const LoggerManager&) = delete;
-    LoggerManager& operator=(const LoggerManager&) = delete;
-    
-    std::shared_ptr<AsyncLogger> getLogger(const std::string& name) {
-        std::lock_guard<std::mutex> lock(loggers_mutex_);
-        
-        auto it = loggers_.find(name);
-        if (it != loggers_.end()) {
-            return std::shared_ptr<AsyncLogger>(it->second.get(), [](AsyncLogger*){});
-        }
-        
-        // Create new logger
-        auto logger = std::make_unique<AsyncLogger>(name, default_level_);
-        auto* logger_ptr = logger.get();
-        loggers_[name] = std::move(logger);
-        
-        return std::shared_ptr<AsyncLogger>(logger_ptr, [](AsyncLogger*){});
-    }
-    
-    void setDefaultLogLevel(LogLevel level) {
-        std::lock_guard<std::mutex> lock(loggers_mutex_);
-        default_level_ = level;
-        
-        for (auto& pair : loggers_) {
-            pair.second->setLogLevel(level);
-        }
-    }
-    
-    void shutdown() {
-        std::lock_guard<std::mutex> lock(loggers_mutex_);
-        for (auto& pair : loggers_) {
-            pair.second->shutdown();
-        }
-        loggers_.clear();
-    }
-    
-    size_t getLoggerCount() const {
-        std::lock_guard<std::mutex> lock(loggers_mutex_);
-        return loggers_.size();
-    }
+    mutable std::mutex mutex_;
+    std::unordered_map<std::string, std::shared_ptr<Logger>> loggers_;
+    LogLevel defaultLevel_ = LogLevel::Info;
 };
 
-// ===== LOGGING MACROS =====
+/**
+ * @brief RAII timer that logs the elapsed time of a scope when destroyed.
+ */
+class ScopedLogTimer {
+public:
+    /**
+     * @brief Starts timing.
+     * @param logger Logger to report to (must outlive the timer).
+     * @param label Description of the timed scope.
+     * @param level Level of the completion message.
+     */
+    ScopedLogTimer(Logger& logger, std::string label, LogLevel level = LogLevel::Debug);
 
-#define LOG_GET_LOGGER(name) CppVerseHub::Utils::LoggerManager::getInstance().getLogger(name)
+    /// @brief Logs "label took N us". Never throws.
+    ~ScopedLogTimer();
+    ScopedLogTimer(const ScopedLogTimer&) = delete;
+    ScopedLogTimer& operator=(const ScopedLogTimer&) = delete;
+    ScopedLogTimer(ScopedLogTimer&&) = delete;
+    ScopedLogTimer& operator=(ScopedLogTimer&&) = delete;
 
-#define LOG_TRACE(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::TRACE)) { \
-        (logger)->trace(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-#define LOG_DEBUG(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::DEBUG)) { \
-        (logger)->debug(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-#define LOG_INFO(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::INFO)) { \
-        (logger)->info(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-#define LOG_WARN(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::WARN)) { \
-        (logger)->warn(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-#define LOG_ERROR(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::ERROR)) { \
-        (logger)->error(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-#define LOG_FATAL(logger, message) \
-    do { if ((logger)->shouldLog(CppVerseHub::Utils::LogLevel::FATAL)) { \
-        (logger)->fatal(message, __FILE__, __FUNCTION__, __LINE__); } } while(0)
-
-// ===== SCOPED LOGGER FOR RAII =====
-
-class ScopedLogger {
 private:
-    std::shared_ptr<AsyncLogger> logger_;
-    std::string function_name_;
-    std::chrono::high_resolution_clock::time_point start_time_;
-    
-public:
-    ScopedLogger(std::shared_ptr<AsyncLogger> logger, const std::string& function_name)
-        : logger_(std::move(logger)), function_name_(function_name),
-          start_time_(std::chrono::high_resolution_clock::now()) {
-        LOG_TRACE(logger_, "Entering function: " + function_name_);
-    }
-    
-    ~ScopedLogger() {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time_);
-        
-        std::ostringstream oss;
-        oss << "Exiting function: " << function_name_ 
-            << " (took " << duration.count() << " μs)";
-        LOG_TRACE(logger_, oss.str());
-    }
+    Logger* logger_;
+    std::string label_;
+    LogLevel level_;
+    std::chrono::steady_clock::time_point start_;
 };
 
-#define LOG_FUNCTION_SCOPE(logger) \
-    CppVerseHub::Utils::ScopedLogger _scoped_logger((logger), __FUNCTION__)
+/**
+ * @brief Runs the logging showcase, writing only to `out`.
+ * @param out Destination stream.
+ */
+void demonstrateLogging(std::ostream& out = std::cout);
 
 } // namespace CppVerseHub::Utils
+
+/**
+ * @brief Lazily-evaluated logging macro: the streamed arguments are only evaluated when enabled.
+ *
+ * Usage: `CPPVERSEHUB_LOG(logger, CppVerseHub::Utils::LogLevel::Info, "x=", x);`
+ */
+#define CPPVERSEHUB_LOG(logger, lvl, ...)                                                                 \
+    do {                                                                                                  \
+        auto& cppversehub_logger_ref_ = (logger);                                                         \
+        if (cppversehub_logger_ref_.shouldLog(lvl)) {                                                     \
+            cppversehub_logger_ref_.log((lvl), ::CppVerseHub::Utils::detail::concat(__VA_ARGS__));        \
+        }                                                                                                 \
+    } while (false)
