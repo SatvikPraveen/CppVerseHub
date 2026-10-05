@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <memory_resource>
 #include <mutex>
@@ -459,8 +460,9 @@ public:
      */
     [[nodiscard]] bool owns(const T* p) const noexcept {
         const auto* b = reinterpret_cast<const std::byte*>(p);
-        const auto* first = slots_[0].bytes;
-        const auto* last = slots_[Capacity - 1].bytes + sizeof(Slot);
+        // [first, last) spans every slot's storage; last is one past the final byte.
+        const std::byte* first = std::begin(slots_[0].bytes);
+        const std::byte* last = std::end(slots_[Capacity - 1].bytes);
         return !std::less<const std::byte*>{}(b, first) && std::less<const std::byte*>{}(b, last);
     }
 

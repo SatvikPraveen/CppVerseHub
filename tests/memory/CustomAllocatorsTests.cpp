@@ -9,6 +9,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <deque>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <map>
@@ -355,7 +356,7 @@ TEST_CASE("MonotonicArena with an initial buffer avoids upstream allocations",
     MonotonicArena arena(buffer, sizeof(buffer), &upstream);
     void* p = arena.allocate(100, 8);
     CHECK(static_cast<std::byte*>(p) >= buffer);
-    CHECK(static_cast<std::byte*>(p) < buffer + sizeof(buffer));
+    CHECK(static_cast<std::byte*>(p) < std::end(buffer));
     CHECK(upstream.stats().allocations() == 0);
     static_cast<void>(arena.allocate(1000, 8)); // overflow -> upstream
     CHECK(upstream.stats().allocations() == 1);
