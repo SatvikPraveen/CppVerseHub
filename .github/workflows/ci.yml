@@ -42,7 +42,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/_deps
           key: deps-${{ matrix.os }}-${{ matrix.compiler }}-${{ hashFiles('cmake/Dependencies.cmake') }}
